@@ -65,7 +65,10 @@ select{background:var(--panel);color:var(--text);border:1px solid var(--border);
       The audit trail is the compliance record — governed, not just sparse, AI.
     </div>
   </div>
-  <div class="card"><h2>Audit trail <span class="badge">SHA-256</span></h2><div id="audit"></div></div>
+  <div class="card"><h2>Audit trail <span class="badge">signed · HMAC + chain</span>
+      <button class="ghost" style="float:right;padding:3px 9px;font-size:.62rem" onclick="verifyAudit()">verify integrity</button></h2>
+    <div id="auditstatus" class="hint" style="margin-bottom:6px"></div>
+    <div id="audit"></div></div>
 </div>
 
 <script>
@@ -100,7 +103,13 @@ async function refresh(active){
   fill(document.getElementById('graftSel'),avail.length?avail:['(forest full)']);
   fill(document.getElementById('qSel'),names());
   const a=await api('/api/audit');
-  document.getElementById('audit').innerHTML=a.audit.map(x=>`<div class="a"><span class="t">${x.t}</span> <span class="ev">${x.event}</span> — ${x.detail}</div>`).join('');
+  document.getElementById('audit').innerHTML=a.audit.map(x=>`<div class="a"><span class="t">${x.t}</span> <span class="ev">${x.event}</span> — ${x.detail} <span class="t">#${x.sig}</span></div>`).join('');
+}
+async function verifyAudit(){
+  const r=await api('/api/audit/verify');
+  document.getElementById('auditstatus').innerHTML=r.ok
+    ?`<span class="ok">✓ integrity verified — ${r.entries} entries, chain + signatures intact</span>`
+    :`<span class="bad">✗ tampering at entry ${r.broken_index}: ${r.reason}</span>`;
 }
 async function query(){
   const d=document.getElementById('qSel').value;

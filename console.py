@@ -20,6 +20,7 @@ from flask import Flask, request, jsonify, render_template
 from das.model import DASForest
 from das.functional import softmax
 from das.lifecycle import ForestLifecycle
+from das.audit import AuditLog
 
 app = Flask(__name__)
 
@@ -47,7 +48,7 @@ class Service:
             self._train_leaf(i, name)
         self._train_router()
         self.life = ForestLifecycle(self.forest)
-        self.audit = []
+        self.alog = AuditLog()
         self._log("init", f"forest created with experts: {', '.join(self.active)}")
 
     def _gen(self, name, n):
@@ -72,9 +73,16 @@ class Service:
             i = self.rng.integers(0, len(Xr), 64); self.forest.router.train_step(Xr[i], dr[i], lr=0.15)
 
     def _log(self, event, detail):
-        self.audit.append({"t": time.strftime("%H:%M:%S"), "event": event, "detail": detail,
-                           "hashes": {self.active[i]: self.forest.leaves[i].weight_hash()
-                                      for i in range(len(self.active))}})
+        payload = {self.active[i]: self.forest.leaves[i].weight_hash() for i in range(len(self.active))}
+        self.alog.append(event, detail, payload=payload)
+
+    def audit_view(self):
+        return [{"t": e["ts"][11:], "event": e["event"], "detail": e["detail"], "sig": e["sig"][:12]}
+                for e in self.alog.entries[-12:][::-1]]
+
+    def audit_verify(self):
+        ok, idx, reason = self.alog.verify()
+        return {"ok": ok, "broken_index": idx, "reason": reason, "entries": len(self.alog.entries)}
 
     def state(self):
         mon = self.life.monitor() if hasattr(self, "life") else {}
@@ -123,7 +131,11 @@ def api_state():
 
 @app.route('/api/audit')
 def api_audit():
-    with LOCK: return jsonify({"audit": svc.audit[-12:][::-1]})
+    with LOCK: return jsonify({"audit": svc.audit_view()})
+
+@app.route('/api/audit/verify')
+def api_audit_verify():
+    with LOCK: return jsonify(svc.audit_verify())
 
 @app.route('/api/predict', methods=['POST'])
 def api_predict():
