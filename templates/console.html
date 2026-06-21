@@ -16,7 +16,7 @@ select{background:var(--panel);color:var(--text);border:1px solid var(--border);
 .bar .grp{display:flex;gap:6px;align-items:center}
 .bar .lbl{font-size:.64rem;color:var(--muted)}
 .stage{background:linear-gradient(#08120c,#0c1810);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-#forest{width:100%;height:440px;display:block}
+#forest svg{width:100%;height:440px;display:block}
 .tree{cursor:pointer}
 .tree.grow{animation:fadein .6s ease-out}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
@@ -45,7 +45,7 @@ select{background:var(--panel);color:var(--text);border:1px solid var(--border);
   <span class="hint">grafting adds a tree without disturbing the others (provably) · routing lights up the chosen tree</span>
 </div>
 
-<div class="stage"><svg id="forest" viewBox="0 0 960 440" preserveAspectRatio="xMidYMid meet"></svg></div>
+<div class="stage"><div id="forest"></div></div>
 <div id="result">—</div>
 
 <div class="cols">
@@ -71,9 +71,9 @@ function fill(sel,arr){sel.innerHTML=arr.map(n=>`<option>${n}</option>`).join(''
 const PALETTE=['#2e7d32','#388e3c','#43a047','#2e7d52','#356e3a','#3a7d4a','#2f8f5a','#47a06a'];
 
 function drawForest(activeName){
-  const svg=document.getElementById('forest'), W=960, soil=380;
+  const W=960, soil=380;
   const n=state.experts.length, gap=W/(n+1);
-  let s=`<defs></defs>`;
+  let s=``;
   // ground + root/mycelial line
   s+=`<rect x=0 y=${soil} width=${W} height=60 fill="#0a1410"/>`;
   s+=`<line x1=40 y1=${soil} x2=${W-40} y2=${soil} stroke="#24402c" stroke-width=2/>`;
@@ -95,7 +95,8 @@ function drawForest(activeName){
     s+=`<text class="hov" x=${x} y=${soil-200} text-anchor=middle fill="#fc8181" font-size=10 opacity=0>click to prune ✕</text>`;
     s+=`</g>`;
   });
-  svg.innerHTML=s;
+  document.getElementById('forest').innerHTML =
+    `<svg viewBox="0 0 ${W} 440" preserveAspectRatio="xMidYMid meet">${s}</svg>`;
 }
 
 async function refresh(active){
