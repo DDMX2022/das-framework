@@ -17,11 +17,10 @@ select{background:var(--panel);color:var(--text);border:1px solid var(--border);
 .bar .lbl{font-size:.64rem;color:var(--muted)}
 .stage{background:linear-gradient(#08120c,#0c1810);border:1px solid var(--border);border-radius:10px;overflow:hidden}
 #forest{width:100%;height:440px;display:block}
-.tree{transform-box:fill-box;transform-origin:bottom center;cursor:pointer}
-.tree.grow{animation:grow .7s cubic-bezier(.2,.8,.2,1)}
-@keyframes grow{from{transform:scale(.01)}to{transform:scale(1)}}
-.tree.active{animation:pulse 1.1s ease-out}
-@keyframes pulse{0%{filter:none}25%{filter:drop-shadow(0 0 18px #68d391)}100%{filter:none}}
+.tree{cursor:pointer}
+.tree.grow{animation:fadein .6s ease-out}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.tree.active circle{stroke:#9ae6b4;stroke-width:3}
 .tree:hover .hov{opacity:1}
 #result{font-size:.78rem;margin:10px 2px;min-height:20px}
 .ok{color:var(--c3)}.bad{color:var(--amber)}
