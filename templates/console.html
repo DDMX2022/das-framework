@@ -43,7 +43,8 @@ select{background:var(--panel);color:var(--text);border:1px solid var(--border);
 </style></head><body>
 <header>
   <div><h1>🌳 DAS Console — grow your forest</h1>
-       <div class="sub">each tree is an isolated, auditable expert · graft to grow · click a tree to prune</div></div>
+       <div class="sub">each tree is an isolated, auditable expert · graft to grow · click a tree to prune
+       <span id="backend" class="badge" style="margin-left:6px"></span></div></div>
   <button class="ghost" onclick="reset()">↻ Reset forest</button>
 </header>
 
@@ -98,6 +99,7 @@ function drawForest(active){
 async function refresh(active){
   prev=names();
   state=await api('/api/state');
+  document.getElementById('backend').textContent='experts: '+(state.backend||'?');
   drawForest(active);
   const avail=DOMAINS.filter(d=>!names().includes(d));
   fill(document.getElementById('graftSel'),avail.length?avail:['(forest full)']);

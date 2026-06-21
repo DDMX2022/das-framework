@@ -154,6 +154,8 @@ python console.py        # → http://localhost:5070
 ```
 Route a query (watch it hit the right expert), graft a new expert (existing ones stay byte-identical), prune one (right-to-be-forgotten), and watch the SHA-256 audit trail update in real time. This is the governance pitch made tangible.
 
+When PyTorch is installed the console backs each tree with a **real LoRA adapter on one shared, frozen backbone** (`LoRAForest` — the production expert format); without torch it falls back to the NumPy core, so it always runs. The live backend is shown in the header (`experts: lora (torch)` vs `numpy`).
+
 ### REST inference API
 
 `serve.py` loads a forest saved by `demo_torch.py` and serves predictions:
@@ -405,7 +407,7 @@ DAS today is a **complete, honestly-measured research prototype**: NumPy + PyTor
 
 **Success metrics:** one design partner in production · reproducible benchmark vs LoRA/PEFT/Avalanche on *governance* axes · latency/throughput SLA at real scale · audit log accepted as a compliance artifact · semver releases on green CI.
 
-**First milestone (start here):** (1) back the console with **real LoRA-adapter experts on a HuggingFace model** (kills "it's synthetic"); (2) **tests + CI + PyPI**; (3) **signed, exportable audit log**.
+**First milestone (start here):** (1) back the console with **real LoRA-adapter experts** — ✅ done (`LoRAForest`; the console now drives genuine LoRA adapters on a shared frozen backbone). Remaining piece: swap the local backbone for a **HuggingFace model** (hook in place in `LoRALeaf`, gated on libs/download). (2) **tests + CI + PyPI** — ✅ tests + CI done. (3) **signed, exportable audit log** — ✅ done.
 
 **Top risk (honest):** a framework matures around *real usage* — secure a design partner before building Phases 1–2, or it stays a demo. The moat is the **governance + audit** story, not the architecture (which is LoRA-equivalent).
 
