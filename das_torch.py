@@ -14,6 +14,9 @@ The device line below auto-selects MPS (Apple GPU) if available.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import hashlib
+import json
+import os
 
 device = (
     "mps" if torch.backends.mps.is_available()
@@ -25,8 +28,11 @@ print(f"Using device: {device}")
 class FibonacciLeaf(nn.Module):
     """A specialist expert = a plain MLP with Fibonacci-shaped widths.
     (The Fibonacci sizing is cosmetic; isolation is the real feature.)"""
+    leaf_type = 'mlp'
+
     def __init__(self, dims):  # e.g. [21, 13, 8, 2]
         super().__init__()
+        self.dims = list(dims)
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
@@ -36,6 +42,50 @@ class FibonacciLeaf(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
+    def freeze(self):
+        for p in self.parameters():
+            p.requires_grad_(False)
+
+    def unfreeze(self):
+        for p in self.parameters():
+            p.requires_grad_(True)
+
+class ConvLeaf(nn.Module):
+    """A heterogeneous expert: same flat-vector in/out contract as
+    FibonacciLeaf (so DASForest doesn't need to know which kind of leaf it's
+    holding), but internally reshapes to a 28x28 image and runs two
+    conv+ReLU+pool blocks before a small FC head. This is the proof that
+    DAS's "uniform leaf API" isn't just an MLP API in disguise — leaves can
+    be architecturally whatever they need to be, as long as forward() maps
+    a flat (N, in_dim) tensor to a flat (N, out_dim) tensor.
+    dims is kept as [in_dim, out_dim] only, purely for checkpoint metadata
+    and to mirror FibonacciLeaf's interface — it does not describe the conv
+    stack's internal shapes."""
+    leaf_type = 'conv'
+
+    def __init__(self, dims):  # dims = [in_dim, out_dim], in_dim must be a perfect square (e.g. 784)
+        super().__init__()
+        self.dims = list(dims)
+        in_dim, out_dim = dims[0], dims[-1]
+        side = int(round(in_dim ** 0.5))
+        assert side * side == in_dim, f"ConvLeaf expects a square image input, got in_dim={in_dim}"
+        self.side = side
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),   # side -> side/2
+            nn.Conv2d(16, 32, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),  # side/2 -> side/4
+        )
+        flat_dim = 32 * (side // 4) * (side // 4)
+        self.fc = nn.Sequential(
+            nn.Linear(flat_dim, 64), nn.ReLU(),
+            nn.Linear(64, out_dim),
+        )
+
+    def forward(self, x):
+        x = x.view(-1, 1, self.side, self.side)
+        x = self.conv(x)
+        x = x.flatten(1)
+        return self.fc(x)
 
     def freeze(self):
         for p in self.parameters():
@@ -77,6 +127,23 @@ class DASForest(nn.Module):
         """Add a new expert. NOTE: you must also give the router a short update
         so it learns the new route — the experts stay isolated, the router does not."""
         self.leaves.append(FibonacciLeaf(new_dims or self.leaf_dims).to(next(self.parameters()).device))
+        self._expand_gate()
+        return len(self.leaves) - 1
+
+    def graft_leaf(self, leaf):
+        """Like graft(), but for an ALREADY-BUILT leaf (e.g. one restored from
+        disk via load_leaf). This is the operational version of grafting: you
+        trained a leaf once, somewhere, and now you're attaching it to a forest
+        without retraining it. The router still needs a new slot — that part
+        is identical to graft()."""
+        self.leaves.append(leaf.to(next(self.parameters()).device))
+        self._expand_gate()
+        return len(self.leaves) - 1
+
+    def _expand_gate(self):
+        """Shared plumbing for graft()/graft_leaf(): widen the router's output
+        layer by one column, copying over the old weights so existing routes
+        don't change, and randomly initialising the new column."""
         old = self.router.gate
         new = nn.Linear(old.in_features, old.out_features + 1).to(old.weight.device)
         with torch.no_grad():
@@ -85,7 +152,148 @@ class DASForest(nn.Module):
             new.weight[-1].normal_(0, 0.01)
             new.bias[-1].zero_()
         self.router.gate = new
-        return len(self.leaves) - 1
+
+def leaf_hash(leaf):
+    """SHA-256 over every parameter tensor's raw bytes, truncated to 16 hex
+    chars. Same recipe as mnist_stress.py. This is the entire "proof" in DAS:
+    if the hash doesn't move, the weights didn't move, full stop — no need to
+    trust eval-mode metrics that can look stable while weights still drift."""
+    h = hashlib.sha256()
+    for p in leaf.parameters():
+        h.update(p.data.cpu().numpy().tobytes())
+    return h.hexdigest()[:16]
+
+def train_router(forest, X, y_domain, steps=600, lr=1e-3, batch=128, device="cpu"):
+    """Supervised router training: cross-entropy on the gate logits against
+    the known domain id. This is the ONE part of DAS that is NOT isolated —
+    the router is a shared, ordinary classifier and is allowed to keep
+    learning as new domains show up (see graft()'s docstring)."""
+    X = X.to(device)
+    y_domain = y_domain.to(device)
+    opt = torch.optim.Adam(forest.router.parameters(), lr=lr)
+    n = X.shape[0]
+    forest.router.train()
+    for s in range(steps):
+        idx = torch.randint(0, n, (min(batch, n),), device=device)
+        xb, yb = X[idx], y_domain[idx]
+        opt.zero_grad()
+        _, _, logits = forest.router(xb)
+        loss = F.cross_entropy(logits, yb)
+        loss.backward()
+        opt.step()
+    with torch.no_grad():
+        _, _, logits = forest.router(X)
+        acc = (logits.argmax(1) == y_domain).float().mean().item()
+    return acc
+
+def train_leaf_isolated(forest, leaf_id, X, y, steps=600, lr=1e-3, batch=128, device="cpu"):
+    """The isolation mechanism, spelled out:
+      1. Freeze EVERY leaf in the forest (including leaf_id itself).
+      2. Unfreeze only leaf_id.
+      3. Build an Adam optimizer over ONLY leaf_id's parameters — even if
+         autograd somehow computed a gradient for a frozen leaf, the
+         optimizer has no reference to it and could not update it.
+      4. Train. Re-freeze leaf_id when done so it's safe to leave lying
+         around (the forest's default state is "everything frozen").
+    Two independent locks (requires_grad=False AND "not in the optimizer")
+    is the honest way to guarantee isolation — either one alone is one bug
+    away from leaking."""
+    for leaf in forest.leaves:
+        leaf.freeze()
+    leaf = forest.leaves[leaf_id]
+    leaf.unfreeze()
+
+    X = X.to(device)
+    y = y.to(device)
+    opt = torch.optim.Adam(leaf.parameters(), lr=lr)
+    n = X.shape[0]
+    leaf.train()
+    for s in range(steps):
+        idx = torch.randint(0, n, (min(batch, n),), device=device)
+        xb, yb = X[idx], y[idx]
+        opt.zero_grad()
+        loss = F.cross_entropy(leaf(xb), yb)
+        loss.backward()
+        opt.step()
+    leaf.freeze()
+    leaf.eval()
+
+    with torch.no_grad():
+        acc = (leaf(X).argmax(1) == y).float().mean().item()
+    return acc
+
+# ── Checkpointing ──────────────────────────────────────────────────────
+# A leaf checkpoint is a plain dict: {'type', 'dims', 'state_dict'}. 'type'
+# lets load_leaf() reconstruct the right class (FibonacciLeaf vs ConvLeaf,
+# the latter added in Stage 3) instead of assuming everything is an MLP.
+
+def save_leaf(leaf, path):
+    """Freeze a leaf to disk. Just dims + state_dict + a type tag — nothing
+    fancy, no optimizer state, because a frozen leaf has no optimizer."""
+    ckpt = {
+        'type': getattr(leaf, 'leaf_type', 'mlp'),
+        'dims': list(leaf.dims),
+        'state_dict': leaf.state_dict(),
+    }
+    torch.save(ckpt, path)
+
+def load_leaf(path, device='cpu'):
+    """Reconstruct a leaf from a checkpoint saved by save_leaf(). Returns it
+    frozen, since a leaf loaded from disk is by definition "already trained"
+    — if you want to keep training it, call .unfreeze() yourself."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    leaf_type = ckpt.get('type', 'mlp')
+    if leaf_type == 'mlp':
+        leaf = FibonacciLeaf(ckpt['dims'])
+    elif leaf_type == 'conv':
+        leaf = ConvLeaf(ckpt['dims'])
+    else:
+        raise ValueError(f"unknown leaf type in checkpoint: {leaf_type!r}")
+    leaf.load_state_dict(ckpt['state_dict'])
+    leaf.to(device)
+    leaf.freeze()
+    return leaf
+
+def save_forest(forest, dir):
+    """Save a whole forest: router state_dict + every leaf (via save_leaf)
+    + a manifest.json recording leaf count, dims, and types so load_forest
+    can rebuild the exact same shape before loading weights into it."""
+    os.makedirs(dir, exist_ok=True)
+    torch.save(forest.router.state_dict(), os.path.join(dir, 'router.pt'))
+    manifest = {
+        'd_model': forest.router.gate.in_features,
+        'leaf_dims': list(forest.leaf_dims),
+        'num_leaves': len(forest.leaves),
+        'leaf_types': [getattr(leaf, 'leaf_type', 'mlp') for leaf in forest.leaves],
+    }
+    for i, leaf in enumerate(forest.leaves):
+        save_leaf(leaf, os.path.join(dir, f'leaf_{i}.pt'))
+    with open(os.path.join(dir, 'manifest.json'), 'w') as f:
+        json.dump(manifest, f, indent=2)
+
+def load_forest(dir, device='cpu'):
+    """Rebuild a forest exactly as save_forest() left it: same router gate
+    shape, same leaves in the same order, all loaded byte-for-byte from
+    disk (not re-initialised then maybe-overwritten — reconstructed fresh,
+    then load_state_dict'd, so there's nothing for stale init values to
+    hide behind)."""
+    with open(os.path.join(dir, 'manifest.json')) as f:
+        manifest = json.load(f)
+    # num_leaves=1 here only to give StemRouter a valid (non-zero-width) gate
+    # to build; it gets discarded and replaced below once we know the real
+    # width from the saved router state_dict.
+    forest = DASForest(manifest['d_model'], manifest['leaf_dims'], 1).to(device)
+    forest.leaves = nn.ModuleList()
+    router_sd = torch.load(os.path.join(dir, 'router.pt'), map_location=device, weights_only=False)
+    # the manifest's num_leaves tells us the router gate's true width, which
+    # may differ from leaf_dims-derived defaults if leaves were grafted.
+    out_features = router_sd['gate.weight'].shape[0]
+    forest.router.gate = nn.Linear(manifest['d_model'], out_features).to(device)
+    forest.router.load_state_dict(router_sd)
+    for i in range(manifest['num_leaves']):
+        leaf = load_leaf(os.path.join(dir, f'leaf_{i}.pt'), device=device)
+        forest.leaves.append(leaf)
+    return forest
 
 if __name__ == "__main__":
     # quick smoke test on random data

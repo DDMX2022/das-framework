@@ -19,7 +19,11 @@ das-framework/
 │   └── packnet.py          PackNetMLP     — pruning + per-task weight masks (CL baseline)
 ├── demo.py                 Full lifecycle on synthetic data + forgetting proof (NumPy)
 ├── benchmark.py            DAS vs matched-size MLP on sklearn digits (NumPy)
-├── das_torch.py            PyTorch port (autograd + Apple Silicon MPS)
+├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
+├── demo_torch.py           PyTorch lifecycle on MNIST + forgetting proof (autograd path)
+├── checkpoint_demo.py      Per-leaf + whole-forest save/load byte-exact restore proofs
+├── conv_demo.py            ConvLeaf (CNN expert) trained, frozen, checkpointed
+├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments
 ├── templates/              UI for the web app (SSE + Chart.js)
@@ -28,6 +32,7 @@ das-framework/
 │   ├── real_bench.html     Real-world multi-dataset benchmark
 │   ├── continual_bench.html Split-MNIST continual learning
 │   └── permuted_bench.html  Permuted-MNIST continual learning
+├── checkpoints/            saved leaves/forests (gitignored; written by the demos)
 └── data/MNIST/raw/         MNIST IDX files (downloaded by mnist_stress.py)
 ```
 
@@ -67,13 +72,33 @@ python app.py
 
 The web app reads MNIST directly from `data/MNIST/raw/*.gz` (stdlib `gzip` + `numpy`, no torchvision). If those files are missing, run `python mnist_stress.py` once to download them.
 
-### PyTorch scripts (Apple Silicon)
+### PyTorch backend (Apple Silicon)
+
+`das_torch.py` is the real autograd backend (not just a smoke test): isolated training, SHA-256 leaf hashing, per-leaf and whole-forest checkpoint/restore, and a `ConvLeaf` CNN expert. Four runnable demos:
 
 ```bash
 pip install torch torchvision
-python das_torch.py      # smoke test, auto-selects mps
-python mnist_stress.py   # 10-leaf MNIST, ~20s of training on M-series
+python demo_torch.py        # full lifecycle on MNIST + forgetting proof (~6s, CPU)
+python checkpoint_demo.py   # byte-exact save/load + graft-from-disk proofs
+python conv_demo.py         # a CNN leaf trained, frozen, checkpointed, restored
+python mnist_stress.py      # 10-leaf MNIST, ~20s on M-series (auto-selects mps)
 ```
+
+The proof demos force CPU for bit-reproducible hashes; heavy training auto-selects MPS.
+
+### REST inference API
+
+`serve.py` loads a forest saved by `demo_torch.py` and serves predictions:
+
+```bash
+python serve.py                                  # port 5060
+curl localhost:5060/health                        # {"leaves":3,"status":"ok"}
+curl -X POST localhost:5060/predict \
+     -H 'Content-Type: application/json' \
+     -d '{"pixels": [ ...784 floats... ]}'         # -> {"leaf":i,"prediction":c,"confidence":p}
+```
+
+Each input is routed to exactly one leaf; the response says which leaf fired. Out-of-domain inputs are misrouted (honestly — no leaf was trained on them).
 
 ---
 
@@ -204,6 +229,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 
 - ✅ **Done (Phase 5):** EWC baseline + cross-domain contamination test on `/continual`.
 - ✅ **Done (Phase 6):** PackNet baseline and the Permuted-MNIST regime (`/permuted`).
-1. Split-CIFAR-10/100 (needs CNN leaves) and Progressive Neural Networks.
-2. CNN leaves and an attention-based router; per-leaf checkpoint/restore; a REST inference API.
-3. Port `demo.py`'s training loop into `das_torch.py` with autograd for GPU-scale runs.
+- ✅ **Done (Phase 7):** PyTorch backend — autograd trainer, per-leaf & whole-forest checkpoint/restore (byte-exact), `ConvLeaf` CNN expert, and a REST inference API (`serve.py`).
+1. Split-CIFAR-10/100 on `ConvLeaf` forests — does routing survive real images?
+2. Progressive Neural Networks as another structural baseline; an attention-based router.
+3. Scale up: larger leaves on MPS/GPU, a tokenizer+embedding front-end for a text domain.
