@@ -35,6 +35,7 @@ das-framework/
 ├── lora_bench.py           Phase 14: DAS isolated heads vs per-task LoRA adapters
 ├── pnn_bench.py            Progressive Neural Nets baseline (laterals) vs isolation
 ├── router_bench.py         Linear vs MLP router on raw pixels (MNIST + CIFAR)
+├── paging_demo.py          Phase 12: JIT weight paging — memory win vs latency tax
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments
@@ -319,4 +320,6 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 
 ✅ **Also done:** expressive router study (`router_bench.py`) — a non-linear MLP router beats a linear gate on raw pixels (MNIST 0.88→0.96, CIFAR 0.40→0.45) but raw CIFAR routing stays poor; routing on *learned features* (Phase 9) helps more (0.42→0.66 on CIFAR, ~0.98 on MNIST) but doesn't fully fix CIFAR.
 
-The grand-vision pieces from the original framing (JIT paging → "100B on a laptop", a mycelial-LLM forest, 90% cost cuts, beating frontier models) remain unbuilt and unsupported by the evidence gathered so far.
+On the grand-vision pieces from the original framing:
+- **JIT paging** is now built and measured (`paging_demo.py`): it genuinely cuts device memory ~8× for a small latency tax, but the cost is **hardware-dependent** — nearly free on Apple Silicon's unified memory, far costlier on the discrete-GPU/PCIe systems the "100B on a laptop" pitch is usually aimed at. Real technique, hardware-conditional claim.
+- "90% cost cuts" and "beating frontier models" remain unsupported by the evidence.
