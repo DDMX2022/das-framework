@@ -80,7 +80,74 @@ python mnist_stress.py   # 10-leaf MNIST, ~20s of training on M-series
 2. **FibonacciLeaf** (`functional.py`) — a standalone MLP with manual forward/backward. A `frozen` flag gates the weight update, so a frozen leaf cannot move even when gradients flow. `weight_hash()` returns a SHA-256 fingerprint used to prove that.
 3. **DASForest** (`model.py`) — routes each input to its leaf, collects outputs. `graft()` adds a new leaf **and** a new router slot (the router must learn the new route — see [hype notes](#what-is-real-vs-hype)).
 
-**The forgetting proof:** snapshot every frozen leaf's hash, train a new leaf, re-hash. If any previously-frozen leaf changed, the proof fails. It never does — that's the point.
+### Inference: one input, one leaf
+
+At prediction time the router commits 100% of the signal to a single leaf. All other leaves stay frozen and are never touched — that hard top-1 path is what bounds compute and gradient flow to one expert.
+
+```mermaid
+flowchart LR
+    X([Input x]) --> R{{"Stem Router<br/>linear → softmax → argmax"}}
+    R -- "τ = [0.02, 0.95, 0.03]<br/>argmax → Leaf 1" --> L1["Leaf 1 (active)<br/>MLP"]
+    R -. frozen .-> L0["Leaf 0"]
+    R -. frozen .-> L2["Leaf 2"]
+    L1 --> OUT([Output logits])
+    L0 -.-> X0((idle))
+    L2 -.-> X2((idle))
+
+    classDef active fill:#2e7d32,stroke:#1b5e20,color:#fff;
+    classDef idle fill:#424242,stroke:#212121,color:#aaa;
+    class L1 active;
+    class L0,L2 idle;
+```
+
+### Training lifecycle + the forgetting proof
+
+Each leaf is trained in isolation (router frozen, all other leaves frozen). Before grafting a new leaf, every existing leaf is fingerprinted with SHA-256; after training the new leaf, the fingerprints are re-checked. They are always byte-identical — that is the proof.
+
+```mermaid
+flowchart TD
+    A["Phase 1: train Stem Router<br/>(supervised on domain labels)"] --> B["Phase 2: train Leaf 0 in isolation<br/>others frozen"]
+    B --> C["train Leaf 1 in isolation<br/>others frozen"]
+    C --> D["📸 Snapshot: hash every leaf<br/>(weight_hash)"]
+    D --> E["Phase 3: graft Leaf 2<br/>+ add router slot"]
+    E --> F["train Leaf 2 in isolation<br/>Leaf 0 &amp; 1 frozen"]
+    F --> G["📸 Re-hash all leaves"]
+    G --> H{"old hashes == new hashes?"}
+    H -- yes --> P["✅ PASS — zero forgetting<br/>(byte-identical)"]
+    H -- no --> Q["❌ FAIL — a frozen leaf moved"]
+
+    classDef pass fill:#2e7d32,stroke:#1b5e20,color:#fff;
+    classDef fail fill:#b71c1c,stroke:#7f0000,color:#fff;
+    class P pass;
+    class Q fail;
+```
+
+### Continual learning: why DAS doesn't forget
+
+The `/continual` page runs this comparison on Split-MNIST. A fine-tuned MLP overwrites shared weights each task (old-task accuracy decays → negative BWT); DAS adds an isolated leaf per task (old leaves untouched → BWT ≈ 0).
+
+```mermaid
+flowchart LR
+    subgraph DAS["DAS Forest — graft per task"]
+        direction TB
+        T1["Task 0/1"] --> Lf0["Leaf 0 🔒"]
+        T2["Task 2/3"] --> Lf1["Leaf 1 🔒"]
+        T3["Task 4/5"] --> Lf2["Leaf 2 🔒"]
+        note1["old leaves frozen → BWT ≈ 0"]
+    end
+    subgraph FT["Fine-tuned MLP — one shared net"]
+        direction TB
+        F1["Task 0/1"] --> W["shared weights W"]
+        F2["Task 2/3"] --> W
+        F3["Task 4/5"] --> W
+        note2["each task overwrites W → forgets<br/>BWT ≈ −0.2 to −0.3"]
+    end
+
+    classDef good fill:#2e7d32,stroke:#1b5e20,color:#fff;
+    classDef bad fill:#b71c1c,stroke:#7f0000,color:#fff;
+    class note1 good;
+    class note2 bad;
+```
 
 ---
 
