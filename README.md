@@ -25,6 +25,7 @@ das-framework/
 ├── canopy_demo.py          Phase 10: top-k canopy merge (graceful degradation)
 ├── text_demo.py            Phase 11: forest on text via a tokenizer front-end
 ├── governance_demo.py      Multi-tenant isolation + deletion/unlearning + audit
+├── mycelial_demo.py        Phase 13: orchestrator decomposes + routes to trees
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
 ├── demo_torch.py           PyTorch lifecycle on MNIST + forgetting proof (autograd path)
 ├── checkpoint_demo.py      Per-leaf + whole-forest save/load byte-exact restore proofs
@@ -320,6 +321,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 
 ✅ **Also done:** expressive router study (`router_bench.py`) — a non-linear MLP router beats a linear gate on raw pixels (MNIST 0.88→0.96, CIFAR 0.40→0.45) but raw CIFAR routing stays poor; routing on *learned features* (Phase 9) helps more (0.42→0.66 on CIFAR, ~0.98 on MNIST) but doesn't fully fix CIFAR.
 
-On the grand-vision pieces from the original framing:
-- **JIT paging** is now built and measured (`paging_demo.py`): it genuinely cuts device memory ~8× for a small latency tax, but the cost is **hardware-dependent** — nearly free on Apple Silicon's unified memory, far costlier on the discrete-GPU/PCIe systems the "100B on a laptop" pitch is usually aimed at. Real technique, hardware-conditional claim.
+On the grand-vision pieces from the original framing — now built and measured rather than asserted:
+- **JIT paging** (`paging_demo.py`): genuinely cuts device memory ~8× for a small latency tax, but **hardware-dependent** — nearly free on Apple Silicon's unified memory, far costlier on the discrete-GPU/PCIe systems the "100B on a laptop" pitch targets. Real technique, hardware-conditional claim.
+- **Mycelial-LLM forest** (`mycelial_demo.py`): the orchestrator-decomposes-and-routes-to-trees pattern *works* (clauses route to the right specialist trees and synthesise). But the honest cost is `soil + k activated trees`, not "one tiny leaf" — a dense orchestrator runs on every query and dominates compute, and multi-domain queries fire multiple trees. The architecture holds; the "run a tiny fraction" economics don't.
 - "90% cost cuts" and "beating frontier models" remain unsupported by the evidence.
