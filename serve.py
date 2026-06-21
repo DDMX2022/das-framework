@@ -104,6 +104,75 @@ def predict():
 
     return jsonify({"leaf": leaf, "prediction": prediction, "confidence": confidence})
 
+# ── Landing page + sample endpoint (so the API isn't a blank page) ──────
+def _load_test_images():
+    """Lazily load MNIST test images for the interactive tester. Returns None
+    if the IDX files aren't present (the tester just hides itself then)."""
+    import gzip, struct
+    try:
+        with gzip.open('./data/MNIST/raw/t10k-images-idx3-ubyte.gz', 'rb') as f:
+            f.read(4); n = struct.unpack('>I', f.read(4))[0]; f.read(8)
+            data = __import__('numpy').frombuffer(f.read(), dtype='uint8').reshape(n, 784)
+        with gzip.open('./data/MNIST/raw/t10k-labels-idx1-ubyte.gz', 'rb') as f:
+            f.read(8)
+            labels = __import__('numpy').frombuffer(f.read(), dtype='uint8')
+        return data, labels
+    except Exception:
+        return None
+
+@app.route('/sample', methods=['GET'])
+def sample():
+    import random
+    imgs = _load_test_images()
+    if imgs is None:
+        return jsonify({"error": "no MNIST test data on disk"}), 404
+    data, labels = imgs
+    i = random.randrange(len(data))
+    return jsonify({"pixels": (data[i] / 255.0).tolist(), "label": int(labels[i])})
+
+@app.route('/', methods=['GET'])
+def index():
+    return """<!doctype html><html><head><meta charset=utf-8>
+<title>DAS inference API</title><style>
+body{background:#0a140a;color:#c8e6c9;font-family:'SF Mono',monospace;max-width:680px;margin:40px auto;padding:0 16px;line-height:1.6}
+h1{color:#68d391;font-size:1.1rem;letter-spacing:.08em}
+.card{background:#0f1c0f;border:1px solid #1a3020;border-radius:8px;padding:16px;margin:14px 0}
+button{background:#4a7c59;color:#fff;border:none;border-radius:5px;padding:8px 16px;font-family:inherit;cursor:pointer}
+button:hover{background:#56ab2f}
+canvas{image-rendering:pixelated;border:1px solid #1a3020;background:#000}
+code{color:#9ae6b4}.muted{color:#4a7c59;font-size:.85rem}
+#out{margin-top:10px;font-size:.95rem}
+</style></head><body>
+<h1>🌳 DAS inference API</h1>
+<p class=muted>A trained forest is loaded and serving predictions. This is a JSON API; the tester below calls it for you.</p>
+<div class=card>
+  <button onclick=go()>Classify a random MNIST digit</button>
+  <div style=margin-top:12px><canvas id=c width=112 height=112></canvas></div>
+  <div id=out class=muted>click the button…</div>
+</div>
+<div class=card>
+  <div class=muted>Endpoints</div>
+  <p><code>GET /health</code> — forest status<br>
+     <code>GET /sample</code> — a random test image + label<br>
+     <code>POST /predict</code> — <code>{"pixels":[784 floats]}</code> → <code>{leaf,prediction,confidence}</code></p>
+</div>
+<script>
+async function go(){
+  const s=await (await fetch('/sample')).json();
+  if(s.error){document.getElementById('out').textContent=s.error;return;}
+  const ctx=document.getElementById('c').getContext('2d');
+  const img=ctx.createImageData(28,28);
+  for(let i=0;i<784;i++){const v=Math.round(s.pixels[i]*255);img.data[i*4]=v;img.data[i*4+1]=v;img.data[i*4+2]=v;img.data[i*4+3]=255;}
+  const tmp=document.createElement('canvas');tmp.width=28;tmp.height=28;tmp.getContext('2d').putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,112,112);ctx.drawImage(tmp,0,0,112,112);
+  const r=await (await fetch('/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pixels:s.pixels})})).json();
+  const ok=r.prediction===s.label;
+  document.getElementById('out').innerHTML=
+    `true label <b>${s.label}</b> → routed to <b>leaf ${r.leaf}</b>, predicted <b>${r.prediction}</b> `+
+    `(${(r.confidence*100).toFixed(1)}%) <span style="color:${ok?'#68d391':'#fc8181'}">${ok?'✓':'✗ (out-of-domain digits misroute by design)'}</span>`;
+}
+</script></body></html>"""
+
 if __name__ == "__main__":
     print(f"\n  -> DAS inference API: http://localhost:{PORT}")
     print(f"  -> GET  /health")
