@@ -1,0 +1,20 @@
+# keep the build context small + the image clean
+.git
+__pycache__
+*.pyc
+*.egg-info
+checkpoints
+data
+tests
+*.md
+!README.md
+# scripts/demos/benchmarks not needed to serve the governance API
+app.py
+serve.py
+benchmark.py
+*_demo.py
+*_bench.py
+*_stress.py
+mnist_stress.py
+templates
+csrc

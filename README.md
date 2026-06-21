@@ -56,6 +56,9 @@ das-framework/
 ├── governance_demo.py      Multi-tenant isolation + deletion/unlearning + audit
 ├── control_plane_demo.py   Governance control plane — RBAC · multi-tenancy · audit
 ├── langgraph_demo.py       DAS as a governed node UNDER an orchestrator (provenance + RBAC)
+├── governance_api.py       REST API for the control plane (NumPy+Flask; routing/RBAC/audit)
+├── Dockerfile              Containerize the governance API (no torch — small image)
+├── deploy/k8s.yaml         Kubernetes Deployment + Service + PVC + audit Secret
 ├── hub_demo.py             Leaf marketplace: publish → pull → graft, hash-verified
 ├── mycelial_demo.py        Phase 13: orchestrator decomposes + routes to trees
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
@@ -175,6 +178,28 @@ curl -X POST localhost:5060/predict \
 ```
 
 Each input is routed to exactly one leaf; the response says which leaf fired. Out-of-domain inputs are misrouted (honestly — no leaf was trained on them).
+
+### Governance API — the deployable unit
+
+`governance_api.py` serves the **control plane** itself (NumPy + Flask, no torch): routing *with provenance*, right-to-be-forgotten, and the tamper-evident audit log. On boot it loads a persisted fleet from `DAS_STATE` (or bootstraps a demo two-tenant fleet). The acting principal comes from `X-DAS-Actor` (identity-by-assertion — put a real authn proxy in front for production); RBAC is enforced by the control plane.
+
+```bash
+DAS_AUDIT_SECRET=prod-secret DAS_STATE=./state python governance_api.py   # port 5070
+curl localhost:5070/health                         # experts/tenants + audit_chain_ok + state_matches_audit
+curl -X POST localhost:5070/predict -H 'Content-Type: application/json' \
+     -d '{"embedding": [ ...d floats... ]}'         # -> {tenant,name,eid,confidence,prediction}
+curl -X POST localhost:5070/delete_tenant -H 'X-DAS-Actor: root' \
+     -H 'Content-Type: application/json' -d '{"tenant":"acme"}'   # right-to-be-forgotten
+curl localhost:5070/audit/verify                   # re-walk the signed chain
+```
+
+Containerized (image is torch-free, runs non-root, state on a volume, secret from the environment):
+
+```bash
+docker build -t das-governance .
+docker run -p 5070:5070 -e DAS_AUDIT_SECRET=prod-secret -v das_state:/data das-governance
+# Kubernetes: kubectl apply -f deploy/k8s.yaml   (Deployment + Service + PVC + audit Secret)
+```
 
 ---
 
@@ -408,7 +433,7 @@ DAS today is a **complete, honestly-measured research prototype**: NumPy + PyTor
 | **0 · Foundation** | Credible engineering + a design partner | Versioned PyPI release, green CI, docs site; wedge use case + 1 partner |
 | **1 · Real backend** | Stop being toy-scale | Forest of **real LoRA/HF experts** serving traffic under a latency SLA; router fixed |
 | **2 · Governance control plane** *(the product)* | The differentiator, production-grade | ✅ Tamper-evident **signed audit log**, **multi-tenancy + RBAC + expert registry**, **save/restore persistence** with state↔audit binding (`das/governance.py`) |
-| **3 · Integrations** | Fit existing stacks | 🟡 **LangGraph node** done — `DASExpertNode` routes a query to the right governed expert and writes provenance (tenant/expert/confidence/actor) + RBAC denials back into graph state (`das/integrations/langgraph_node.py`); HF Hub interop, Docker/k8s deploy remain |
+| **3 · Integrations** | Fit existing stacks | 🟡 **LangGraph node** done (`DASExpertNode` — routed answers carry tenant/expert/confidence/actor provenance + RBAC denials, `das/integrations/`); **deploy** done (`governance_api.py` REST control plane + `Dockerfile` + `deploy/k8s.yaml`, NumPy/Flask, persisted state on a volume, audit secret from env/Secret); HF Hub interop remains |
 | **4 · Prove & launch** | Evidence + GTM | Public governance benchmark, partner case study, security review, open-core 1.0 |
 
 **Success metrics:** one design partner in production · reproducible benchmark vs LoRA/PEFT/Avalanche on *governance* axes · latency/throughput SLA at real scale · audit log accepted as a compliance artifact · semver releases on green CI.

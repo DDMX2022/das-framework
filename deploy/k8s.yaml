@@ -1,0 +1,79 @@
+# Minimal Kubernetes deployment of the DAS governance control plane.
+#   kubectl apply -f deploy/k8s.yaml
+# The audit secret comes from a Secret (never baked into the image); persisted
+# state lives on a PVC so the forest + signed log survive pod restarts.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: das-audit
+type: Opaque
+stringData:
+  # CHANGE THIS. Losing/altering it invalidates the audit chain on reload.
+  secret: "change-me-in-prod"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: das-state
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: das-governance
+  labels: { app: das-governance }
+spec:
+  replicas: 1            # single writer: the control plane owns one audit chain
+  selector:
+    matchLabels: { app: das-governance }
+  template:
+    metadata:
+      labels: { app: das-governance }
+    spec:
+      containers:
+        - name: das-governance
+          image: das-governance:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5070
+          env:
+            - name: DAS_STATE
+              value: /data
+            - name: DAS_PORT
+              value: "5070"
+            - name: DAS_AUDIT_SECRET
+              valueFrom:
+                secretKeyRef: { name: das-audit, key: secret }
+          volumeMounts:
+            - name: state
+              mountPath: /data
+          readinessProbe:
+            httpGet: { path: /health, port: 5070 }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: { path: /health, port: 5070 }
+            initialDelaySeconds: 25
+            periodSeconds: 30
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "512Mi" }
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: das-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: das-governance
+spec:
+  selector: { app: das-governance }
+  ports:
+    - port: 80
+      targetPort: 5070
