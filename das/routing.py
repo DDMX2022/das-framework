@@ -24,6 +24,21 @@ class StemRouter:
         leaf = np.argmax(tau, axis=-1)     # hard top-1 selection
         return leaf, tau
 
+    def route_topk(self, h, k=2):
+        """Soft top-k routing for the canopy: return the k highest-weighted
+        leaves per input and their RENORMALISED weights (sum to 1 over the k).
+        HONEST NOTE: merging k leaves only makes sense when the leaves share an
+        output space (e.g. all 10-class). For DAS's usual disjoint-domain experts,
+        merge is meaningless and top-1 is the correct behaviour — see
+        DASForest.predict_canopy."""
+        logits = h @ self.W + self.b
+        tau = softmax(logits)
+        k = min(k, tau.shape[1])
+        idx = np.argsort(-tau, axis=1)[:, :k]           # (N, k) top-k leaf ids
+        w = np.take_along_axis(tau, idx, axis=1)         # (N, k) their weights
+        w = w / w.sum(axis=1, keepdims=True)             # renormalise over the k
+        return idx, w
+
     def train_step(self, h, domain_labels, lr):
         """Supervised: learn to predict the correct domain for each input."""
         logits = h @ self.W + self.b

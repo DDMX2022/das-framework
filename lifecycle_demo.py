@@ -101,8 +101,32 @@ after2 = {i: forest.leaves[i].weight_hash() for i in [0, 1, 2]}
 regrow_ok = all(before2[i] == after2[i] for i in [0, 1, 2])
 print(f"  [proof]  old leaves byte-identical after regrow: {'PASS' if regrow_ok else 'FAIL'}")
 
+# ── REDUNDANCY: graft a duplicate of domain 0, detect + prune it ─
+print("\n  [redundancy] grafting a second leaf trained on domain 0 (a duplicate) ...")
+dup_id = life.graft(seed=777)
+grow_leaf(forest, dup_id, doms[0][0], doms[0][1])
+# probe on domain-0 data — where both the original and the duplicate operate
+probe, THRESH = doms[0][0], 0.90
+red = life.find_redundant(probe, threshold=THRESH)
+print(f"  [redundancy] detected redundant pairs (i,j,agreement): {red}")
+n_before = len(forest.leaves)
+dropped = life.prune_redundant(probe, threshold=THRESH)
+print(f"  [redundancy] pruned duplicates {dropped} -> {n_before} leaves became {len(forest.leaves)}")
+redundancy_ok = len(forest.leaves) < n_before
+
+# ── PERSISTENCE: usage counters survive a save/load round trip ───
+life.reset_usage(); life.route(doms[0][0]); life.route(doms[1][0])
+import os, tempfile
+p = os.path.join(tempfile.gettempdir(), 'das_usage.json')
+life.save_usage(p)
+usage_before = life.usage.copy(); total_before = life.total_routed
+life.usage[:] = 0; life.total_routed = 0
+life.load_usage(p)
+persist_ok = bool((life.usage == usage_before).all() and life.total_routed == total_before)
+print(f"\n  [persist] usage restored after save/load: {'PASS' if persist_ok else 'FAIL'}")
+
 print("\n" + "=" * 64)
-overall = prune_ok and route_ok and regrow_ok
+overall = prune_ok and route_ok and regrow_ok and redundancy_ok and persist_ok
 print(f"  Overall lifecycle proof: {'PASS' if overall else 'FAIL'}")
 print("=" * 64)
 import sys; sys.exit(0 if overall else 1)

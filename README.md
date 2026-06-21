@@ -21,6 +21,7 @@ das-framework/
 ├── demo.py                 Full lifecycle on synthetic data + forgetting proof (NumPy)
 ├── benchmark.py            DAS vs matched-size MLP on sklearn digits (NumPy)
 ├── lifecycle_demo.py       Forest lifecycle: grow → graft → prune → regrow (NumPy)
+├── canopy_demo.py          Phase 10: top-k canopy merge (graceful degradation)
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
 ├── demo_torch.py           PyTorch lifecycle on MNIST + forgetting proof (autograd path)
 ├── checkpoint_demo.py      Per-leaf + whole-forest save/load byte-exact restore proofs
@@ -297,7 +298,8 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 - ✅ **Done (Phase 5):** EWC baseline + cross-domain contamination test on `/continual`.
 - ✅ **Done (Phase 6):** PackNet baseline and the Permuted-MNIST regime (`/permuted`).
 - ✅ **Done (Phase 7):** PyTorch backend — autograd trainer, per-leaf & whole-forest checkpoint/restore (byte-exact), `ConvLeaf` CNN expert, and a REST inference API (`serve.py`).
-- ✅ **Done (Lifecycle):** `ForestLifecycle` — usage monitoring, dormancy-based pruning (with router-gate shrink), and regrow. The full grow → graft → prune → regrow loop, with the forgetting proof holding across prune *and* regrow (`lifecycle_demo.py`).
+- ✅ **Done (Lifecycle):** `ForestLifecycle` — usage monitoring, dormancy-based pruning (with router-gate shrink), regrow, **redundancy pruning** (drop a leaf that duplicates another, by output agreement), and **usage persistence**. The full grow → graft → prune → regrow loop with the forgetting proof holding throughout (`lifecycle_demo.py`).
+- ✅ **Done (Phase 10):** top-k **canopy** merge — `DASForest.predict_canopy` blends the top-k leaves by routing weight for graceful degradation under routing uncertainty (top-2 ≥ top-1). Only valid when leaves share an output space; for disjoint-domain experts top-1 is correct (`canopy_demo.py`).
 - ✅ **Done (Phase 9):** `BackboneForest` — a shared frozen backbone feeds a router that routes on *learned features* (not raw pixels), with tiny isolated heads (130 params each, ~1672× smaller than the backbone) sharing those features. Forgetting proof holds when grafting a new head (`backbone_demo.py`). Tradeoff: the backbone is a shared trainable component.
 - ✅ **Done (Phase 8):** Split-CIFAR — CNN forest vs fine-tuned vs multi-task (`cifar_bench.py`). Finding: experts work, forgetting holds, but the raw-pixel router collapses to 42% — the bottleneck on real images.
 - ✅ **Done (Phase 14):** DAS vs LoRA (`lora_bench.py`). Finding: they tie on isolation/forgetting/deletion; DAS's only structural edge is the built-in task-free router. **DAS's value is the governance niche, not raw capability.**

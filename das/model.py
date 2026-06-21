@@ -19,7 +19,7 @@ class DASForest:
                        for i in range(num_leaves)]
 
     def predict(self, h):
-        """Route each input to its leaf, collect outputs."""
+        """Route each input to its leaf, collect outputs (hard top-1)."""
         leaf_idx, _ = self.router.route(h)
         out = np.zeros((h.shape[0], self.leaf_dims[-1]))
         for i, leaf in enumerate(self.leaves):
@@ -27,6 +27,22 @@ class DASForest:
             if mask.any():
                 out[mask] = leaf.forward(h[mask])
         return out, leaf_idx
+
+    def predict_canopy(self, h, k=2):
+        """The canopy: blend the top-k leaves' outputs by their routing weights,
+        instead of committing 100% to one. This trades a little of the 'absolute
+        isolation' purity for graceful degradation — a misroute no longer means a
+        wrong answer, because the correct leaf is usually still in the top-k.
+        Only valid when leaves share an output space (same final dim)."""
+        idx, w = self.router.route_topk(h, k)
+        out = np.zeros((h.shape[0], self.leaf_dims[-1]))
+        for slot in range(idx.shape[1]):
+            sel = idx[:, slot]
+            for i, leaf in enumerate(self.leaves):
+                mask = (sel == i)
+                if mask.any():
+                    out[mask] += w[mask, slot:slot + 1] * leaf.forward(h[mask])
+        return out, idx
 
     def graft(self, new_leaf_dims=None, seed=99):
         """Add a brand new expert leaf and a router slot for it."""

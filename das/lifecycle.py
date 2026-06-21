@@ -93,6 +93,44 @@ class ForestLifecycle:
             self.prune(i)
         return ids
 
+    def find_redundant(self, X, threshold=0.95):
+        """Find leaf pairs that have converged to (nearly) the same function:
+        run every leaf on a probe set X and return (i, j) pairs whose argmax
+        predictions agree on >= threshold of inputs. Two leaves doing the same
+        job are wasted capacity — keep one, prune the other."""
+        preds = [leaf.forward(X).argmax(1) for leaf in self.forest.leaves]
+        pairs = []
+        n = len(preds)
+        for i in range(n):
+            for j in range(i + 1, n):
+                agree = float((preds[i] == preds[j]).mean())
+                if agree >= threshold:
+                    pairs.append((i, j, round(agree, 4)))
+        return pairs
+
+    def prune_redundant(self, X, threshold=0.95):
+        """Drop one leaf from each redundant pair (keeps the lower id). Returns
+        the original ids pruned."""
+        drop = sorted({j for (_, j, _) in self.find_redundant(X, threshold)}, reverse=True)
+        for j in drop:
+            self.prune(j)
+        return drop
+
+    # ── PERSISTENCE ──────────────────────────────────────────────────────
+    def save_usage(self, path):
+        """Persist the usage counters so monitoring survives across sessions
+        (pair with save_forest for the weights)."""
+        import json
+        with open(path, 'w') as f:
+            json.dump({'usage': self.usage.tolist(), 'total_routed': self.total_routed}, f)
+
+    def load_usage(self, path):
+        import json
+        with open(path) as f:
+            d = json.load(f)
+        self.usage = np.array(d['usage'], dtype=np.int64)
+        self.total_routed = int(d['total_routed'])
+
     # ── REGROW ───────────────────────────────────────────────────────────
     def graft(self, new_leaf_dims=None, seed=99):
         """Graft a fresh leaf (then GROW it by training in isolation as usual)."""
