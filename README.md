@@ -26,6 +26,7 @@ das-framework/
 ├── checkpoint_demo.py      Per-leaf + whole-forest save/load byte-exact restore proofs
 ├── conv_demo.py            ConvLeaf (CNN expert) trained, frozen, checkpointed
 ├── backbone_demo.py        Phase 9: shared frozen backbone + isolated heads (MNIST)
+├── cifar_bench.py          Phase 8: Split-CIFAR — CNN forest vs fine-tuned vs multi-task
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments
@@ -237,6 +238,20 @@ Two honest takeaways the suite is designed to surface: (1) **EWC's BWT improves 
 
 - **Cross-domain contamination test** (`/continual`): every trained leaf is run on every task's test set. The diagonal (own domain) stays ~99%; off-diagonal (wrong domain) collapses to ~52% (binary chance). This proves leaves are genuine specialists **and** that the router is doing essential work — without it picking the diagonal, the forest would be near chance.
 
+### Split-CIFAR — the real-image stress test (`cifar_bench.py`)
+
+The first benchmark on real images (CIFAR-10, 5 binary tasks, CNN leaves). It was built specifically to find where the architecture breaks — and it does, exactly where predicted:
+
+| Result | Number | Reading |
+|---|---|---|
+| **Router accuracy (raw pixels)** | **42%** | **The bottleneck.** A linear gate can't separate visual categories from raw pixels (it routes MNIST near-perfectly). |
+| Per-leaf accuracy (task known) | 80–93% | The CNN experts themselves are fine. |
+| DAS forgetting (BWT) | **0.000** | Structural — holds on CIFAR too. Checkpoint restore byte-exact. |
+| Fine-tuned CNN (BWT) | −0.22 | Forgets, as expected. |
+| Multi-task CNN (upper bound) | 79–94% | The ceiling. |
+
+The honest takeaway: on real images the **experts work and the forgetting guarantee holds, but the linear-on-raw-pixels router collapses** — so end-to-end DAS is bottlenecked by routing. This is exactly what motivates Phase 9 (route on *learned features* via a shared backbone, where the router recovers to ~98%).
+
 ---
 
 ## What is real vs. hype
@@ -269,6 +284,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 - ✅ **Done (Phase 7):** PyTorch backend — autograd trainer, per-leaf & whole-forest checkpoint/restore (byte-exact), `ConvLeaf` CNN expert, and a REST inference API (`serve.py`).
 - ✅ **Done (Lifecycle):** `ForestLifecycle` — usage monitoring, dormancy-based pruning (with router-gate shrink), and regrow. The full grow → graft → prune → regrow loop, with the forgetting proof holding across prune *and* regrow (`lifecycle_demo.py`).
 - ✅ **Done (Phase 9):** `BackboneForest` — a shared frozen backbone feeds a router that routes on *learned features* (not raw pixels), with tiny isolated heads (130 params each, ~1672× smaller than the backbone) sharing those features. Forgetting proof holds when grafting a new head (`backbone_demo.py`). Tradeoff: the backbone is a shared trainable component.
-1. Split-CIFAR-10/100 on `ConvLeaf` forests — does routing survive real images?
-2. Progressive Neural Networks as another structural baseline; an attention-based router.
-3. Scale up: larger leaves on MPS/GPU, a tokenizer+embedding front-end for a text domain.
+- ✅ **Done (Phase 8):** Split-CIFAR — CNN forest vs fine-tuned vs multi-task (`cifar_bench.py`). Finding: experts work, forgetting holds, but the raw-pixel router collapses to 42% — the bottleneck on real images.
+1. Phase 14: head-to-head vs **LoRA adapters** on a frozen backbone — the make-or-break test of whether DAS's auditable isolation beats the standard alternative.
+2. Wire the shared-backbone forest (Phase 9) into Split-CIFAR to confirm the router recovers on learned features.
+3. Progressive Neural Networks baseline; tokenizer+embedding front-end for a text domain.
