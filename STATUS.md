@@ -43,6 +43,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Control plane | RBAC + multi-tenancy + signed audit + save/restore | role/tenant denials + tenant-delete isolation + persistence + tamper-detect PASS |
 | Orchestrator integration | governed DAS node under LangGraph (provenance + RBAC) | correct routing + provenance per query; denial surfaced as state + audited PASS |
 | Governance API + deploy | `governance_api.py` (NumPy+Flask) + Dockerfile + k8s manifest | boot→predict→RBAC 403→persist→reload byte-identical + chain bound PASS |
+| Governance benchmark | Monolith vs Isolated experts vs DAS control plane | DAS ties isolation, wins audit/RBAC/provenance (numbers below) |
 | REST API | `serve.py` + interactive page | live predictions |
 
 ## Key measured findings
@@ -71,6 +72,8 @@ toy scale, with a governance angle that's its real defensible value.
 | Control-plane persistence | save→reload byte-identical; weight-file swap caught by state↔audit binding | `control_plane_demo.py` |
 | DAS as a LangGraph node | every routed answer carries tenant/expert/confidence provenance; RBAC denial surfaces as state + is audited | `langgraph_demo.py` |
 | Governance API as a deployable unit | boot bootstraps/loads a fleet; /predict provenance, RBAC 403s, save→reload byte-identical + state↔audit bound across restarts | `governance_api.py` |
+| Governance benchmark: monolith forgets | BWT −0.467, 0% isolation on add | `governance_benchmark.py` |
+| Governance benchmark: DAS = isolation, + governance | isolation/delete 100% (ties LoRA); audit tamper-caught 100%, RBAC denied 100%, router 100% | `governance_benchmark.py` |
 
 ## Not built / out of scope
 - "100B on a laptop" at low latency on PCIe GPUs (paging cost is real there).

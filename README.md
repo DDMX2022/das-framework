@@ -55,6 +55,9 @@ das-framework/
 ├── encoder_demo.py         Pretrained (frozen) encoder front-end — transfer
 ├── governance_demo.py      Multi-tenant isolation + deletion/unlearning + audit
 ├── control_plane_demo.py   Governance control plane — RBAC · multi-tenancy · audit
+├── governance_benchmark.py Governance head-to-head: Monolith vs Isolated vs DAS-CP (numbers)
+├── CASE_STUDY.md           Worked multi-tenant regulated-AI scenario (illustrative, measured)
+├── SECURITY_REVIEW.md      Self-review: threat model, protections, ranked gaps
 ├── langgraph_demo.py       DAS as a governed node UNDER an orchestrator (provenance + RBAC)
 ├── governance_api.py       REST API for the control plane (NumPy+Flask; routing/RBAC/audit)
 ├── Dockerfile              Containerize the governance API (no torch — small image)
@@ -434,7 +437,7 @@ DAS today is a **complete, honestly-measured research prototype**: NumPy + PyTor
 | **1 · Real backend** | Stop being toy-scale | Forest of **real LoRA/HF experts** serving traffic under a latency SLA; router fixed |
 | **2 · Governance control plane** *(the product)* | The differentiator, production-grade | ✅ Tamper-evident **signed audit log**, **multi-tenancy + RBAC + expert registry**, **save/restore persistence** with state↔audit binding (`das/governance.py`) |
 | **3 · Integrations** | Fit existing stacks | 🟡 **LangGraph node** done (`DASExpertNode` — routed answers carry tenant/expert/confidence/actor provenance + RBAC denials, `das/integrations/`); **deploy** done (`governance_api.py` REST control plane + `Dockerfile` + `deploy/k8s.yaml`, NumPy/Flask, persisted state on a volume, audit secret from env/Secret); HF Hub interop remains |
-| **4 · Prove & launch** | Evidence + GTM | Public governance benchmark, partner case study, security review, open-core 1.0 |
+| **4 · Prove & launch** | Evidence + GTM | 🟡 **governance benchmark** done (`governance_benchmark.py` — Monolith vs Isolated vs DAS-CP, numbers + regression test), **case study** (`CASE_STUDY.md`, illustrative + measured) and **self security review** (`SECURITY_REVIEW.md`, ranked gaps) written; remaining: a *real design partner*, an *independent* security audit, open-core 1.0 |
 
 **Success metrics:** one design partner in production · reproducible benchmark vs LoRA/PEFT/Avalanche on *governance* axes · latency/throughput SLA at real scale · audit log accepted as a compliance artifact · semver releases on green CI.
 
