@@ -16,9 +16,11 @@ das-framework/
 │   ├── functional.py       FibonacciLeaf  — an expert MLP + frozen flag + weight_hash()
 │   ├── routing.py          StemRouter     — MoE gate (linear → softmax → argmax)
 │   ├── model.py            DASForest      — assembles router + leaves, graft(), proofs
-│   └── packnet.py          PackNetMLP     — pruning + per-task weight masks (CL baseline)
+│   ├── packnet.py          PackNetMLP     — pruning + per-task weight masks (CL baseline)
+│   └── lifecycle.py        ForestLifecycle — usage monitor, prune, regrow loop
 ├── demo.py                 Full lifecycle on synthetic data + forgetting proof (NumPy)
 ├── benchmark.py            DAS vs matched-size MLP on sklearn digits (NumPy)
+├── lifecycle_demo.py       Forest lifecycle: grow → graft → prune → regrow (NumPy)
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
 ├── demo_torch.py           PyTorch lifecycle on MNIST + forgetting proof (autograd path)
 ├── checkpoint_demo.py      Per-leaf + whole-forest save/load byte-exact restore proofs
@@ -230,6 +232,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 - ✅ **Done (Phase 5):** EWC baseline + cross-domain contamination test on `/continual`.
 - ✅ **Done (Phase 6):** PackNet baseline and the Permuted-MNIST regime (`/permuted`).
 - ✅ **Done (Phase 7):** PyTorch backend — autograd trainer, per-leaf & whole-forest checkpoint/restore (byte-exact), `ConvLeaf` CNN expert, and a REST inference API (`serve.py`).
+- ✅ **Done (Lifecycle):** `ForestLifecycle` — usage monitoring, dormancy-based pruning (with router-gate shrink), and regrow. The full grow → graft → prune → regrow loop, with the forgetting proof holding across prune *and* regrow (`lifecycle_demo.py`).
 1. Split-CIFAR-10/100 on `ConvLeaf` forests — does routing survive real images?
 2. Progressive Neural Networks as another structural baseline; an attention-based router.
 3. Scale up: larger leaves on MPS/GPU, a tokenizer+embedding front-end for a text domain.
