@@ -39,6 +39,7 @@ das-framework/
 ├── pnn_bench.py            Progressive Neural Nets baseline (laterals) vs isolation
 ├── router_bench.py         Linear vs MLP router on raw pixels (MNIST + CIFAR)
 ├── paging_demo.py          Phase 12: JIT weight paging — memory win vs latency tax
+├── unsupervised_routing.py Router discovers domains with no labels (+ load balance)
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments

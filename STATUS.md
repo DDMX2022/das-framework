@@ -21,6 +21,12 @@ toy scale, with a governance angle that's its real defensible value.
   images, paging's cost is hardware-dependent, the mycelial orchestrator's
   economics collapse once the always-on soil is counted, and "beats frontier
   models / 90% cost cut" is unsupported.
+- **The last conceptual gap is now built**: unsupervised routing (no domain
+  labels) genuinely discovers the hidden domains — but co-training the experts
+  to do it **destroys the byte-identical isolation guarantee**. Self-organising
+  routing and auditable isolation are mutually exclusive; you pick one. That's
+  the deepest honest finding: DAS's value (isolation) and the headline MoE
+  capability (learned routing) are in direct tension.
 
 ## Built & verified
 
@@ -49,6 +55,10 @@ toy scale, with a governance angle that's its real defensible value.
 | Deletion / unlearning | tenant acc 0.995 → 0.52, others byte-identical | `governance_demo.py` |
 | JIT paging | 8× less device mem, +0.17 ms/query (unified mem) | `paging_demo.py` |
 | Mycelial soil dominates cost | always-on orchestrator ≈ 100% of active compute | `mycelial_demo.py` |
+| Unsupervised routing discovers domains | purity 0.77 (vs 0.33 chance), no labels | `unsupervised_routing.py` |
+| Load-balancing can over-balance | forcing even usage dropped purity 0.77 → 0.55 | `unsupervised_routing.py` |
+| Fibonacci widths are cosmetic | Fib/pow2/linear within 0.006 (noise) | `leaf_shapes_bench.py` |
+| Learned embedding beats BoW on word order | BoW 0.50 → embedding 1.00 | `embedding_demo.py` |
 
 ## Not built / out of scope
 - "100B on a laptop" at low latency on PCIe GPUs (paging cost is real there).
