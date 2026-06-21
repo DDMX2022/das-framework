@@ -62,6 +62,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Prefetch hides page-in (when compute ≥ transfer) | 2 ms transfer: 40% hidden; 10 ms: only 15% (transfer-bound) | `prefetch_demo.py` |
 | Sparse activation scales | stored 12.7M→101.5M (8×), active+latency flat (~1 ms) | `scale_bench.py` |
 | Pretrained encoder transfers | frozen encoder 1.00 vs from-scratch 0.75 on held-out words | `encoder_demo.py` |
+| C++ pager compiles & pages correctly | C++ layer real (CPU/MPS); CUDA async path untestable (no NVIDIA) | `csrc/pager.cpp`, `pager_demo.py` |
 
 ## Not built / out of scope
 - "100B on a laptop" at low latency on PCIe GPUs (paging cost is real there).

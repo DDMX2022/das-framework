@@ -43,6 +43,8 @@ das-framework/
 ├── unsupervised_routing.py Router discovers domains with no labels (+ load balance)
 ├── prefetch_demo.py        Predictive prefetching — hide page-in behind compute
 ├── scale_bench.py          Scale stress — stored grows, active+latency stay flat
+├── csrc/pager.cpp          C++ torch extension for the page-in copy
+├── pager_demo.py           Compiles + runs the C++ pager (CUDA path noted, untested)
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments
