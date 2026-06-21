@@ -12,6 +12,23 @@ DAS is a hard-routed Mixture-of-Experts where every expert ("leaf") is **isolate
 
 ---
 
+## The problem it solves
+
+Production AI models are **monolithic** — one big set of shared weights. That creates four problems DAS is built to fix:
+
+| The pain (monolithic models) | What DAS does instead |
+|---|---|
+| **Catastrophic forgetting** — teaching a model something new degrades or overwrites what it already knew. | Each capability is an **isolated expert**; training a new one leaves the others **byte-identical** (SHA-256 proven). |
+| **Risky, slow updates** — any change re-opens validation/certification of the *whole* model. | **Graft** a new expert without touching the rest, so you only re-certify the new piece. |
+| **No clean deletion** — removing one capability or one user's data influence ("right to be forgotten") is an unsolved problem in a shared network. | **Prune** an expert: its capability is gone, the rest provably untouched. |
+| **No proof of isolation** — you can't show a regulator that capability/tenant A wasn't affected by B. | A **cryptographic audit trail** of weight fingerprints *is* the compliance evidence. |
+
+**Concretely, it's for teams who must answer questions like:** *"Prove adding this feature didn't change the certified model." · "Delete this tenant's model and prove it's gone." · "Show tenant A's data never influenced tenant B's model."* Monolithic models — and even standard fine-tuning/MoE — can't answer these cleanly. That gap is the problem DAS targets.
+
+> **Not** trying to solve: being a smarter or cheaper model than frontier LLMs. DAS is a **governance layer for a fleet of models**, not a replacement for them (it sits under LangGraph/vLLM and uses LoRA adapters as experts).
+
+---
+
 ## What's in here
 
 ```
