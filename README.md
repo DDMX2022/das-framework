@@ -27,6 +27,7 @@ das-framework/
 ├── conv_demo.py            ConvLeaf (CNN expert) trained, frozen, checkpointed
 ├── backbone_demo.py        Phase 9: shared frozen backbone + isolated heads (MNIST)
 ├── cifar_bench.py          Phase 8: Split-CIFAR — CNN forest vs fine-tuned vs multi-task
+├── lora_bench.py           Phase 14: DAS isolated heads vs per-task LoRA adapters
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments
@@ -252,6 +253,20 @@ The first benchmark on real images (CIFAR-10, 5 binary tasks, CNN leaves). It wa
 
 The honest takeaway: on real images the **experts work and the forgetting guarantee holds, but the linear-on-raw-pixels router collapses** — so end-to-end DAS is bottlenecked by routing. This is exactly what motivates Phase 9 (route on *learned features* via a shared backbone, where the router recovers to ~98%).
 
+### DAS vs LoRA — the make-or-break test (`lora_bench.py`)
+
+Per-task LoRA adapters on a frozen backbone are the industry-standard way to "add capability without disturbing the rest." So we tested DAS isolated heads against per-task LoRA on the same frozen backbone:
+
+| Metric | DAS (head) | LoRA (adapter) | Winner |
+|---|---|---|---|
+| Mean per-task accuracy | 0.993 | 0.997 | ~tie (LoRA +0.004) |
+| Params per task | **130** | 11,010 | DAS (lighter) |
+| Zero forgetting (isolated) | ✅ | ✅ | tie |
+| Deletion (drop the module) | trivial | trivial | tie |
+| Task-free routing built in | **yes** (router 95%) | no | DAS |
+
+**The honest verdict:** DAS and per-task LoRA are nearly the same idea. They **tie** on isolation, forgetting, and deletion — LoRA gets those "for free" too. LoRA is marginally more accurate (it can re-tune features) at far more params/task; DAS heads are tiny. DAS's *one* structural edge is the **integrated, task-free router**. If the task is always known, plain LoRA is simpler and equivalent. **DAS earns its keep only where task-free routing + an audit trail genuinely matter** — i.e. the governance niche, not raw capability.
+
 ---
 
 ## What is real vs. hype
@@ -285,6 +300,11 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 - ✅ **Done (Lifecycle):** `ForestLifecycle` — usage monitoring, dormancy-based pruning (with router-gate shrink), and regrow. The full grow → graft → prune → regrow loop, with the forgetting proof holding across prune *and* regrow (`lifecycle_demo.py`).
 - ✅ **Done (Phase 9):** `BackboneForest` — a shared frozen backbone feeds a router that routes on *learned features* (not raw pixels), with tiny isolated heads (130 params each, ~1672× smaller than the backbone) sharing those features. Forgetting proof holds when grafting a new head (`backbone_demo.py`). Tradeoff: the backbone is a shared trainable component.
 - ✅ **Done (Phase 8):** Split-CIFAR — CNN forest vs fine-tuned vs multi-task (`cifar_bench.py`). Finding: experts work, forgetting holds, but the raw-pixel router collapses to 42% — the bottleneck on real images.
-1. Phase 14: head-to-head vs **LoRA adapters** on a frozen backbone — the make-or-break test of whether DAS's auditable isolation beats the standard alternative.
-2. Wire the shared-backbone forest (Phase 9) into Split-CIFAR to confirm the router recovers on learned features.
-3. Progressive Neural Networks baseline; tokenizer+embedding front-end for a text domain.
+- ✅ **Done (Phase 14):** DAS vs LoRA (`lora_bench.py`). Finding: they tie on isolation/forgetting/deletion; DAS's only structural edge is the built-in task-free router. **DAS's value is the governance niche, not raw capability.**
+
+**Where this leaves the project (honest):** the architecture is a competent re-implementation of hard-routed MoE + parameter isolation, equivalent to per-task LoRA plus a router. Its defensible real-world home is **auditable, governed model fleets** — provable non-interference, deletion/unlearning, multi-tenant isolation — not "better/cheaper AI." Sensible directions from here:
+1. Prove the governance story on one concrete scenario (per-tenant isolation + deletion + audit trail).
+2. Wire the Phase 9 shared backbone into Split-CIFAR to confirm the router recovers on learned features.
+3. (Optional) tokenizer+embedding front-end for a text domain.
+
+The grand-vision pieces from the original framing (JIT paging → "100B on a laptop", a mycelial-LLM forest, 90% cost cuts, beating frontier models) remain unbuilt and unsupported by the evidence gathered so far.
