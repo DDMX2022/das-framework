@@ -49,13 +49,14 @@ das-framework/
 ├── pager_demo.py           Compiles + runs the C++ pager (CUDA path noted, untested)
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
-├── app.py                  Flask server — 6 live, browser-streamed experiments
+├── app.py                  Flask server — 7 live, browser-streamed experiments
 ├── templates/              UI for the web app (SSE + Chart.js)
 │   ├── index.html          Forest demo + digits benchmark
 │   ├── stress.html         MNIST stress test
 │   ├── real_bench.html     Real-world multi-dataset benchmark
 │   ├── continual_bench.html Split-MNIST continual learning
-│   └── permuted_bench.html  Permuted-MNIST continual learning
+│   ├── permuted_bench.html  Permuted-MNIST continual learning
+│   └── lifecycle.html       live grow → graft → prune → regrow visualizer
 ├── checkpoints/            saved leaves/forests (gitignored; written by the demos)
 └── data/MNIST/raw/         MNIST IDX files (downloaded by mnist_stress.py)
 ```
@@ -101,6 +102,7 @@ python app.py
 | `/real` | **Real-world benchmark** | Adult Income, Wine Quality, Credit Default (OpenML), with download progress + heartbeat |
 | `/continual` | **Split-MNIST continual learning** | DAS vs EWC vs PackNet vs Fine-tuned vs Multi-task, live accuracy matrices + contamination test |
 | `/permuted` | **Permuted-MNIST continual learning** | same five models on the domain-incremental regime |
+| `/lifecycle` | **Forest lifecycle** | live grow → graft → prune → regrow with the byte-identical proof |
 | `/benchmark` (stream) | digits SSE stream | backing stream for the `/` benchmark tab |
 
 The web app reads MNIST directly from `data/MNIST/raw/*.gz` (stdlib `gzip` + `numpy`, no torchvision). If those files are missing, run `python mnist_stress.py` once to download them.

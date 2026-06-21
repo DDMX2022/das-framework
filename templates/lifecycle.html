@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>DAS — Forest Lifecycle</title>
+<style>
+:root{--bg:#060d06;--panel:#0c180c;--border:#1a3020;--c1:#38a169;--c3:#68d391;
+      --amber:#f6ad55;--red:#fc8181;--text:#c8e6c9;--muted:#4a7c59;--blue:#63b3ed}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono',monospace;padding:18px;line-height:1.5}
+header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:14px}
+h1{font-size:.9rem;letter-spacing:.1em;color:var(--c1);text-transform:uppercase}
+.nav a{color:var(--muted);text-decoration:none;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:.7rem;margin-left:6px}
+.nav a:hover{color:var(--text);border-color:var(--c1)}
+button{background:var(--c1);color:#fff;border:none;border-radius:5px;padding:7px 16px;font-family:inherit;cursor:pointer;letter-spacing:.06em}
+button:disabled{background:#1a3020;color:var(--muted)}
+#banner{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:.78rem;margin-bottom:14px}
+#banner b{color:var(--c3)}
+#forest{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.leaf{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;width:150px;transition:.4s}
+.leaf.idle{opacity:.5}
+.leaf.pruned{border-color:var(--red);opacity:.35;text-decoration:line-through}
+.leaf.new{border-color:var(--c3);box-shadow:0 0 12px rgba(104,211,145,.3)}
+.leaf .id{font-weight:bold;color:var(--text);font-size:.8rem}
+.leaf .acc{color:var(--c3);font-size:.72rem;margin-top:3px}
+.leaf .hash{color:var(--muted);font-size:.58rem;margin-top:3px;word-break:break-all}
+.bar{height:6px;background:#0a2010;border-radius:3px;margin-top:8px;overflow:hidden}
+.bar>div{height:100%;background:var(--blue);width:0;transition:.5s}
+.usepct{font-size:.6rem;color:var(--blue);margin-top:2px}
+#log{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:.7rem;max-height:240px;overflow-y:auto}
+#log div{padding:2px 0;color:var(--muted)}
+#log .grow{color:var(--c3)}#log .prune{color:var(--red)}#log .regrow{color:var(--c1)}
+#proof{margin-top:14px;padding:12px;border-radius:6px;text-align:center;font-size:.82rem;display:none}
+#proof.pass{background:#0a1f0a;color:var(--c3);border:1px solid var(--c1)}
+#proof.fail{background:#1f0a0a;color:var(--red);border:1px solid #c53030}
+.explain{font-size:.66rem;color:var(--muted);line-height:1.7;margin-bottom:14px}
+</style></head><body>
+<header>
+  <h1>🌳 DAS — Forest Lifecycle</h1>
+  <div style="display:flex;align-items:center">
+    <span class="nav"><a href="/">← Forest</a><a href="/continual">🧠 Continual</a><a href="/permuted">🔀 Permuted</a></span>
+    <button id="run" onclick="go()" style="margin-left:12px">▶ Run lifecycle</button>
+  </div>
+</header>
+
+<div class="explain">Live <b>grow → graft → prune → regrow</b>: train leaves in isolation, serve a workload that leaves one leaf idle, prune the dormant leaf (router gate shrinks), then graft a fresh leaf — proving every surviving leaf stays byte-identical (SHA-256) throughout.</div>
+
+<div id="banner">Click <b>▶ Run lifecycle</b> to start.</div>
+<div id="forest"></div>
+<div id="log"></div>
+<div id="proof"></div>
+
+<script>
+const forest=document.getElementById('forest'), log=document.getElementById('log');
+function banner(h){document.getElementById('banner').innerHTML=h}
+function logline(t,cls){const d=document.createElement('div');if(cls)d.className=cls;d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight}
+function leafCard(id){let el=document.getElementById('leaf'+id);
+  if(!el){el=document.createElement('div');el.className='leaf';el.id='leaf'+id;
+    el.innerHTML=`<div class="id">Leaf ${id}</div><div class="acc">—</div><div class="bar"><div></div></div><div class="usepct"></div><div class="hash"></div>`;
+    forest.appendChild(el)}return el}
+
+function go(){
+  document.getElementById('run').disabled=true;
+  forest.innerHTML='';log.innerHTML='';document.getElementById('proof').style.display='none';
+  const es=new EventSource('/lifecycle-stream');
+  es.onmessage=ev=>{const d=JSON.parse(ev.data);
+    if(d.e==='lc_init'){banner('Initialising forest…')}
+    else if(d.e==='lc_phase'){banner('<b>'+d.label+'</b>');logline('▸ '+d.label,d.phase==='grow'?'grow':d.phase==='prune'?'prune':d.phase==='regrow'?'regrow':'')}
+    else if(d.e==='lc_leaf'){const el=leafCard(d.leaf);el.querySelector('.acc').textContent='acc '+(d.acc*100).toFixed(1)+'%';el.querySelector('.hash').textContent=d.hash;logline(`  leaf ${d.leaf} grown — acc ${(d.acc*100).toFixed(1)}%`)}
+    else if(d.e==='lc_usage'){for(const k in d.usage){const el=document.getElementById('leaf'+k);if(el){const p=Math.round(d.usage[k]*100);el.querySelector('.bar>div').style.width=p+'%';el.querySelector('.usepct').textContent=p+'% of traffic';if(p<2)el.classList.add('idle')}}logline('  usage measured — idle leaves flagged')}
+    else if(d.e==='lc_prune'){d.pruned.forEach(i=>{const el=document.getElementById('leaf'+i);if(el)el.classList.add('pruned')});logline(`  pruned ${JSON.stringify(d.pruned)} → ${d.n_leaves} leaves | survivors byte-identical: ${d.survivors_ok}`,'prune')}
+    else if(d.e==='lc_regrow'){const el=leafCard(d.leaf);el.className='leaf new';el.querySelector('.acc').textContent='acc '+(d.acc*100).toFixed(1)+'%';logline(`  grafted leaf ${d.leaf} — acc ${(d.acc*100).toFixed(1)}% | old leaves unchanged: ${d.old_ok}`,'regrow')}
+    else if(d.e==='lc_done'){const p=document.getElementById('proof');p.className=d.proof?'pass':'fail';p.style.display='block';p.textContent=d.proof?'✓ Lifecycle proof PASS — survivors byte-identical across prune AND regrow':'✗ FAIL — a surviving leaf changed';es.close();document.getElementById('run').disabled=false}
+  };
+  es.onerror=()=>{banner('Stream error — is the server running?');es.close();document.getElementById('run').disabled=false};
+}
+</script></body></html>

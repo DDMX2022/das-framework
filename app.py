@@ -12,6 +12,7 @@ sys.path.insert(0, '.')
 from das.model import DASForest
 from das.functional import FibonacciLeaf, softmax
 from das.packnet import PackNetMLP
+from das.lifecycle import ForestLifecycle
 
 app = Flask(__name__)
 
@@ -1135,6 +1136,68 @@ def continual(): return render_template('continual_bench.html')
 @app.route('/continual-stream')
 def continual_stream():
     return Response(run_continual_bench(), mimetype='text/event-stream',
+                    headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
+
+# ── Forest lifecycle: grow -> graft -> prune -> regrow (live) ───
+def run_lifecycle():
+    rng = np.random.default_rng(0)
+    Dm, LEAF, N = 21, [21, 13, 8, 2], 400
+    def dom(did, n):
+        centers = {0: np.eye(Dm)[0]*4, 1: np.eye(Dm)[5]*4, 2: np.eye(Dm)[10]*4, 3: np.eye(Dm)[14]*4}
+        rule = np.random.default_rng(100+did).normal(0, 1, Dm)
+        X = centers[did] + rng.normal(0, 1.0, (n, Dm))
+        return X, (X @ rule > 0).astype(int)
+    data = {d: dom(d, N) for d in range(3)}
+
+    yield emit({'e':'lc_init'})
+    forest = DASForest(Dm, LEAF, num_leaves=3, seed=7)
+    Xr = np.vstack([data[d][0] for d in range(3)]); dr = np.concatenate([np.full(N, d) for d in range(3)])
+
+    yield emit({'e':'lc_phase','phase':'grow','label':'Grow — train router + 3 leaves in isolation'})
+    for _ in range(800):
+        i = rng.integers(0, len(Xr), 64); forest.router.train_step(Xr[i], dr[i], lr=0.15)
+    for d in range(3):
+        leaf = forest.leaves[d]; leaf.frozen = False
+        for _ in range(400):
+            i = rng.integers(0, N, 64); leaf.backward(ce_grad(leaf.forward(data[d][0][i]), data[d][1][i]), 0.05)
+        leaf.frozen = True
+        yield emit({'e':'lc_leaf','leaf':d,'acc':acc(leaf.forward(data[d][0]), data[d][1]),
+                    'hash':leaf.weight_hash()})
+
+    life = ForestLifecycle(forest)
+    yield emit({'e':'lc_phase','phase':'route','label':'Route — serve domains 0 & 1 only (leaf 2 goes idle)'})
+    for d in [0, 1]: life.route(data[d][0])
+    mon = life.monitor()
+    yield emit({'e':'lc_usage','usage':{str(k): mon[k]['share'] for k in mon}})
+
+    snap = {i: forest.leaves[i].weight_hash() for i in [0, 1]}
+    dormant = life.dormant_leaves(max_share=0.01)
+    yield emit({'e':'lc_phase','phase':'prune','label':f'Prune — evict dormant leaves {dormant}'})
+    pruned = life.prune_dormant(max_share=0.01)
+    survivors_ok = all(forest.leaves[i].weight_hash() == snap[i] for i in [0, 1])
+    yield emit({'e':'lc_prune','pruned':pruned,'n_leaves':len(forest.leaves),'survivors_ok':survivors_ok})
+
+    yield emit({'e':'lc_phase','phase':'regrow','label':'Regrow — graft a new leaf for domain 3'})
+    X3, y3 = dom(3, N)
+    before = {i: forest.leaves[i].weight_hash() for i in range(len(forest.leaves))}
+    nid = life.graft(seed=321)
+    Xr2 = np.vstack([data[0][0], data[1][0], X3]); dr2 = np.concatenate([np.full(N, 0), np.full(N, 1), np.full(N, nid)])
+    for _ in range(400):
+        i = rng.integers(0, len(Xr2), 64); forest.router.train_step(Xr2[i], dr2[i], lr=0.15)
+    leaf = forest.leaves[nid]; leaf.frozen = False
+    for _ in range(400):
+        i = rng.integers(0, N, 64); leaf.backward(ce_grad(leaf.forward(X3[i]), y3[i]), 0.05)
+    leaf.frozen = True
+    regrow_ok = all(forest.leaves[i].weight_hash() == before[i] for i in range(len(before)))
+    yield emit({'e':'lc_regrow','leaf':nid,'acc':acc(leaf.forward(X3), y3),'old_ok':regrow_ok})
+    yield emit({'e':'lc_done','proof':bool(survivors_ok and regrow_ok)})
+
+@app.route('/lifecycle')
+def lifecycle(): return render_template('lifecycle.html')
+
+@app.route('/lifecycle-stream')
+def lifecycle_stream():
+    return Response(run_lifecycle(), mimetype='text/event-stream',
                     headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
 
 @app.route('/permuted')
