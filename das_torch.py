@@ -264,13 +264,33 @@ def train_leaf_isolated(forest, leaf_id, X, y, steps=600, lr=1e-3, batch=128, de
 # A leaf checkpoint is a plain dict: {'type', 'dims', 'state_dict'}. 'type'
 # lets load_leaf() reconstruct the right class (FibonacciLeaf vs ConvLeaf,
 # the latter added in Stage 3) instead of assuming everything is an MLP.
+# LoRALeaf (Phase 1) is the odd one out: it HOLDS A REFERENCE to a shared
+# backbone, so leaf.state_dict() would otherwise include the backbone's
+# weights too (nn.Module walks all submodules). We deliberately save/load
+# only the adapter+head sub-state-dict — the backbone is persisted exactly
+# once by LoRAForest.save(), not duplicated per leaf.
 
 def save_leaf(leaf, path):
     """Freeze a leaf to disk. Just dims + state_dict + a type tag — nothing
     fancy, no optimizer state, because a frozen leaf has no optimizer.
     For ConvLeaf we also persist 'channels' (1 for grayscale MNIST-style,
     3 for RGB CIFAR-style) so load_leaf can rebuild the right conv stack —
-    FibonacciLeaf has no such attribute, hence getattr with a default."""
+    FibonacciLeaf has no such attribute, hence getattr with a default.
+    For LoRALeaf we persist 'rank' and ONLY the adapter+head state_dict
+    (A1,B1,A2,B2,head) — never the shared backbone's weights, which would
+    otherwise get duplicated into every single leaf checkpoint on disk."""
+    if getattr(leaf, 'leaf_type', 'mlp') == 'lora':
+        ckpt = {
+            'type': 'lora',
+            'dims': list(leaf.dims),
+            'rank': leaf.rank,
+            'state_dict': {
+                'A1': leaf.A1, 'B1': leaf.B1, 'A2': leaf.A2, 'B2': leaf.B2,
+                'head.weight': leaf.head.weight, 'head.bias': leaf.head.bias,
+            },
+        }
+        torch.save(ckpt, path)
+        return
     ckpt = {
         'type': getattr(leaf, 'leaf_type', 'mlp'),
         'dims': list(leaf.dims),
@@ -279,21 +299,36 @@ def save_leaf(leaf, path):
     }
     torch.save(ckpt, path)
 
-def load_leaf(path, device='cpu'):
+def load_leaf(path, device='cpu', backbone=None):
     """Reconstruct a leaf from a checkpoint saved by save_leaf(). Returns it
     frozen, since a leaf loaded from disk is by definition "already trained"
     — if you want to keep training it, call .unfreeze() yourself.
     'channels' defaults to 1 so checkpoints saved before multi-channel
-    ConvLeaf support existed (MNIST, grayscale) still load correctly."""
+    ConvLeaf support existed (MNIST, grayscale) still load correctly.
+    'backbone' is new (Phase 1) and ONLY required for type=='lora' — a
+    LoRALeaf can't exist without the shared frozen backbone it adapts, so the
+    caller (typically LoRAForest.load) must hand one in. Default None keeps
+    this function backward-compatible: existing mlp/conv/head call sites
+    that never pass backbone are untouched."""
     ckpt = torch.load(path, map_location=device, weights_only=False)
     leaf_type = ckpt.get('type', 'mlp')
     if leaf_type == 'mlp':
         leaf = FibonacciLeaf(ckpt['dims'])
+        leaf.load_state_dict(ckpt['state_dict'])
     elif leaf_type == 'conv':
         leaf = ConvLeaf(ckpt['dims'], channels=ckpt.get('channels', 1))
+        leaf.load_state_dict(ckpt['state_dict'])
+    elif leaf_type == 'lora':
+        if backbone is None:
+            raise ValueError("load_leaf: type=='lora' checkpoints need backbone= (the shared frozen base)")
+        leaf = LoRALeaf(backbone, rank=ckpt.get('rank', 8), out_dim=ckpt['dims'][-1])
+        sd = ckpt['state_dict']
+        with torch.no_grad():
+            leaf.A1.copy_(sd['A1']); leaf.B1.copy_(sd['B1'])
+            leaf.A2.copy_(sd['A2']); leaf.B2.copy_(sd['B2'])
+            leaf.head.weight.copy_(sd['head.weight']); leaf.head.bias.copy_(sd['head.bias'])
     else:
         raise ValueError(f"unknown leaf type in checkpoint: {leaf_type!r}")
-    leaf.load_state_dict(ckpt['state_dict'])
     leaf.to(device)
     leaf.freeze()
     return leaf
@@ -471,6 +506,200 @@ def train_head_isolated(forest, head_id, feats, y, steps=400, lr=1e-3, batch=128
     head.eval()
     with torch.no_grad():
         acc = (head(feats).argmax(1) == y).float().mean().item()
+    return acc
+
+# ── Phase 1 (PRODUCT_PLAN): LoRA experts on a shared frozen backbone ───
+# The project's own benchmark (lora_bench.py) found DAS ~= "LoRA + a router".
+# The honest move is to stop competing with LoRA and adopt it: experts become
+# real LoRA adapters, not bespoke leaf classes. LoRALeaf below is exactly
+# lora_bench.LoRAExpert, promoted from a one-off benchmark class into a
+# first-class leaf type with the same freeze/unfreeze/dims/leaf_type contract
+# as FibonacciLeaf/ConvLeaf/HeadLeaf, so it drops into the existing
+# checkpoint + forest machinery instead of needing its own.
+#
+# Production hook (NOT done here — no network, no transformer libs in this
+# env): swap the local `Backbone` for a frozen HF encoder and use peft's LoRA
+# instead of hand-rolled A/B matrices:
+#   from transformers import AutoModel
+#   base = AutoModel.from_pretrained("...").eval()   # frozen, like Backbone
+#   from peft import LoraConfig, get_peft_model
+#   base = get_peft_model(base, LoraConfig(r=8, target_modules=[...]))
+# The forest API (route on shared features -> one adapter -> logits) does not
+# change; only what sits inside "backbone" and "adapter" does.
+
+class LoRALeaf(nn.Module):
+    """A LoRA adapter + head on a SHARED FROZEN Backbone — the expert format
+    the project decided to standardize on (see PRODUCT_PLAN.md Phase 1).
+    Same math as lora_bench.LoRAExpert: low-rank deltas A (rank x in) / B (out
+    x rank) added to each of the backbone's two linears, B initialised to zero
+    so a fresh adapter starts as a no-op (the leaf begins as the untouched
+    backbone + a freshly-initialised head). Only A1,B1,A2,B2,head are ever
+    trained; backbone.parameters() are never touched by this class — they are
+    a reference to someone else's shared, frozen module."""
+    leaf_type = 'lora'
+
+    def __init__(self, backbone, rank=8, out_dim=2):
+        super().__init__()
+        self.backbone = backbone   # shared, frozen — NOT a copy, NOT trained here
+        self.dims = [backbone.in_dim, out_dim]
+        self.rank = rank
+        l1, l2 = backbone.net[0], backbone.net[2]
+        self.A1 = nn.Parameter(torch.randn(rank, l1.in_features) * 0.01)
+        self.B1 = nn.Parameter(torch.zeros(l1.out_features, rank))
+        self.A2 = nn.Parameter(torch.randn(rank, l2.in_features) * 0.01)
+        self.B2 = nn.Parameter(torch.zeros(l2.out_features, rank))
+        self.head = nn.Linear(l2.out_features, out_dim)
+
+    def adapter_params(self):
+        """The ONLY trainable params for this leaf — used to scope the
+        optimizer in train_leaf_isolated so the backbone can't be touched
+        even by accident."""
+        return [self.A1, self.B1, self.A2, self.B2, *self.head.parameters()]
+
+    def forward(self, x):
+        l1, l2 = self.backbone.net[0], self.backbone.net[2]
+        h1 = F.relu(F.linear(x, l1.weight, l1.bias) + F.linear(F.linear(x, self.A1), self.B1))
+        h2 = F.relu(F.linear(h1, l2.weight, l2.bias) + F.linear(F.linear(h1, self.A2), self.B2))
+        return self.head(h2)
+
+    def freeze(self):
+        """Freeze the ADAPTER + HEAD only. The backbone is someone else's
+        shared module with its own lifecycle (see BackboneForest.freeze_backbone);
+        toggling requires_grad on it here would silently affect every other
+        leaf sharing the same backbone instance, which is the opposite of
+        isolation. adapter_params() is the deliberately narrow surface."""
+        for p in self.adapter_params():
+            p.requires_grad_(False)
+
+    def unfreeze(self):
+        for p in self.adapter_params():
+            p.requires_grad_(True)
+
+class LoRAForest(nn.Module):
+    """A forest of LoRA experts sharing ONE frozen backbone. Mirrors
+    BackboneForest's shape (shared backbone, router-on-features, per-task
+    modules) but the per-task module is a LoRALeaf (adapter + head) instead
+    of a bare HeadLeaf — i.e. each expert can also re-tune the backbone's
+    features via its own low-rank delta, not just add a head on top."""
+    def __init__(self, in_dim, feat_dim, out_dim, num_leaves, rank=8):
+        super().__init__()
+        self.out_dim = out_dim
+        self.rank = rank
+        self.backbone = Backbone(in_dim, feat_dim)
+        self.router = StemRouter(feat_dim, num_leaves)
+        self.leaves = nn.ModuleList(
+            [LoRALeaf(self.backbone, rank=rank, out_dim=out_dim) for _ in range(num_leaves)]
+        )
+
+    def features(self, x):
+        return self.backbone(x)
+
+    def freeze_backbone(self):
+        self.backbone.freeze()
+
+    def predict(self, x):
+        """Route on backbone features (top-1), run the chosen LoRALeaf on the
+        RAW input (each adapter re-derives its own features from x through
+        backbone + its own delta — that's the point of LoRA vs a plain head)."""
+        h = self.features(x)
+        leaf_idx, _, _ = self.router(h)
+        out = torch.zeros(x.shape[0], self.out_dim, device=x.device)
+        for i, leaf in enumerate(self.leaves):
+            mask = leaf_idx == i
+            if mask.any():
+                out[mask] = leaf(x[mask])
+        return out, leaf_idx
+
+    def graft_leaf(self):
+        """Add a new LoRALeaf on the SAME shared backbone + widen the router
+        gate by one column. Mirrors BackboneForest.graft_head."""
+        new_leaf = LoRALeaf(self.backbone, rank=self.rank, out_dim=self.out_dim)
+        new_leaf.to(next(self.backbone.parameters()).device)
+        self.leaves.append(new_leaf)
+        old = self.router.gate
+        new = nn.Linear(old.in_features, old.out_features + 1).to(old.weight.device)
+        with torch.no_grad():
+            new.weight[:-1] = old.weight
+            new.bias[:-1] = old.bias
+            new.weight[-1].normal_(0, 0.01)
+            new.bias[-1].zero_()
+        self.router.gate = new
+        return len(self.leaves) - 1
+
+    def save(self, dir):
+        """Save the shared backbone ONCE + every leaf's adapter (via
+        save_leaf, which for type=='lora' skips the backbone — see below).
+        Manifest records rank/out_dim/num_leaves so load() can rebuild the
+        exact same shapes before loading weights in."""
+        os.makedirs(dir, exist_ok=True)
+        torch.save(self.backbone.state_dict(), os.path.join(dir, 'backbone.pt'))
+        torch.save(self.router.state_dict(), os.path.join(dir, 'router.pt'))
+        manifest = {
+            'in_dim': self.backbone.in_dim,
+            'feat_dim': self.backbone.feat_dim,
+            'out_dim': self.out_dim,
+            'rank': self.rank,
+            'num_leaves': len(self.leaves),
+        }
+        for i, leaf in enumerate(self.leaves):
+            save_leaf(leaf, os.path.join(dir, f'leaf_{i}.pt'))
+        with open(os.path.join(dir, 'manifest.json'), 'w') as f:
+            json.dump(manifest, f, indent=2)
+
+    @staticmethod
+    def load(dir, device='cpu'):
+        """Rebuild a LoRAForest exactly as save() left it: backbone loaded
+        once, then every leaf reconstructed against THAT SAME backbone
+        instance (not a fresh one) so leaves truly share it, matching the
+        live-object invariant."""
+        with open(os.path.join(dir, 'manifest.json')) as f:
+            manifest = json.load(f)
+        forest = LoRAForest(
+            manifest['in_dim'], manifest['feat_dim'], manifest['out_dim'],
+            num_leaves=1, rank=manifest['rank'],
+        ).to(device)
+        backbone_sd = torch.load(os.path.join(dir, 'backbone.pt'), map_location=device, weights_only=False)
+        forest.backbone.load_state_dict(backbone_sd)
+        forest.backbone.freeze()
+        router_sd = torch.load(os.path.join(dir, 'router.pt'), map_location=device, weights_only=False)
+        out_features = router_sd['gate.weight'].shape[0]
+        forest.router.gate = nn.Linear(manifest['feat_dim'], out_features).to(device)
+        forest.router.load_state_dict(router_sd)
+        forest.leaves = nn.ModuleList()
+        for i in range(manifest['num_leaves']):
+            leaf = load_leaf(os.path.join(dir, f'leaf_{i}.pt'), device=device, backbone=forest.backbone)
+            forest.leaves.append(leaf)
+        return forest
+
+def train_leaf_isolated_lora(forest, leaf_id, X, y, steps=400, lr=1e-3, batch=128, device="cpu"):
+    """The LoRAForest analogue of train_leaf_isolated/train_head_isolated:
+    freeze every leaf's adapter, unfreeze only leaf_id's, scope the optimizer
+    to leaf.adapter_params() (never the backbone, never another leaf's
+    adapter). Trains on raw x (not precomputed features) since each adapter
+    needs to run its own forward through backbone+delta — that's the cost of
+    LoRA vs a plain head, paid once per step, not a correctness issue."""
+    for leaf in forest.leaves:
+        leaf.freeze()
+    leaf = forest.leaves[leaf_id]
+    leaf.unfreeze()
+
+    X = X.to(device)
+    y = y.to(device)
+    opt = torch.optim.Adam(leaf.adapter_params(), lr=lr)
+    n = X.shape[0]
+    leaf.train()
+    for _ in range(steps):
+        idx = torch.randint(0, n, (min(batch, n),), device=device)
+        xb, yb = X[idx], y[idx]
+        opt.zero_grad()
+        loss = F.cross_entropy(leaf(xb), yb)
+        loss.backward()
+        opt.step()
+    leaf.freeze()
+    leaf.eval()
+
+    with torch.no_grad():
+        acc = (leaf(X).argmax(1) == y).float().mean().item()
     return acc
 
 if __name__ == "__main__":

@@ -60,6 +60,7 @@ das-framework/
 ├── backbone_cifar_bench.py Phase 9 on CIFAR: conv backbone, router on features
 ├── cifar_bench.py          Phase 8: Split-CIFAR — CNN forest vs fine-tuned vs multi-task
 ├── lora_bench.py           Phase 14: DAS isolated heads vs per-task LoRA adapters
+├── lora_leaf_demo.py       LoRALeaf — experts as LoRA adapters on a shared frozen backbone
 ├── pnn_bench.py            Progressive Neural Nets baseline (laterals) vs isolation
 ├── router_bench.py         Linear vs MLP router on raw pixels (MNIST + CIFAR)
 ├── paging_demo.py          Phase 12: JIT weight paging — memory win vs latency tax
