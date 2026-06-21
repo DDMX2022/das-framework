@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>DAS — Continual Learning Benchmark</title>
+<title>DAS — Permuted-MNIST Benchmark</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
@@ -84,6 +84,11 @@ main{display:flex;flex:1;overflow:hidden}
               border-radius:6px;font-size:.72rem;color:var(--muted)}
 #phase-banner strong{color:var(--c3)}
 
+/* Router accuracy callout */
+#router-callout{display:none;padding:10px 16px;background:var(--panel);
+                 border:1px solid var(--border);border-radius:6px;font-size:.7rem;color:var(--muted)}
+#router-callout strong{color:var(--c3)}
+
 /* Live chart row */
 #live-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .chart-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
@@ -99,21 +104,6 @@ main{display:flex;flex:1;overflow:hidden}
 .matrix-box.ewc h3{color:var(--blue)}
 .matrix-box.ft  h3{color:var(--amber)}
 .matrix-box.pkn h3{color:var(--purple)}
-
-/* Contamination heatmap */
-#contam-section{display:none}
-.contam-wrap{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:14px}
-.contam-flex{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
-.contam-table{border-collapse:separate;border-spacing:3px;font-size:.62rem}
-.contam-table th{color:var(--muted);padding:2px 5px;font-size:.58rem;font-weight:normal}
-.contam-table td{padding:5px 6px;text-align:center;border-radius:3px;min-width:44px}
-.contam-note{flex:1;min-width:220px;font-size:.66rem;line-height:1.8;color:var(--muted)}
-.contam-note strong{color:var(--text)}
-.contam-stat{display:flex;gap:16px;margin-top:10px}
-.contam-stat .cs{background:#0a160a;border:1px solid var(--border);border-radius:5px;
-                 padding:8px 12px;text-align:center;flex:1}
-.contam-stat .cs .v{font-size:1.2rem;font-weight:bold}
-.contam-stat .cs .l{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
 
 .acc-matrix{width:100%;border-collapse:separate;border-spacing:3px;font-size:.62rem}
 .acc-matrix th{color:var(--muted);padding:2px 4px;text-align:center;
@@ -196,12 +186,12 @@ main{display:flex;flex:1;overflow:hidden}
 <body>
 
 <header>
-  <h1>🧠 DAS — Split-MNIST Continual Learning</h1>
+  <h1>🔀 DAS — Permuted-MNIST Benchmark</h1>
   <div class="nav-links">
     <a href="/" class="back-btn">← Forest</a>
     <a href="/stress" class="back-btn">🔥 Stress</a>
     <a href="/real" class="back-btn">⚡ Real</a>
-    <a href="/permuted" class="back-btn">🔀 Permuted</a>
+    <a href="/continual" class="back-btn">🧠 Continual</a>
   </div>
   <div style="display:flex;align-items:center;gap:12px">
     <span id="status">Ready</span>
@@ -223,7 +213,7 @@ main{display:flex;flex:1;overflow:hidden}
           <span class="mc-name">DAS Forest</span>
           <span class="mc-badge das">Zero Forgetting</span>
         </div>
-        <div class="mc-desc">Grafts one frozen leaf per task. Old weights are locked — mathematically impossible to forget previous tasks.</div>
+        <div class="mc-desc">Grafts one frozen 10-class leaf per permutation. Old weights are locked — mathematically impossible to forget previous permutations.</div>
         <div class="mc-status" id="das-status">Waiting…</div>
       </div>
 
@@ -232,7 +222,7 @@ main{display:flex;flex:1;overflow:hidden}
           <span class="mc-name">Fine-tuned MLP</span>
           <span class="mc-badge ft">Catastrophic Forgetting</span>
         </div>
-        <div class="mc-desc">One shared network fine-tuned sequentially. Gradient updates for task N overwrite weights learned for tasks 0…N-1.</div>
+        <div class="mc-desc">One shared 10-class network fine-tuned sequentially across permutations. Less brutal than Split-MNIST (same label space helps), but still forgets.</div>
         <div class="mc-status" id="ft-status">Waiting…</div>
       </div>
 
@@ -241,7 +231,7 @@ main{display:flex;flex:1;overflow:hidden}
           <span class="mc-name">EWC MLP</span>
           <span class="mc-badge mt" style="color:var(--blue);border-color:#205070;background:#0a1520">Soft Protection</span>
         </div>
-        <div class="mc-desc">Elastic Weight Consolidation — the standard CL baseline. After each task it adds a penalty that resists changing weights important to old tasks. Helps, but can't guarantee zero forgetting.</div>
+        <div class="mc-desc">Elastic Weight Consolidation. This is EWC's <strong>home turf</strong> — Kirkpatrick et al. (2017) demoed it on exactly this benchmark. Expect its BWT to look much better here than on Split-MNIST.</div>
         <div class="mc-status" id="ewc-status">Waiting…</div>
       </div>
 
@@ -250,7 +240,7 @@ main{display:flex;flex:1;overflow:hidden}
           <span class="mc-name">PackNet</span>
           <span class="mc-badge pkn">Zero Forgetting, Fixed Capacity</span>
         </div>
-        <div class="mc-desc">One shared network, iteratively pruned. Each task permanently claims a slice of free weights; once claimed they're frozen forever — same hard guarantee as DAS, but capacity is fixed and shrinks with every task.</div>
+        <div class="mc-desc">One shared network, iteratively pruned. Same hard zero-forgetting guarantee as DAS, but fixed capacity — later permutations get a smaller slice of free weights.</div>
         <div class="mc-status" id="pkn-status">Waiting…</div>
       </div>
 
@@ -259,32 +249,30 @@ main{display:flex;flex:1;overflow:hidden}
           <span class="mc-name">Multi-task MLP</span>
           <span class="mc-badge mt">Upper Bound</span>
         </div>
-        <div class="mc-desc">Trained on all 10 digits simultaneously. Not a continual learner — shows the ceiling for this architecture.</div>
+        <div class="mc-desc">Trained on all permutations mixed together. Not a continual learner — shows the ceiling for one shared network.</div>
         <div class="mc-status" id="mt-status">Waiting…</div>
       </div>
     </div>
   </div>
 
   <div>
-    <h2>Tasks (Split-MNIST)</h2>
+    <h2>Tasks (Permuted-MNIST)</h2>
     <div class="task-list" id="task-list">
-      <div class="task-item waiting" id="titem-0"><div class="task-dot"></div> Task 0: 0 vs 1</div>
-      <div class="task-item waiting" id="titem-1"><div class="task-dot"></div> Task 1: 2 vs 3</div>
-      <div class="task-item waiting" id="titem-2"><div class="task-dot"></div> Task 2: 4 vs 5</div>
-      <div class="task-item waiting" id="titem-3"><div class="task-dot"></div> Task 3: 6 vs 7</div>
-      <div class="task-item waiting" id="titem-4"><div class="task-dot"></div> Task 4: 8 vs 9</div>
+      <div class="task-item waiting" id="titem-0"><div class="task-dot"></div> Perm 0 — fixed pixel shuffle #0</div>
+      <div class="task-item waiting" id="titem-1"><div class="task-dot"></div> Perm 1 — fixed pixel shuffle #1</div>
+      <div class="task-item waiting" id="titem-2"><div class="task-dot"></div> Perm 2 — fixed pixel shuffle #2</div>
+      <div class="task-item waiting" id="titem-3"><div class="task-dot"></div> Perm 3 — fixed pixel shuffle #3</div>
+      <div class="task-item waiting" id="titem-4"><div class="task-dot"></div> Perm 4 — fixed pixel shuffle #4</div>
     </div>
   </div>
 
   <div class="explainer">
-    <h4>What is catastrophic forgetting?</h4>
-    Standard neural networks have a single set of shared weights. When you train on a new task, gradient updates shift those weights toward the new task's optimum — <strong>erasing what was learned before</strong>. This is catastrophic forgetting. On Split-MNIST, a fine-tuned MLP's accuracy on earlier tasks often drops to near 50% (random binary chance) by the time it finishes task 4.
+    <h4>Why Permuted-MNIST?</h4>
+    Split-MNIST is <strong>task-incremental</strong>: each task is a disjoint pair of digits, which is the regime where naive fine-tuning and EWC suffer most. Permuted-MNIST is <strong>domain-incremental</strong>: every task is the SAME 10-class digit problem, just viewed through a different fixed pixel shuffle. Same label space, same decision boundary shape — just relabeled inputs.
     <br><br>
-    <strong>DAS's structural solution:</strong> each task gets a dedicated frozen leaf. Once trained and locked, its weights can never be touched by subsequent training. The proof is cryptographic — SHA-256 hash verification.
+    This is the regime EWC's own paper used to show it working well. Including it here is the honest move: if DAS only looked good on the benchmark hand-picked to make competitors struggle, that wouldn't prove much. Here we expect EWC's BWT to close in toward 0 — DAS should still win, but by a smaller margin.
     <br><br>
-    <strong>BWT (Backward Transfer)</strong> measures average accuracy drop on previous tasks after all training is done. DAS targets BWT ≈ 0.00. Fine-tuned MLP typically shows BWT &lt; −0.20.
-    <br><br>
-    <strong>PackNet:</strong> zero forgetting like DAS, but fixed capacity — later tasks get fewer free weights, so plasticity declines.
+    <strong>Router note:</strong> a fixed permutation moves MNIST's mostly-blank border pixels to different coordinates per task, which gives a linear router a genuine, generalizing signal to identify which permutation produced a sample — reported below.
   </div>
 
 </div>
@@ -293,6 +281,7 @@ main{display:flex;flex:1;overflow:hidden}
 <div id="right">
 
   <div id="phase-banner">Waiting to start — click <strong>▶ Run Benchmark</strong></div>
+  <div id="router-callout"></div>
   <div id="error-msg"></div>
 
   <!-- Live learning curves -->
@@ -320,20 +309,16 @@ main{display:flex;flex:1;overflow:hidden}
 
   <!-- Accuracy matrices -->
   <div>
-    <div class="section-title">Accuracy Matrix — does the model remember previous tasks?</div>
+    <div class="section-title">Accuracy Matrix — does the model remember previous permutations?</div>
     <div id="matrix-section">
 
       <div class="matrix-box das">
-        <h3>🌿 DAS Forest — Row = after training task N</h3>
+        <h3>🌿 DAS Forest — Row = after training perm N</h3>
         <table class="acc-matrix" id="das-matrix-table">
           <thead>
             <tr>
               <th></th>
-              <th>T0<br><span style="font-size:.55rem;color:#2d5a3d">0v1</span></th>
-              <th>T1<br><span style="font-size:.55rem;color:#2d5a3d">2v3</span></th>
-              <th>T2<br><span style="font-size:.55rem;color:#2d5a3d">4v5</span></th>
-              <th>T3<br><span style="font-size:.55rem;color:#2d5a3d">6v7</span></th>
-              <th>T4<br><span style="font-size:.55rem;color:#2d5a3d">8v9</span></th>
+              <th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th>
             </tr>
           </thead>
           <tbody id="das-tbody"></tbody>
@@ -341,16 +326,12 @@ main{display:flex;flex:1;overflow:hidden}
       </div>
 
       <div class="matrix-box ewc">
-        <h3>🛡️ EWC MLP — soft penalty slows forgetting</h3>
+        <h3>🛡️ EWC MLP — home-turf regime for EWC</h3>
         <table class="acc-matrix" id="ewc-matrix-table">
           <thead>
             <tr>
               <th></th>
-              <th>T0<br><span style="font-size:.55rem;color:#2c4a6e">0v1</span></th>
-              <th>T1<br><span style="font-size:.55rem;color:#2c4a6e">2v3</span></th>
-              <th>T2<br><span style="font-size:.55rem;color:#2c4a6e">4v5</span></th>
-              <th>T3<br><span style="font-size:.55rem;color:#2c4a6e">6v7</span></th>
-              <th>T4<br><span style="font-size:.55rem;color:#2c4a6e">8v9</span></th>
+              <th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th>
             </tr>
           </thead>
           <tbody id="ewc-tbody"></tbody>
@@ -358,16 +339,12 @@ main{display:flex;flex:1;overflow:hidden}
       </div>
 
       <div class="matrix-box ft">
-        <h3>⚡ Fine-tuned MLP — watch the forgetting!</h3>
+        <h3>⚡ Fine-tuned MLP — domain-incremental forgetting</h3>
         <table class="acc-matrix" id="ft-matrix-table">
           <thead>
             <tr>
               <th></th>
-              <th>T0<br><span style="font-size:.55rem;color:#5a3d1a">0v1</span></th>
-              <th>T1<br><span style="font-size:.55rem;color:#5a3d1a">2v3</span></th>
-              <th>T2<br><span style="font-size:.55rem;color:#5a3d1a">4v5</span></th>
-              <th>T3<br><span style="font-size:.55rem;color:#5a3d1a">6v7</span></th>
-              <th>T4<br><span style="font-size:.55rem;color:#5a3d1a">8v9</span></th>
+              <th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th>
             </tr>
           </thead>
           <tbody id="ft-tbody"></tbody>
@@ -380,11 +357,7 @@ main{display:flex;flex:1;overflow:hidden}
           <thead>
             <tr>
               <th></th>
-              <th>T0<br><span style="font-size:.55rem;color:#3d2c5a">0v1</span></th>
-              <th>T1<br><span style="font-size:.55rem;color:#3d2c5a">2v3</span></th>
-              <th>T2<br><span style="font-size:.55rem;color:#3d2c5a">4v5</span></th>
-              <th>T3<br><span style="font-size:.55rem;color:#3d2c5a">6v7</span></th>
-              <th>T4<br><span style="font-size:.55rem;color:#3d2c5a">8v9</span></th>
+              <th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th>
             </tr>
           </thead>
           <tbody id="pkn-tbody"></tbody>
@@ -394,49 +367,16 @@ main{display:flex;flex:1;overflow:hidden}
     </div>
   </div>
 
-  <!-- Cross-domain contamination -->
-  <div id="contam-section">
-    <div class="section-title">Cross-domain contamination — is each leaf really a specialist?</div>
-    <div class="contam-wrap">
-      <div class="contam-flex">
-        <table class="contam-table" id="contam-table">
-          <thead>
-            <tr><th></th><th colspan="5" style="color:var(--muted);padding-bottom:6px">evaluated on task →</th></tr>
-            <tr>
-              <th></th>
-              <th>0v1</th><th>2v3</th><th>4v5</th><th>6v7</th><th>8v9</th>
-            </tr>
-          </thead>
-          <tbody id="contam-tbody"></tbody>
-        </table>
-        <div class="contam-note">
-          Each row is a <strong>trained leaf</strong>; each column is a <strong>task's test set</strong>.
-          The bright <strong>diagonal</strong> is each leaf on its own domain (~99%). Every
-          <strong>off-diagonal</strong> cell is a leaf forced to judge data it never trained on —
-          accuracy collapses toward <strong>50% (random binary chance)</strong>.
-          <br><br>
-          This proves two things: (1) leaves are genuine <strong>specialists</strong>, not generalists,
-          and (2) the <strong>router is doing essential work</strong> — without it correctly picking the
-          diagonal, the forest would be near chance.
-          <div class="contam-stat">
-            <div class="cs"><div class="v" style="color:var(--c3)" id="contam-diag">—</div><div class="l">own domain (diagonal)</div></div>
-            <div class="cs"><div class="v" style="color:var(--red)" id="contam-off">—</div><div class="l">wrong domain (off-diag)</div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Multi-task chart -->
   <div>
     <div class="section-title">Multi-task MLP — upper bound training</div>
     <div id="mt-row">
       <div class="chart-box">
-        <h3 id="mt-chart-title">Multi-task MLP (all 10 digits at once)</h3>
+        <h3 id="mt-chart-title">Multi-task MLP (all permutations at once)</h3>
         <canvas id="mt-chart"></canvas>
       </div>
       <div class="chart-box" id="mt-results-box" style="display:none">
-        <h3>Per-task accuracy (upper bound)</h3>
+        <h3>Per-permutation accuracy (upper bound)</h3>
         <div id="mt-results" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
       </div>
     </div>
@@ -449,22 +389,22 @@ main{display:flex;flex:1;overflow:hidden}
       <div class="bwt-card das">
         <div class="bwt-label">DAS Forest BWT</div>
         <div class="bwt-value good" id="das-bwt">—</div>
-        <div class="bwt-explain">Mean accuracy change on tasks 0–3 after all training. ~0.00 means no forgetting. Hash proof verifies it cryptographically.</div>
+        <div class="bwt-explain">Mean accuracy change on perms 0–3 after all training. ~0.00 means no forgetting — structural, regime-independent.</div>
       </div>
       <div class="bwt-card ewc">
         <div class="bwt-label">EWC MLP BWT</div>
         <div class="bwt-value mid" id="ewc-bwt">—</div>
-        <div class="bwt-explain">EWC's penalty reduces forgetting vs. naive fine-tuning, but on single-head Split-MNIST it still can't reach zero — soft protection has limits.</div>
+        <div class="bwt-explain">Expected to be much closer to 0 here than on Split-MNIST — this domain-incremental regime is EWC's strong suit.</div>
       </div>
       <div class="bwt-card ft">
         <div class="bwt-label">Fine-tuned MLP BWT</div>
         <div class="bwt-value bad" id="ft-bwt">—</div>
-        <div class="bwt-explain">Negative = accuracy dropped. A value of −0.25 means the model lost ~25% accuracy on each old task on average.</div>
+        <div class="bwt-explain">Negative = accuracy dropped. Usually less catastrophic than Split-MNIST since all tasks share the same 10-class output space.</div>
       </div>
       <div class="bwt-card pkn">
         <div class="bwt-label">PackNet BWT</div>
         <div class="bwt-value good" id="pkn-bwt" style="color:var(--purple)">—</div>
-        <div class="bwt-explain">Structural, like DAS: ~0.00 expected — each task's claimed weights are frozen and never touched again. The cost shows up as plasticity, not BWT.</div>
+        <div class="bwt-explain">Structural, like DAS: ~0.00 regardless of regime — claimed weights are frozen and never touched again.</div>
       </div>
     </div>
   </div>
@@ -515,17 +455,17 @@ main{display:flex;flex:1;overflow:hidden}
     <!-- Extra metrics table -->
     <div class="metrics-grid">
       <div class="cost-card">
-        <h4>Plasticity — accuracy when first learning each task</h4>
+        <h4>Plasticity — accuracy when first learning each permutation</h4>
         <table class="metric-table">
-          <thead><tr><th class="row-h">Task</th><th>DAS</th><th>EWC</th><th>Fine-tuned</th><th>PackNet</th><th>Multi-task</th></tr></thead>
+          <thead><tr><th class="row-h">Perm</th><th>DAS</th><th>EWC</th><th>Fine-tuned</th><th>PackNet</th><th>Multi-task</th></tr></thead>
           <tbody id="plasticity-tbody"></tbody>
         </table>
         <div style="font-size:.58rem;color:var(--muted);margin-top:6px">Watch the <strong style="color:var(--purple)">PackNet</strong> column — it should trend down as capacity runs out.</div>
       </div>
       <div class="cost-card">
-        <h4>Stability — retention of earlier tasks after all training</h4>
+        <h4>Stability — retention of earlier permutations after all training</h4>
         <table class="metric-table">
-          <thead><tr><th class="row-h">Task</th><th>DAS final</th><th>EWC final</th><th>FT final</th><th>PackNet final</th></tr></thead>
+          <thead><tr><th class="row-h">Perm</th><th>DAS final</th><th>EWC final</th><th>FT final</th><th>PackNet final</th></tr></thead>
           <tbody id="stability-tbody"></tbody>
           <tfoot>
             <tr style="border-top:1px solid var(--border)">
@@ -537,7 +477,7 @@ main{display:flex;flex:1;overflow:hidden}
             </tr>
           </tfoot>
         </table>
-        <div style="font-size:.58rem;color:var(--muted);margin-top:6px">Stability score: 1.0 = perfect retention of earlier tasks.</div>
+        <div style="font-size:.58rem;color:var(--muted);margin-top:6px">Stability score: 1.0 = perfect retention of earlier permutations.</div>
       </div>
     </div>
   </div>
@@ -550,7 +490,7 @@ main{display:flex;flex:1;overflow:hidden}
     <table id="sum-table">
       <thead>
         <tr>
-          <th style="text-align:left">Task</th>
+          <th style="text-align:left">Perm</th>
           <th>DAS</th>
           <th>EWC</th>
           <th>Fine-tuned</th>
@@ -570,13 +510,12 @@ main{display:flex;flex:1;overflow:hidden}
 
 <script>
 // ── State ──────────────────────────────────────────────────────
-const dasMatrix = Array.from({length:5},()=>Array(5).fill(null));
-const ewcMatrix = Array.from({length:5},()=>Array(5).fill(null));
-const ftMatrix  = Array.from({length:5},()=>Array(5).fill(null));
-const pknMatrix = Array.from({length:5},()=>Array(5).fill(null));
-const mtAccs    = Array(5).fill(null);
+const N = 5;
+const dasMatrix = Array.from({length:N},()=>Array(N).fill(null));
+const ewcMatrix = Array.from({length:N},()=>Array(N).fill(null));
+const ftMatrix  = Array.from({length:N},()=>Array(N).fill(null));
+const pknMatrix = Array.from({length:N},()=>Array(N).fill(null));
 let running = false;
-let currentPhase = null;
 
 // ── Charts ────────────────────────────────────────────────────
 function makeChart(id, label, color) {
@@ -586,7 +525,7 @@ function makeChart(id, label, color) {
          borderWidth:1.5,pointRadius:0,tension:.3}]},
     options:{animation:false,responsive:true,maintainAspectRatio:false,
              scales:{x:{display:false},
-                     y:{min:0.4,max:1.05,ticks:{color:'#4a7c59',font:{size:9}},
+                     y:{min:0.0,max:1.05,ticks:{color:'#4a7c59',font:{size:9}},
                         grid:{color:'#1a3020'}}},
              plugins:{legend:{display:false}}}
   });
@@ -621,14 +560,13 @@ function cellClass(val, isDiag) {
 
 function renderMatrix(tbodyId, matrix) {
   const tbody = document.getElementById(tbodyId);
-  const stageLabels = ['After T0','After T1','After T2','After T3','After T4'];
+  const stageLabels = ['After P0','After P1','After P2','After P3','After P4'];
   let html = '';
-  for (let row=0; row<5; row++) {
+  for (let row=0; row<N; row++) {
     html += `<tr><td class="row-label">${stageLabels[row]}</td>`;
-    for (let col=0; col<5; col++) {
+    for (let col=0; col<N; col++) {
       const v = matrix[row][col];
       if (v === null) {
-        // Has this stage been filled yet?
         const cls = row < matrix.findIndex(r=>r.every(c=>c===null)) || matrix[row].some(c=>c!==null)
                   ? 'cell-future' : 'cell-empty';
         html += `<td class="${cls}">—</td>`;
@@ -662,33 +600,34 @@ function startBench() {
   document.getElementById('status').textContent = 'Running…';
   document.getElementById('loading-msg').style.display = 'block';
   document.getElementById('summary-section').style.display = 'none';
+  document.getElementById('router-callout').style.display = 'none';
   document.getElementById('error-msg').style.display = 'none';
   clearChart(dasChart); clearChart(ftChart); clearChart(ewcChart); clearChart(pknChart); clearChart(mtChart);
 
-  const es = new EventSource('/continual-stream');
+  const es = new EventSource('/permuted-stream');
   es.onmessage = function(ev) {
     const d = JSON.parse(ev.data);
 
-    if (d.e === 'cl_init') {
+    if (d.e === 'pm_init') {
       banner('Initialising…');
     }
 
-    else if (d.e === 'cl_loading') {
+    else if (d.e === 'pm_loading') {
       document.getElementById('loading-msg').style.display = 'block';
       banner('Loading MNIST data from disk…');
     }
 
-    else if (d.e === 'cl_loaded') {
+    else if (d.e === 'pm_loaded') {
       document.getElementById('loading-msg').style.display = 'none';
-      banner(`Loaded Split-MNIST: 5 tasks, ${d.n_train.map((n,i)=>`T${i}:${n}`).join('  ')} samples`);
+      banner(`Loaded Permuted-MNIST: ${d.n_perm} permutations, ${d.n_train} train / ${d.n_test} test samples each`);
     }
 
-    else if (d.e === 'cl_error') {
+    else if (d.e === 'pm_error') {
       showError(d.msg);
       es.close(); done();
     }
 
-    else if (d.e === 'cl_phase') {
+    else if (d.e === 'pm_phase') {
       banner(`<strong>${d.label}</strong>`);
       if (d.phase === 'das_router') {
         document.getElementById('das-status').textContent = 'Training router…';
@@ -698,50 +637,50 @@ function startBench() {
         for (let i=0;i<t;i++) setTask(i,'done');
         setTask(t,'active');
         document.getElementById('das-status').textContent = `Grafting Leaf ${t}…`;
-        document.getElementById('das-chart-title').textContent = `DAS Leaf ${t} — ${d.label.split('task ')[1]||''}`;
+        document.getElementById('das-chart-title').textContent = `DAS Leaf ${t} — permutation ${t}`;
         clearChart(dasChart);
       }
       else if (d.phase === 'finetune') {
         const t = d.task;
         setTask(t,'active');
-        document.getElementById('ft-status').textContent = `Fine-tuning on task ${t}…`;
-        document.getElementById('ft-chart-title').textContent = `Fine-tuned MLP — task ${t}`;
+        document.getElementById('ft-status').textContent = `Fine-tuning on permutation ${t}…`;
+        document.getElementById('ft-chart-title').textContent = `Fine-tuned MLP — permutation ${t}`;
         clearChart(ftChart);
       }
       else if (d.phase === 'ewc') {
         const t = d.task;
-        document.getElementById('ewc-status').textContent = `EWC on task ${t}…`;
-        document.getElementById('ewc-chart-title').textContent = `EWC MLP — task ${t}`;
+        document.getElementById('ewc-status').textContent = `EWC on permutation ${t}…`;
+        document.getElementById('ewc-chart-title').textContent = `EWC MLP — permutation ${t}`;
         clearChart(ewcChart);
-      }
-      else if (d.phase === 'contam') {
-        document.getElementById('das-status').textContent = 'Contamination test…';
       }
       else if (d.phase === 'packnet') {
         const t = d.task;
-        document.getElementById('pkn-status').textContent = `PackNet claiming slice for task ${t}…`;
-        document.getElementById('pkn-chart-title').textContent = `PackNet — task ${t}`;
+        document.getElementById('pkn-status').textContent = `PackNet claiming slice for permutation ${t}…`;
+        document.getElementById('pkn-chart-title').textContent = `PackNet — permutation ${t}`;
         clearChart(pknChart);
       }
       else if (d.phase === 'multitask') {
-        for (let i=0;i<5;i++) setTask(i,'done');
-        document.getElementById('mt-status').textContent = 'Training on all digits…';
+        for (let i=0;i<N;i++) setTask(i,'done');
+        document.getElementById('mt-status').textContent = 'Training on all permutations…';
       }
     }
 
-    else if (d.e === 'cl_router_step') {
+    else if (d.e === 'pm_router_step') {
       document.getElementById('status').textContent = `Router step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
     }
-    else if (d.e === 'cl_router_done') {
-      document.getElementById('das-status').textContent = 'Router done ✓';
+    else if (d.e === 'pm_router_done') {
+      document.getElementById('das-status').textContent = `Router done ✓  acc ${(d.acc*100).toFixed(1)}%`;
+      const cal = document.getElementById('router-callout');
+      cal.style.display = 'block';
+      cal.innerHTML = `<strong>Router accuracy: ${(d.acc*100).toFixed(1)}%</strong> — identifying which fixed pixel-permutation produced a sample, on held-out routing data.`;
     }
 
-    else if (d.e === 'cl_leaf_step') {
+    else if (d.e === 'pm_leaf_step') {
       pushChart(dasChart, d.step, d.acc);
-      document.getElementById('status').textContent = `DAS T${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+      document.getElementById('status').textContent = `DAS P${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_das_eval') {
+    else if (d.e === 'pm_das_eval') {
       const t = d.stage;
       d.accs.forEach((v,col)=>{ dasMatrix[t][col]=v; });
       renderMatrix('das-tbody', dasMatrix);
@@ -749,62 +688,56 @@ function startBench() {
       document.getElementById('das-status').textContent = `Leaf ${t} done ✓  acc ${(d.accs[t]*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_ft_step') {
+    else if (d.e === 'pm_ft_step') {
       pushChart(ftChart, d.step, d.acc);
-      document.getElementById('status').textContent = `FT T${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+      document.getElementById('status').textContent = `FT P${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_ft_eval') {
+    else if (d.e === 'pm_ft_eval') {
       const t = d.stage;
       d.accs.forEach((v,col)=>{ ftMatrix[t][col]=v; });
       renderMatrix('ft-tbody', ftMatrix);
-      document.getElementById('ft-status').textContent = `Task ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%`;
+      document.getElementById('ft-status').textContent = `Perm ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_ewc_step') {
+    else if (d.e === 'pm_ewc_step') {
       pushChart(ewcChart, d.step, d.acc);
-      document.getElementById('status').textContent = `EWC T${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+      document.getElementById('status').textContent = `EWC P${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_ewc_eval') {
+    else if (d.e === 'pm_ewc_eval') {
       const t = d.stage;
       d.accs.forEach((v,col)=>{ ewcMatrix[t][col]=v; });
       renderMatrix('ewc-tbody', ewcMatrix);
-      document.getElementById('ewc-status').textContent = `Task ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%`;
+      document.getElementById('ewc-status').textContent = `Perm ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_contam') {
-      renderContam(d.matrix, d.diag_mean, d.off_mean);
-    }
-
-    else if (d.e === 'cl_pkn_step') {
+    else if (d.e === 'pm_pkn_step') {
       pushChart(pknChart, d.step, d.acc);
-      document.getElementById('status').textContent = `PackNet T${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+      document.getElementById('status').textContent = `PackNet P${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_pkn_eval') {
+    else if (d.e === 'pm_pkn_eval') {
       const t = d.stage;
       d.accs.forEach((v,col)=>{ pknMatrix[t][col]=v; });
       renderMatrix('pkn-tbody', pknMatrix);
       document.getElementById('pkn-status').textContent =
-        `Task ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%  (free weights: ${d.free_before}→${d.free_after})`;
+        `Perm ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%  (free weights: ${d.free_before}→${d.free_after})`;
     }
 
-    else if (d.e === 'cl_mt_step') {
+    else if (d.e === 'pm_mt_step') {
       pushChart(mtChart, d.step, d.acc);
       document.getElementById('status').textContent = `Multi-task step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
     }
 
-    else if (d.e === 'cl_mt_done') {
+    else if (d.e === 'pm_mt_done') {
       document.getElementById('mt-status').textContent = 'Done ✓';
       const box = document.getElementById('mt-results-box');
       const res = document.getElementById('mt-results');
       box.style.display='block';
-      const labels=['0v1','2v3','4v5','6v7','8v9'];
       res.innerHTML = d.accs.map((v,i)=>`
         <div style="display:flex;align-items:center;gap:8px;font-size:.67rem">
-          <span style="color:var(--muted);min-width:32px">T${i}</span>
-          <span style="color:var(--muted);min-width:40px">${labels[i]}</span>
+          <span style="color:var(--muted);min-width:32px">P${i}</span>
           <div style="flex:1;background:#0a2010;border-radius:3px;height:8px">
             <div style="background:var(--blue);height:100%;border-radius:3px;width:${(v*100).toFixed(0)}%"></div>
           </div>
@@ -812,7 +745,7 @@ function startBench() {
         </div>`).join('');
     }
 
-    else if (d.e === 'cl_done') {
+    else if (d.e === 'pm_done') {
       // BWT
       const dasBWT = d.das_bwt;
       const ewcBWT = d.ewc_bwt;
@@ -821,30 +754,25 @@ function startBench() {
       document.getElementById('das-bwt').textContent = (dasBWT >= 0 ? '+':'') + dasBWT.toFixed(3);
       document.getElementById('ewc-bwt').textContent = (ewcBWT >= 0 ? '+':'') + ewcBWT.toFixed(3);
       document.getElementById('ft-bwt').textContent  = (ftBWT  >= 0 ? '+':'') + ftBWT.toFixed(3);
-      if (pknBWT != null) document.getElementById('pkn-bwt').textContent = (pknBWT >= 0 ? '+':'') + pknBWT.toFixed(3);
+      document.getElementById('pkn-bwt').textContent = (pknBWT >= 0 ? '+':'') + pknBWT.toFixed(3);
       document.getElementById('ewc-bwt').className = 'bwt-value ' + (ewcBWT < -0.05 ? 'mid':'good');
       document.getElementById('ft-bwt').className = 'bwt-value ' + (ftBWT < -0.05 ? 'bad':'draw');
 
       // Full matrices
       d.das_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)dasMatrix[t][c]=v; }); });
-      if (d.ewc_matrix) d.ewc_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)ewcMatrix[t][c]=v; }); });
+      d.ewc_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)ewcMatrix[t][c]=v; }); });
       d.ft_matrix.forEach( (row,t)=>{ row.forEach((v,c)=>{ if(v!==null)ftMatrix[t][c]=v; }); });
-      if (d.pkn_matrix) d.pkn_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)pknMatrix[t][c]=v; }); });
+      d.pkn_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)pknMatrix[t][c]=v; }); });
       renderMatrix('das-tbody', dasMatrix);
       renderMatrix('ewc-tbody', ewcMatrix);
       renderMatrix('ft-tbody',  ftMatrix);
       renderMatrix('pkn-tbody', pknMatrix);
-      if (d.contam) {
-        const diag = d.contam.reduce((s,r,i)=>s+r[i],0)/5;
-        let off=0,n=0; d.contam.forEach((r,i)=>r.forEach((v,j)=>{ if(i!==j){off+=v;n++;} }));
-        renderContam(d.contam, diag, off/n);
-      }
 
       // Cost & metrics
-      if (d.cost)    buildCostSection(d.cost, d.metrics);
+      if (d.cost) buildCostSection(d.cost, d.metrics);
       // Summary
       buildSummary(d);
-      banner(`<strong>Done!</strong>  DAS BWT: <span style="color:var(--c3)">${dasBWT.toFixed(3)}</span> &nbsp;|&nbsp; Fine-tuned BWT: <span style="color:var(--red)">${ftBWT.toFixed(3)}</span>`);
+      banner(`<strong>Done!</strong>  DAS BWT: <span style="color:var(--c3)">${dasBWT.toFixed(3)}</span> &nbsp;|&nbsp; EWC BWT: <span style="color:var(--blue)">${ewcBWT.toFixed(3)}</span> &nbsp;|&nbsp; Fine-tuned BWT: <span style="color:var(--red)">${ftBWT.toFixed(3)}</span> &nbsp;|&nbsp; Router acc: <span style="color:var(--c3)">${(d.router_acc*100).toFixed(1)}%</span>`);
 
       es.close(); done();
     }
@@ -896,13 +824,13 @@ function buildCostSection(cost, metrics) {
   document.getElementById('c-das-active').textContent = fmtK(cost.das_active_params);
   document.getElementById('c-ft-params').textContent  = fmtK(cost.ft_params);
   document.getElementById('c-mt-params').textContent  = fmtK(cost.mt_params);
-  if (cost.pkn_params != null) document.getElementById('c-pkn-params').textContent = fmtK(cost.pkn_params);
-  const maxP = Math.max(cost.das_stored_params, cost.ft_params, cost.mt_params, cost.pkn_params||0);
+  document.getElementById('c-pkn-params').textContent = fmtK(cost.pkn_params);
+  const maxP = Math.max(cost.das_stored_params, cost.ft_params, cost.mt_params, cost.pkn_params);
   document.getElementById('param-bars').innerHTML =
     paramBar('DAS stored (all leaves)', cost.das_stored_params, maxP, '#4a7c59') +
     paramBar('DAS active (1 leaf + router)', cost.das_active_params, maxP, '#56ab2f') +
     paramBar('Fine-tuned MLP', cost.ft_params, maxP, '#744210') +
-    paramBar('PackNet (shared, fixed)', cost.pkn_params||0, maxP, '#5a3d7a') +
+    paramBar('PackNet (shared, fixed)', cost.pkn_params, maxP, '#5a3d7a') +
     paramBar('Multi-task MLP', cost.mt_params, maxP, '#2c4a6e');
 
   // ── FLOPs cards ──
@@ -924,27 +852,26 @@ function buildCostSection(cost, metrics) {
   document.getElementById('c-t-leaves').textContent  = cost.t_das_leaves.reduce((a,b)=>a+b,0).toFixed(1) + 's';
   document.getElementById('c-t-das').textContent     = cost.t_das_total + 's';
   document.getElementById('c-t-ft').textContent      = cost.t_ft_total  + 's';
+  document.getElementById('c-t-pkn').textContent     = cost.t_pkn_total + 's';
   document.getElementById('c-t-mt').textContent      = cost.t_mt        + 's';
-  if (cost.t_pkn_total != null) document.getElementById('c-t-pkn').textContent = cost.t_pkn_total + 's';
-  const maxT = Math.max(cost.t_das_total, cost.t_ft_total, cost.t_mt, cost.t_pkn_total||0);
+  const maxT = Math.max(cost.t_das_total, cost.t_ft_total, cost.t_mt, cost.t_pkn_total);
   document.getElementById('time-bars').innerHTML =
     paramBar('DAS total', cost.t_das_total, maxT, '#56ab2f') +
     paramBar('Fine-tuned total', cost.t_ft_total, maxT, '#744210') +
-    paramBar('PackNet total', cost.t_pkn_total||0, maxT, '#5a3d7a') +
+    paramBar('PackNet total', cost.t_pkn_total, maxT, '#5a3d7a') +
     paramBar('Multi-task', cost.t_mt, maxT, '#2c4a6e');
 
   if (!metrics) return;
 
   // ── Plasticity table ──
-  const tasks = ['0v1','2v3','4v5','6v7','8v9'];
   let pHtml = '';
-  for (let t=0; t<5; t++) {
-    const dv = metrics.das_plasticity[t], ev = (metrics.ewc_plasticity||[])[t],
+  for (let t=0; t<N; t++) {
+    const dv = metrics.das_plasticity[t], ev = metrics.ewc_plasticity[t],
           fv = metrics.ft_plasticity[t], mv = metrics.mt_plasticity[t],
-          kv = (metrics.pkn_plasticity||[])[t];
+          kv = metrics.pkn_plasticity[t];
     const f = v => v!=null?(v*100).toFixed(1)+'%':'—';
     pHtml += `<tr>
-      <td class="row-h">T${t}: ${tasks[t]}</td>
+      <td class="row-h">P${t}</td>
       <td style="color:var(--c3)">${f(dv)}</td>
       <td style="color:var(--blue)">${f(ev)}</td>
       <td style="color:var(--amber)">${f(fv)}</td>
@@ -956,61 +883,41 @@ function buildCostSection(cost, metrics) {
 
   // ── Stability table ──
   let sHtml = '';
-  for (let t=0; t<5; t++) {
-    const dv = metrics.das_final[t], ev = (metrics.ewc_final||[])[t], fv = metrics.ft_final[t],
-          kv = (metrics.pkn_final||[])[t];
+  for (let t=0; t<N; t++) {
+    const dv = metrics.das_final[t], ev = metrics.ewc_final[t], fv = metrics.ft_final[t],
+          kv = metrics.pkn_final[t];
     const f = v => v!=null?(v*100).toFixed(1)+'%':'—';
     sHtml += `<tr>
-      <td class="row-h">T${t}: ${tasks[t]}</td>
+      <td class="row-h">P${t}</td>
       <td style="color:var(--c3)">${f(dv)}</td>
-      <td style="color:${ev!=null&&ev<0.7?'var(--red)':'var(--blue)'}">${f(ev)}</td>
-      <td style="color:${fv!=null&&fv<0.7?'var(--red)':'var(--amber)'}">${f(fv)}</td>
-      <td style="color:${kv!=null&&kv<0.7?'var(--red)':'var(--purple)'}">${f(kv)}</td>
+      <td style="color:${ev<0.7?'var(--red)':'var(--blue)'}">${f(ev)}</td>
+      <td style="color:${fv<0.7?'var(--red)':'var(--amber)'}">${f(fv)}</td>
+      <td style="color:${kv<0.7?'var(--red)':'var(--purple)'}">${f(kv)}</td>
     </tr>`;
   }
   document.getElementById('stability-tbody').innerHTML = sHtml;
   document.getElementById('m-das-stab').textContent = metrics.das_stability.toFixed(3);
-  if (metrics.ewc_stability!=null) document.getElementById('m-ewc-stab').textContent = metrics.ewc_stability.toFixed(3);
+  document.getElementById('m-ewc-stab').textContent = metrics.ewc_stability.toFixed(3);
   document.getElementById('m-ft-stab').textContent  = metrics.ft_stability.toFixed(3);
-  if (metrics.pkn_stability!=null) document.getElementById('m-pkn-stab').textContent = metrics.pkn_stability.toFixed(3);
-}
-
-// ── Contamination heatmap ─────────────────────────────────────
-function renderContam(matrix, diagMean, offMean) {
-  document.getElementById('contam-section').style.display = 'block';
-  const tasks = ['0v1','2v3','4v5','6v7','8v9'];
-  let html = '';
-  for (let i=0; i<5; i++) {
-    html += `<tr><td class="row-label" style="color:var(--muted);text-align:right;padding-right:6px">Leaf ${i}</td>`;
-    for (let j=0; j<5; j++) {
-      const v = matrix[i][j];
-      const cls = i===j ? 'cell-diag' : (v>=0.7 ? 'cell-ok' : v>=0.6 ? 'cell-bad' : 'cell-bad');
-      html += `<td class="${cls}">${(v*100).toFixed(0)}%</td>`;
-    }
-    html += '</tr>';
-  }
-  document.getElementById('contam-tbody').innerHTML = html;
-  document.getElementById('contam-diag').textContent = (diagMean*100).toFixed(1)+'%';
-  document.getElementById('contam-off').textContent  = (offMean*100).toFixed(1)+'%';
+  document.getElementById('m-pkn-stab').textContent = metrics.pkn_stability.toFixed(3);
 }
 
 function buildSummary(d) {
-  const tasks = d.tasks || ['0v1','2v3','4v5','6v7','8v9'];
-  const dasRow  = d.das_matrix[4];
-  const ewcRow  = (d.ewc_matrix||[])[4] || Array(5).fill(null);
-  const ftRow   = d.ft_matrix[4];
-  const pknRow  = (d.pkn_matrix||[])[4] || Array(5).fill(null);
+  const dasRow  = d.das_matrix[N-1];
+  const ewcRow  = d.ewc_matrix[N-1];
+  const ftRow   = d.ft_matrix[N-1];
+  const pknRow  = d.pkn_matrix[N-1];
   const mtAccs  = d.mt_accs;
   const f = v => v!=null?(v*100).toFixed(1)+'%':'—';
 
   let html = '';
-  for (let t=0; t<5; t++) {
+  for (let t=0; t<N; t++) {
     const dv = dasRow[t], ev = ewcRow[t], fv = ftRow[t], kv = pknRow[t], mv = mtAccs[t];
     const maxV = Math.max(...[dv,ev,fv,kv,mv].filter(v=>v!==null));
     const winner = dv === maxV ? 'DAS 🌿' : mv === maxV ? 'Multi-task' : kv === maxV ? 'PackNet'
                  : ev === maxV ? 'EWC' : 'Fine-tuned';
     html += `<tr>
-      <td class="task-col">Task ${t}: ${tasks[t]}</td>
+      <td class="task-col">Perm ${t}</td>
       <td class="${dv===maxV?'win':'lose'}">${f(dv)}</td>
       <td class="${ev===maxV?'win':'lose'}">${f(ev)}</td>
       <td class="${fv===maxV?'win':'lose'}">${f(fv)}</td>
@@ -1024,9 +931,9 @@ function buildSummary(d) {
   html += `<tr style="border-top:2px solid var(--border)">
     <td class="task-col" style="color:var(--muted)">BWT</td>
     <td class="win">${(d.das_bwt>=0?'+':'') + d.das_bwt.toFixed(3)}</td>
-    <td class="draw">${d.ewc_bwt!=null?((d.ewc_bwt>=0?'+':'') + d.ewc_bwt.toFixed(3)):'—'}</td>
+    <td class="draw">${(d.ewc_bwt>=0?'+':'') + d.ewc_bwt.toFixed(3)}</td>
     <td class="lose">${(d.ft_bwt>=0?'+':'') + d.ft_bwt.toFixed(3)}</td>
-    <td class="win">${d.pkn_bwt!=null?((d.pkn_bwt>=0?'+':'') + d.pkn_bwt.toFixed(3)):'—'}</td>
+    <td class="win">${(d.pkn_bwt>=0?'+':'') + d.pkn_bwt.toFixed(3)}</td>
     <td class="draw">N/A</td>
     <td style="color:var(--c3)">DAS 🌿 / PackNet 🧩</td>
   </tr>`;
@@ -1038,7 +945,7 @@ function buildSummary(d) {
   document.getElementById('proof-bar-final').innerHTML = `
     <div class="proof-bar ${allDasStable?'pass':'fail'}">
       ${allDasStable
-        ? '✓ DAS Forgetting Proof PASS — all frozen leaves are byte-identical, BWT ≈ 0'
+        ? '✓ DAS Forgetting Proof PASS — all frozen leaves are byte-identical, BWT ≈ 0 (regime-independent)'
         : '✗ Unexpected change detected in frozen leaves'}
     </div>`;
 

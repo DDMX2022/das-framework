@@ -15,17 +15,19 @@ das-framework/
 ├── das/                    NumPy core (manual backprop, no autograd)
 │   ├── functional.py       FibonacciLeaf  — an expert MLP + frozen flag + weight_hash()
 │   ├── routing.py          StemRouter     — MoE gate (linear → softmax → argmax)
-│   └── model.py            DASForest      — assembles router + leaves, graft(), proofs
+│   ├── model.py            DASForest      — assembles router + leaves, graft(), proofs
+│   └── packnet.py          PackNetMLP     — pruning + per-task weight masks (CL baseline)
 ├── demo.py                 Full lifecycle on synthetic data + forgetting proof (NumPy)
 ├── benchmark.py            DAS vs matched-size MLP on sklearn digits (NumPy)
 ├── das_torch.py            PyTorch port (autograd + Apple Silicon MPS)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
-├── app.py                  Flask server — 5 live, browser-streamed experiments
+├── app.py                  Flask server — 6 live, browser-streamed experiments
 ├── templates/              UI for the web app (SSE + Chart.js)
 │   ├── index.html          Forest demo + digits benchmark
 │   ├── stress.html         MNIST stress test
 │   ├── real_bench.html     Real-world multi-dataset benchmark
-│   └── continual_bench.html Split-MNIST continual learning
+│   ├── continual_bench.html Split-MNIST continual learning
+│   └── permuted_bench.html  Permuted-MNIST continual learning
 └── data/MNIST/raw/         MNIST IDX files (downloaded by mnist_stress.py)
 ```
 
@@ -59,7 +61,8 @@ python app.py
 | `/` | **Forest demo** + **Digits benchmark** | Animated tree growth on synthetic data; DAS vs matched MLP on sklearn digits |
 | `/stress` | **MNIST stress test** | 10 leaves × 784-dim, router + 10 isolated leaves vs a 10-class baseline; 45-pairwise forgetting proof |
 | `/real` | **Real-world benchmark** | Adult Income, Wine Quality, Credit Default (OpenML), with download progress + heartbeat |
-| `/continual` | **Split-MNIST continual learning** | DAS vs Fine-tuned MLP vs Multi-task MLP, with a live 5×5 accuracy matrix |
+| `/continual` | **Split-MNIST continual learning** | DAS vs EWC vs PackNet vs Fine-tuned vs Multi-task, live accuracy matrices + contamination test |
+| `/permuted` | **Permuted-MNIST continual learning** | same five models on the domain-incremental regime |
 | `/benchmark` (stream) | digits SSE stream | backing stream for the `/` benchmark tab |
 
 The web app reads MNIST directly from `data/MNIST/raw/*.gz` (stdlib `gzip` + `numpy`, no torchvision). If those files are missing, run `python mnist_stress.py` once to download them.
@@ -154,22 +157,21 @@ flowchart LR
 ## Benchmarks & metrics
 
 - **Digits / MNIST:** DAS specialist leaves are compared against a single MLP of matched parameter count. Each leaf only ever sees its own domain's gradient, so it can't be pulled off-task by unrelated data.
-- **Split-MNIST continual learning** (`/continual`) compares four regimes — the honest competitor set:
-  - **DAS Forest** — one frozen leaf grafted per task
-  - **EWC MLP** — Elastic Weight Consolidation, the standard CL baseline (soft penalty on important weights)
-  - **Fine-tuned MLP** — one shared net fine-tuned sequentially (this is what people actually do; it forgets)
-  - **Multi-task MLP** — all tasks at once (upper bound)
+- **Continual-learning baseline suite** — two pages, the honest competitor set: **DAS** vs **EWC** (Elastic Weight Consolidation) vs **PackNet** vs **Fine-tuned MLP** vs **Multi-task MLP** (upper bound).
+  - **Split-MNIST** (`/continual`) — class-incremental, single-head: 5 binary tasks (0v1 … 8v9). The known-hard regime for soft methods.
+  - **Permuted-MNIST** (`/permuted`) — domain-incremental: same 10-class task, a fixed pixel permutation per task. The regime where EWC is *expected* to work — included precisely so the suite isn't cherry-picked to always favor DAS.
 - **Metrics reported:** Backward Transfer (BWT), plasticity (diagonal accuracy), stability (final ÷ first-learned), stored vs. active parameters, inference FLOPs, and wall-clock training time per phase.
 
-Measured result (single-head Split-MNIST):
+Measured BWT (higher = less forgetting):
 
-| Model | BWT | Note |
-|---|---|---|
-| **DAS Forest** | **≈ 0.000** | structural isolation — frozen leaves can't move |
-| EWC MLP | ≈ −0.33 | soft penalty helps vs. naive, but can't reach zero |
-| Fine-tuned MLP | ≈ −0.40 | catastrophic forgetting |
+| Model | Split-MNIST | Permuted-MNIST | How it avoids forgetting |
+|---|---|---|---|
+| **DAS Forest** | **0.000** | **0.000** | structural — a frozen leaf per task |
+| **PackNet** | **0.000** | **0.000** | structural — frozen weight masks in one fixed net |
+| EWC MLP | −0.33 | **−0.03** | soft penalty; works in the easy regime, fails in the hard one |
+| Fine-tuned MLP | −0.40 | −0.12 | nothing — catastrophic forgetting |
 
-DAS achieves zero forgetting by storing more total parameters but using **fewer at inference** (only 1 leaf + router activate per prediction). EWC's limited gain here is expected: single-head Split-MNIST is the known-hard regime where soft methods struggle (van de Ven & Tolias, 2019) — which is exactly the contrast that motivates structural isolation.
+Two honest takeaways the suite is designed to surface: (1) **EWC's BWT improves ~10× from Split→Permuted** — exactly the documented regime sensitivity (van de Ven & Tolias, 2019); a benchmark that only ever favored DAS would be untrustworthy. (2) **PackNet matches DAS on forgetting but not on plasticity**: it shares one fixed-capacity network, so as weights get claimed, later tasks have fewer free weights and new-task accuracy erodes (measured: free weights 41.8k→31.4k→20.9k→10.5k→0 across the 5 tasks). DAS instead grows a new leaf per task — unbounded capacity at the cost of more stored parameters (but the same ~1-leaf inference cost).
 
 - **Cross-domain contamination test** (`/continual`): every trained leaf is run on every task's test set. The diagonal (own domain) stays ~99%; off-diagonal (wrong domain) collapses to ~52% (binary chance). This proves leaves are genuine specialists **and** that the router is doing essential work — without it picking the diagonal, the forest would be near chance.
 
@@ -200,7 +202,8 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 
 ## Next steps
 
-- ✅ **Done (Phase 5):** EWC baseline and the cross-domain contamination test, both wired into `/continual`.
-1. More CL baselines (PackNet, Progressive Nets) and Permuted-MNIST / Split-CIFAR.
+- ✅ **Done (Phase 5):** EWC baseline + cross-domain contamination test on `/continual`.
+- ✅ **Done (Phase 6):** PackNet baseline and the Permuted-MNIST regime (`/permuted`).
+1. Split-CIFAR-10/100 (needs CNN leaves) and Progressive Neural Networks.
 2. CNN leaves and an attention-based router; per-leaf checkpoint/restore; a REST inference API.
 3. Port `demo.py`'s training loop into `das_torch.py` with autograd for GPU-scale runs.

@@ -11,6 +11,8 @@ from flask import Flask, render_template, Response
 sys.path.insert(0, '.')
 from das.model import DASForest
 from das.functional import FibonacciLeaf, softmax
+from das.routing import StemRouter
+from das.packnet import PackNetMLP
 
 app = Flask(__name__)
 
@@ -460,6 +462,8 @@ CL_EWC_LAMBDA    = 5000.0  # EWC penalty strength. NB: single-head Split-MNIST i
                            # known-hard regime where EWC only partly helps (van de Ven
                            # & Tolias 2019) — it beats naive fine-tuning but cannot reach
                            # DAS's structural BWT≈0. That contrast is the point.
+CL_PKN_STEPS     = 600   # training steps on free weights, per task
+CL_PKN_REFIT     = 300   # brief re-finetune steps on task-owned weights after pruning
 CL_TASKS = [(0,1),(2,3),(4,5),(6,7),(8,9)]
 
 def _cl_binary_split(X_tr, y_tr, X_te, y_te, d0, d1, rng):
@@ -626,6 +630,69 @@ def run_continual_bench():
     ewc_params_total = n_params(ewc_mlp)
     t_ewc_total = round(sum(t_ewc_tasks), 1)
 
+    # ── PackNet: iterative pruning + per-task binary masks ──────
+    # Same zero-forgetting guarantee as DAS (each task's weights get frozen
+    # once claimed) but inside ONE fixed-size network instead of a new leaf
+    # per task. Capacity is finite and gets carved up as tasks arrive, so
+    # later tasks should get less of it — watch plasticity decline below.
+    pkn = PackNetMLP(CL_LEAF, seed=42)
+    pkn_matrix = [[None]*5 for _ in range(5)]
+    pkn_free_counts = []
+    t_pkn_tasks = []
+    for t in range(5):
+        d0, d1 = CL_TASKS[t]
+        Xtr, ytr, Xte, yte = task_splits[t]
+        yield emit({'e':'cl_phase','phase':'packnet','task':t,
+                    'label':f'PackNet on task {d0} vs {d1} — claims its slice of fixed capacity'})
+        t1 = _time.time()
+        free_before = pkn.free_count()
+        free_mask = [(own == -1) for own in pkn.owner]
+        prng = np.random.default_rng(2000 + t)
+        # 1) train on free weights only
+        for s in range(CL_PKN_STEPS):
+            idx = prng.integers(0, len(Xtr), CL_B)
+            logits = pkn._forward(Xtr[idx])
+            gW, gb = pkn._grads(ce_grad(logits, ytr[idx]))
+            for i in range(len(pkn.W)):
+                pkn.W[i] -= CL_LR * gW[i] * free_mask[i]
+                pkn.b[i] -= CL_LR * gb[i]
+            if s % 60 == 0:
+                pkn.task_bias[t] = [bb.copy() for bb in pkn.b]   # temp bias for live eval
+                yield emit({'e':'cl_pkn_step','task':t,'step':s,
+                            'acc':round(acc(pkn.forward_task(Xtr[:300], t),ytr[:300]),4)})
+        # 2) prune: claim the top |weight| slice of what's still free for task t
+        remaining = 5 - t
+        free_vals = np.concatenate([np.abs(pkn.W[i][free_mask[i]]) for i in range(len(pkn.W))])
+        n_free = free_vals.size
+        keep_count = int(round(n_free / max(remaining, 1)))
+        thresh = (np.partition(free_vals, max(n_free-keep_count, 0))[max(n_free-keep_count, 0)]
+                  if keep_count > 0 and n_free > 0 else np.inf)
+        for i in range(len(pkn.W)):
+            claim = free_mask[i] & (np.abs(pkn.W[i]) >= thresh)
+            pkn.owner[i][claim] = t
+        # 3) brief re-finetune restricted to task-t-owned weights, to recover
+        #    accuracy lost from freezing the rest of the gradient signal away
+        owned_mask = [(own == t) for own in pkn.owner]
+        for s in range(CL_PKN_REFIT):
+            idx = prng.integers(0, len(Xtr), CL_B)
+            logits = pkn._forward(Xtr[idx])
+            gW, gb = pkn._grads(ce_grad(logits, ytr[idx]))
+            for i in range(len(pkn.W)):
+                pkn.W[i] -= CL_LR * gW[i] * owned_mask[i]
+                pkn.b[i] -= CL_LR * gb[i]
+        pkn.task_bias[t] = [bb.copy() for bb in pkn.b]   # final bias snapshot for task t
+        t_pkn_tasks.append(round(_time.time()-t1, 1))
+        free_after = pkn.free_count()
+        pkn_free_counts.append(free_after)
+        for ev in range(t+1):
+            Xe, ye = task_splits[ev][2], task_splits[ev][3]
+            pkn_matrix[t][ev] = round(acc(pkn.forward_task(Xe, ev),ye),4)
+        yield emit({'e':'cl_pkn_eval','stage':t,'accs':pkn_matrix[t][:t+1],
+                    'free_before':int(free_before),'free_after':int(free_after)})
+
+    pkn_params = n_params(pkn)
+    t_pkn_total = round(sum(t_pkn_tasks), 1)
+
     # ── Multi-task MLP: upper bound ─────────────────────────────
     yield emit({'e':'cl_phase','phase':'multitask',
                 'label':'Multi-task MLP: trained on all 10 digits at once (upper bound)'})
@@ -653,22 +720,26 @@ def run_continual_bench():
     das_bwt = round(sum(das_matrix[4][i] - das_matrix[i][i] for i in range(4))/4, 4)
     ft_bwt  = round(sum(ft_matrix[4][i]  - ft_matrix[i][i]  for i in range(4))/4, 4)
     ewc_bwt = round(sum(ewc_matrix[4][i] - ewc_matrix[i][i] for i in range(4))/4, 4)
+    pkn_bwt = round(sum(pkn_matrix[4][i] - pkn_matrix[i][i] for i in range(4))/4, 4)
 
     # Plasticity: accuracy when FIRST learning each task (diagonal)
     das_plasticity = [das_matrix[t][t] for t in range(5)]
     ft_plasticity  = [ft_matrix[t][t]  for t in range(5)]
     ewc_plasticity = [ewc_matrix[t][t] for t in range(5)]
+    pkn_plasticity = [pkn_matrix[t][t] for t in range(5)]
     mt_plasticity  = mt_accs  # upper bound
 
     # Final accuracy: row 4 of each matrix
     das_final = [das_matrix[4][t] for t in range(5)]
     ft_final  = [ft_matrix[4][t]  for t in range(5)]
     ewc_final = [ewc_matrix[4][t] for t in range(5)]
+    pkn_final = [pkn_matrix[4][t] for t in range(5)]
 
     # Stability = mean(final/first_learned) for tasks 0..3
     das_stability = round(sum(das_matrix[4][i]/max(das_matrix[i][i],1e-6) for i in range(4))/4, 4)
     ft_stability  = round(sum(ft_matrix[4][i] /max(ft_matrix[i][i], 1e-6) for i in range(4))/4, 4)
     ewc_stability = round(sum(ewc_matrix[4][i]/max(ewc_matrix[i][i],1e-6) for i in range(4))/4, 4)
+    pkn_stability = round(sum(pkn_matrix[4][i]/max(pkn_matrix[i][i],1e-6) for i in range(4))/4, 4)
 
     # Forward transfer: average over tasks 1-4 of (acc_first_learned / acc_task0_at_same_stage)
     # Simplified: just emit raw numbers, compute in JS
@@ -683,11 +754,13 @@ def run_continual_bench():
                 'das_matrix':das_matrix,
                 'ft_matrix':ft_matrix,
                 'ewc_matrix':ewc_matrix,
+                'pkn_matrix':pkn_matrix,
                 'contam':contam,
                 'mt_accs':mt_accs,
                 'das_bwt':das_bwt,
                 'ft_bwt':ft_bwt,
                 'ewc_bwt':ewc_bwt,
+                'pkn_bwt':pkn_bwt,
                 'tasks':task_labels,
                 # cost metrics
                 'cost':{
@@ -697,6 +770,7 @@ def run_continual_bench():
                     'router_params'     : router_params,
                     'ft_params'         : ft_params_total,
                     'ewc_params'        : ewc_params_total,
+                    'pkn_params'        : pkn_params,
                     'mt_params'         : mt_params_total,
                     'das_infer_flops'   : das_infer_flops,
                     'ft_infer_flops'    : ft_infer_flops,
@@ -708,6 +782,7 @@ def run_continual_bench():
                     't_ft_tasks'        : t_ft_tasks,
                     't_ft_total'        : t_ft_total,
                     't_ewc_total'       : t_ewc_total,
+                    't_pkn_total'       : t_pkn_total,
                     't_mt'              : t_mt,
                 },
                 # extra metrics
@@ -715,13 +790,314 @@ def run_continual_bench():
                     'das_plasticity'  : das_plasticity,
                     'ft_plasticity'   : ft_plasticity,
                     'ewc_plasticity'  : ewc_plasticity,
+                    'pkn_plasticity'  : pkn_plasticity,
                     'mt_plasticity'   : mt_plasticity,
                     'das_final'       : das_final,
                     'ft_final'        : ft_final,
                     'ewc_final'       : ewc_final,
+                    'pkn_final'       : pkn_final,
                     'das_stability'   : das_stability,
                     'ft_stability'    : ft_stability,
                     'ewc_stability'   : ewc_stability,
+                    'pkn_stability'   : pkn_stability,
+                    'pkn_free_counts' : pkn_free_counts,
+                }})
+
+
+# ── Phase 6: Permuted-MNIST — domain-incremental counterweight ──
+# Split-MNIST is the regime where DAS's BWT≈0 looks most dramatic because EWC and
+# fine-tuning genuinely struggle there (task-incremental, disjoint label pairs,
+# heavy interference). Permuted-MNIST is the honest counter-example: every task is
+# the SAME 10-class digit problem, just with a fixed pixel shuffle applied. This is
+# domain-incremental, not task-incremental — and it is the well-known regime where
+# EWC is expected to be much more competitive (Kirkpatrick et al. 2017 demoed EWC
+# on exactly this benchmark). Including it keeps the benchmark suite honest: DAS
+# still wins on BWT, but by a smaller margin, and that's reported plainly below.
+PM_N_PERM      = 5
+PM_LEAF_10     = [784, 128, 64, 10]   # one 10-class leaf per permutation
+PM_LR          = 0.02; PM_B = 128
+PM_N_TRAIN_SUB = 6000   # subset per task — keeps the web run ~70-90s
+PM_N_TEST_SUB  = 1000
+PM_ROUTER_STEPS = 800
+PM_TASK_STEPS   = 800    # DAS / fine-tuned / EWC / PackNet steps per task
+PM_PKN_REFIT    = 200
+PM_MT_STEPS     = 1500
+PM_EWC_LAMBDA   = 5000.0
+
+def run_permuted_bench():
+    import time as _time
+    rng = np.random.default_rng(42)
+    yield emit({'e':'pm_init','n_perm':PM_N_PERM})
+
+    # ── Load MNIST + subset (full 10-class, NOT binary-split like Split-MNIST) ──
+    yield emit({'e':'pm_loading'})
+    try:
+        base = './data/MNIST/raw'
+        X_tr = _read_mnist_idx(f'{base}/train-images-idx3-ubyte.gz').reshape(-1,784).astype(np.float64)/255.0
+        y_tr = _read_mnist_idx(f'{base}/train-labels-idx1-ubyte.gz').astype(int)
+        X_te = _read_mnist_idx(f'{base}/t10k-images-idx3-ubyte.gz').reshape(-1,784).astype(np.float64)/255.0
+        y_te = _read_mnist_idx(f'{base}/t10k-labels-idx1-ubyte.gz').astype(int)
+        # NB: deliberately NOT z-score standardised here. Permuted-MNIST's router
+        # signal comes from "is there ink at this (shuffled) pixel coordinate" —
+        # raw [0,1] intensities preserve that; standardising per-original-position
+        # before permuting doesn't change the underlying signal but raw pixels make
+        # the magnitude-based PackNet pruning and the router both behave more
+        # predictably, and it matches how this benchmark is usually reported.
+    except FileNotFoundError:
+        yield emit({'e':'pm_error','msg':'Run mnist_stress.py first to download MNIST'}); return
+    except Exception as ex:
+        yield emit({'e':'pm_error','msg':str(ex)}); return
+
+    idx_tr = rng.choice(len(X_tr), PM_N_TRAIN_SUB, replace=False)
+    idx_te = rng.choice(len(X_te), PM_N_TEST_SUB, replace=False)
+    Xs_tr, ys_tr = X_tr[idx_tr], y_tr[idx_tr]
+    Xs_te, ys_te = X_te[idx_te], y_te[idx_te]
+    perms = [rng.permutation(784) for _ in range(PM_N_PERM)]
+    yield emit({'e':'pm_loaded','n_train':PM_N_TRAIN_SUB,'n_test':PM_N_TEST_SUB,'n_perm':PM_N_PERM})
+
+    def Xp(t, X): return X[:, perms[t]]   # apply permutation t to a batch
+
+    # ── Router: N_PERM-way, distinguishing WHICH permutation produced a sample ──
+    # A fixed permutation moves MNIST's mostly-zero border pixels to different
+    # coordinates per task, so a linear router has a genuine, generalizing signal
+    # to exploit here — it is not just memorising training rows.
+    t0 = _time.time()
+    yield emit({'e':'pm_phase','phase':'das_router',
+                'label':f'Router: learning {PM_N_PERM} permutation identities'})
+    Xr = np.vstack([Xp(t, Xs_tr) for t in range(PM_N_PERM)])
+    dr = np.concatenate([np.full(len(Xs_tr), t) for t in range(PM_N_PERM)])
+    router = StemRouter(784, PM_N_PERM, seed=7)
+    for s in range(PM_ROUTER_STEPS):
+        idx = rng.integers(0, len(Xr), PM_B)
+        _, a = router.train_step(Xr[idx], dr[idx], lr=0.3)
+        if s % 80 == 0:
+            yield emit({'e':'pm_router_step','step':s,'acc':round(a,4)})
+    t_pm_router = round(_time.time()-t0, 1)
+    ridx, _ = router.route(Xr)
+    router_acc = round(float((ridx==dr).mean()), 4)
+    router_params = router.W.size + router.b.size
+    yield emit({'e':'pm_router_done','acc':router_acc})
+
+    # ── DAS: one 10-class leaf per permutation, frozen once trained ──────
+    das_matrix = [[None]*PM_N_PERM for _ in range(PM_N_PERM)]
+    das_leaves = []
+    t_pm_das_leaves = []
+    for t in range(PM_N_PERM):
+        yield emit({'e':'pm_phase','phase':'das_leaf','task':t,
+                    'label':f'DAS grafts Leaf {t} — permutation {t}'})
+        leaf = FibonacciLeaf(PM_LEAF_10, seed=1+t)
+        Xt = Xp(t, Xs_tr)
+        t1 = _time.time()
+        for s in range(PM_TASK_STEPS):
+            idx = rng.integers(0, len(Xt), PM_B)
+            leaf.backward(ce_grad(leaf.forward(Xt[idx]), ys_tr[idx]), PM_LR)
+            if s % 80 == 0:
+                yield emit({'e':'pm_leaf_step','task':t,'step':s,
+                            'acc':round(acc(leaf.forward(Xt[:300]),ys_tr[:300]),4)})
+        leaf.frozen = True
+        das_leaves.append(leaf)
+        t_pm_das_leaves.append(round(_time.time()-t1, 1))
+        for ev in range(t+1):
+            das_matrix[t][ev] = round(acc(das_leaves[ev].forward(Xp(ev, Xs_te)), ys_te), 4)
+        yield emit({'e':'pm_das_eval','stage':t,'accs':das_matrix[t][:t+1]})
+
+    das_leaf_params = n_params(das_leaves[0])
+    das_stored_params = router_params + PM_N_PERM * das_leaf_params
+    das_active_params = router_params + das_leaf_params
+    das_infer_flops = _dims_flops([784, PM_N_PERM]) + _dims_flops(PM_LEAF_10)
+
+    # ── Fine-tuned MLP: one shared net, naive sequential training ────────
+    ft_mlp = FibonacciLeaf(PM_LEAF_10, seed=42)
+    ft_matrix = [[None]*PM_N_PERM for _ in range(PM_N_PERM)]
+    t_pm_ft_tasks = []
+    for t in range(PM_N_PERM):
+        yield emit({'e':'pm_phase','phase':'finetune','task':t,
+                    'label':f'Fine-tuned MLP overwrites on permutation {t}'})
+        Xt = Xp(t, Xs_tr)
+        t1 = _time.time()
+        for s in range(PM_TASK_STEPS):
+            idx = rng.integers(0, len(Xt), PM_B)
+            ft_mlp.backward(ce_grad(ft_mlp.forward(Xt[idx]), ys_tr[idx]), PM_LR)
+            if s % 80 == 0:
+                yield emit({'e':'pm_ft_step','task':t,'step':s,
+                            'acc':round(acc(ft_mlp.forward(Xt[:300]),ys_tr[:300]),4)})
+        t_pm_ft_tasks.append(round(_time.time()-t1, 1))
+        for ev in range(t+1):
+            ft_matrix[t][ev] = round(acc(ft_mlp.forward(Xp(ev, Xs_te)), ys_te), 4)
+        yield emit({'e':'pm_ft_eval','stage':t,'accs':ft_matrix[t][:t+1]})
+
+    ft_params_total = n_params(ft_mlp)
+    ft_infer_flops = _dims_flops(PM_LEAF_10)
+    t_pm_ft_total = round(sum(t_pm_ft_tasks), 1)
+
+    # ── EWC MLP: the regime DAS's gap is expected to narrow against ──────
+    ewc_mlp = FibonacciLeaf(PM_LEAF_10, seed=42)
+    ewc_matrix = [[None]*PM_N_PERM for _ in range(PM_N_PERM)]
+    ewc_tasks = []
+    t_pm_ewc_tasks = []
+    for t in range(PM_N_PERM):
+        yield emit({'e':'pm_phase','phase':'ewc','task':t,
+                    'label':f'EWC MLP on permutation {t} — penalty protects old weights'})
+        Xt = Xp(t, Xs_tr)
+        t1 = _time.time()
+        for s in range(PM_TASK_STEPS):
+            idx = rng.integers(0, len(Xt), PM_B)
+            ewc_mlp.backward(ce_grad(ewc_mlp.forward(Xt[idx]), ys_tr[idx]), PM_LR,
+                             ewc_lambda=PM_EWC_LAMBDA, ewc_tasks=ewc_tasks)
+            if s % 80 == 0:
+                yield emit({'e':'pm_ewc_step','task':t,'step':s,
+                            'acc':round(acc(ewc_mlp.forward(Xt[:300]),ys_tr[:300]),4)})
+        t_pm_ewc_tasks.append(round(_time.time()-t1, 1))
+        ewc_tasks.append({'fisher': ewc_mlp.fisher_diagonal(Xt, ys_tr, ce_grad, seed=t),
+                          'star':   ewc_mlp.snapshot()})
+        for ev in range(t+1):
+            ewc_matrix[t][ev] = round(acc(ewc_mlp.forward(Xp(ev, Xs_te)), ys_te), 4)
+        yield emit({'e':'pm_ewc_eval','stage':t,'accs':ewc_matrix[t][:t+1]})
+
+    ewc_params_total = n_params(ewc_mlp)
+    t_pm_ewc_total = round(sum(t_pm_ewc_tasks), 1)
+
+    # ── PackNet: same fixed-capacity pruning baseline as Split-MNIST ─────
+    pkn = PackNetMLP(PM_LEAF_10, seed=42)
+    pkn_matrix = [[None]*PM_N_PERM for _ in range(PM_N_PERM)]
+    pkn_free_counts = []
+    t_pm_pkn_tasks = []
+    for t in range(PM_N_PERM):
+        yield emit({'e':'pm_phase','phase':'packnet','task':t,
+                    'label':f'PackNet on permutation {t} — claims its slice of fixed capacity'})
+        Xt = Xp(t, Xs_tr)
+        t1 = _time.time()
+        free_before = pkn.free_count()
+        free_mask = [(own == -1) for own in pkn.owner]
+        prng = np.random.default_rng(3000 + t)
+        for s in range(PM_TASK_STEPS):
+            idx = prng.integers(0, len(Xt), PM_B)
+            logits = pkn._forward(Xt[idx])
+            gW, gb = pkn._grads(ce_grad(logits, ys_tr[idx]))
+            for i in range(len(pkn.W)):
+                pkn.W[i] -= PM_LR * gW[i] * free_mask[i]
+                pkn.b[i] -= PM_LR * gb[i]
+            if s % 80 == 0:
+                pkn.task_bias[t] = [bb.copy() for bb in pkn.b]
+                yield emit({'e':'pm_pkn_step','task':t,'step':s,
+                            'acc':round(acc(pkn.forward_task(Xt[:300], t),ys_tr[:300]),4)})
+        remaining = PM_N_PERM - t
+        free_vals = np.concatenate([np.abs(pkn.W[i][free_mask[i]]) for i in range(len(pkn.W))])
+        n_free = free_vals.size
+        keep_count = int(round(n_free / max(remaining, 1)))
+        thresh = (np.partition(free_vals, max(n_free-keep_count, 0))[max(n_free-keep_count, 0)]
+                  if keep_count > 0 and n_free > 0 else np.inf)
+        for i in range(len(pkn.W)):
+            claim = free_mask[i] & (np.abs(pkn.W[i]) >= thresh)
+            pkn.owner[i][claim] = t
+        owned_mask = [(own == t) for own in pkn.owner]
+        for s in range(PM_PKN_REFIT):
+            idx = prng.integers(0, len(Xt), PM_B)
+            logits = pkn._forward(Xt[idx])
+            gW, gb = pkn._grads(ce_grad(logits, ys_tr[idx]))
+            for i in range(len(pkn.W)):
+                pkn.W[i] -= PM_LR * gW[i] * owned_mask[i]
+                pkn.b[i] -= PM_LR * gb[i]
+        pkn.task_bias[t] = [bb.copy() for bb in pkn.b]
+        t_pm_pkn_tasks.append(round(_time.time()-t1, 1))
+        free_after = pkn.free_count()
+        pkn_free_counts.append(free_after)
+        for ev in range(t+1):
+            pkn_matrix[t][ev] = round(acc(pkn.forward_task(Xp(ev, Xs_te), ev), ys_te), 4)
+        yield emit({'e':'pm_pkn_eval','stage':t,'accs':pkn_matrix[t][:t+1],
+                    'free_before':int(free_before),'free_after':int(free_after)})
+
+    pkn_params = n_params(pkn)
+    t_pm_pkn_total = round(sum(t_pm_pkn_tasks), 1)
+
+    # ── Multi-task MLP: trained on all permutations mixed — upper bound ──
+    yield emit({'e':'pm_phase','phase':'multitask',
+                'label':'Multi-task MLP: trained on all permutations at once (upper bound)'})
+    mt_mlp = FibonacciLeaf(PM_LEAF_10, seed=7)
+    Xall = np.vstack([Xp(t, Xs_tr) for t in range(PM_N_PERM)])
+    yall = np.concatenate([ys_tr for _ in range(PM_N_PERM)])
+    t1 = _time.time()
+    for s in range(PM_MT_STEPS):
+        idx = rng.integers(0, len(Xall), PM_B)
+        mt_mlp.backward(ce_grad(mt_mlp.forward(Xall[idx]), yall[idx]), PM_LR)
+        if s % 150 == 0:
+            yield emit({'e':'pm_mt_step','step':s,
+                        'acc':round(acc(mt_mlp.forward(Xall[:500]),yall[:500]),4)})
+    t_pm_mt = round(_time.time()-t1, 1)
+    mt_params_total = n_params(mt_mlp)
+    mt_infer_flops = _dims_flops(PM_LEAF_10)
+    mt_accs = [round(acc(mt_mlp.forward(Xp(t, Xs_te)), ys_te), 4) for t in range(PM_N_PERM)]
+    yield emit({'e':'pm_mt_done','accs':mt_accs})
+
+    # ── Derived metrics — same formulas as Split-MNIST, NxN this time ────
+    N = PM_N_PERM
+    das_bwt = round(sum(das_matrix[N-1][i] - das_matrix[i][i] for i in range(N-1))/(N-1), 4)
+    ft_bwt  = round(sum(ft_matrix[N-1][i]  - ft_matrix[i][i]  for i in range(N-1))/(N-1), 4)
+    ewc_bwt = round(sum(ewc_matrix[N-1][i] - ewc_matrix[i][i] for i in range(N-1))/(N-1), 4)
+    pkn_bwt = round(sum(pkn_matrix[N-1][i] - pkn_matrix[i][i] for i in range(N-1))/(N-1), 4)
+
+    das_plasticity = [das_matrix[t][t] for t in range(N)]
+    ft_plasticity  = [ft_matrix[t][t]  for t in range(N)]
+    ewc_plasticity = [ewc_matrix[t][t] for t in range(N)]
+    pkn_plasticity = [pkn_matrix[t][t] for t in range(N)]
+    mt_plasticity  = mt_accs
+
+    das_final = [das_matrix[N-1][t] for t in range(N)]
+    ft_final  = [ft_matrix[N-1][t]  for t in range(N)]
+    ewc_final = [ewc_matrix[N-1][t] for t in range(N)]
+    pkn_final = [pkn_matrix[N-1][t] for t in range(N)]
+
+    das_stability = round(sum(das_matrix[N-1][i]/max(das_matrix[i][i],1e-6) for i in range(N-1))/(N-1), 4)
+    ft_stability  = round(sum(ft_matrix[N-1][i] /max(ft_matrix[i][i], 1e-6) for i in range(N-1))/(N-1), 4)
+    ewc_stability = round(sum(ewc_matrix[N-1][i]/max(ewc_matrix[i][i],1e-6) for i in range(N-1))/(N-1), 4)
+    pkn_stability = round(sum(pkn_matrix[N-1][i]/max(pkn_matrix[i][i],1e-6) for i in range(N-1))/(N-1), 4)
+
+    flops_ratio = round(das_infer_flops / max(ft_infer_flops, 1), 4)
+    t_pm_das_total = round(t_pm_router + sum(t_pm_das_leaves), 1)
+
+    yield emit({'e':'pm_done',
+                'das_matrix':das_matrix, 'ft_matrix':ft_matrix,
+                'ewc_matrix':ewc_matrix, 'pkn_matrix':pkn_matrix,
+                'mt_accs':mt_accs,
+                'das_bwt':das_bwt, 'ft_bwt':ft_bwt, 'ewc_bwt':ewc_bwt, 'pkn_bwt':pkn_bwt,
+                'router_acc':router_acc,
+                'cost':{
+                    'das_stored_params' : das_stored_params,
+                    'das_active_params' : das_active_params,
+                    'das_leaf_params'   : das_leaf_params,
+                    'router_params'     : router_params,
+                    'ft_params'         : ft_params_total,
+                    'ewc_params'        : ewc_params_total,
+                    'pkn_params'        : pkn_params,
+                    'mt_params'         : mt_params_total,
+                    'das_infer_flops'   : das_infer_flops,
+                    'ft_infer_flops'    : ft_infer_flops,
+                    'mt_infer_flops'    : mt_infer_flops,
+                    'flops_ratio'       : flops_ratio,
+                    't_das_router'      : t_pm_router,
+                    't_das_leaves'      : t_pm_das_leaves,
+                    't_das_total'       : t_pm_das_total,
+                    't_ft_tasks'        : t_pm_ft_tasks,
+                    't_ft_total'        : t_pm_ft_total,
+                    't_ewc_total'       : t_pm_ewc_total,
+                    't_pkn_total'       : t_pm_pkn_total,
+                    't_mt'              : t_pm_mt,
+                },
+                'metrics':{
+                    'das_plasticity'  : das_plasticity,
+                    'ft_plasticity'   : ft_plasticity,
+                    'ewc_plasticity'  : ewc_plasticity,
+                    'pkn_plasticity'  : pkn_plasticity,
+                    'mt_plasticity'   : mt_plasticity,
+                    'das_final'       : das_final,
+                    'ft_final'        : ft_final,
+                    'ewc_final'       : ewc_final,
+                    'pkn_final'       : pkn_final,
+                    'das_stability'   : das_stability,
+                    'ft_stability'    : ft_stability,
+                    'ewc_stability'   : ewc_stability,
+                    'pkn_stability'   : pkn_stability,
+                    'pkn_free_counts' : pkn_free_counts,
                 }})
 
 
@@ -760,6 +1136,14 @@ def continual(): return render_template('continual_bench.html')
 @app.route('/continual-stream')
 def continual_stream():
     return Response(run_continual_bench(), mimetype='text/event-stream',
+                    headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
+
+@app.route('/permuted')
+def permuted(): return render_template('permuted_bench.html')
+
+@app.route('/permuted-stream')
+def permuted_stream():
+    return Response(run_permuted_bench(), mimetype='text/event-stream',
                     headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
 
 if __name__=='__main__':
