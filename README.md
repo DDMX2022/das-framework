@@ -66,6 +66,15 @@ The NumPy demo needs only `numpy`. The web app adds `flask`, the digits benchmar
 
 > **Mac note:** Homebrew Python 3.14 currently ships a broken `libexpat` and `pip` won't run. Use conda or Python 3.13.
 
+### Install as a library
+
+```bash
+pip install -e .                 # the NumPy core (`das`) + PyTorch backend module
+pip install -e ".[torch]"        # + torch / torchvision
+pip install -e ".[all]"          # + flask, scikit-learn, pandas (everything)
+```
+Then `import das` / `import das_torch` from anywhere.
+
 ```bash
 # recommended: conda
 conda create -n das python=3.11 numpy

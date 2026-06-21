@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "das-engine"
+version = "0.1.0"
+description = "DAS — a hard-routed Mixture-of-Experts with isolated, hot-swappable, auditable experts"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "DDMX2022" }]
+keywords = ["mixture-of-experts", "continual-learning", "moe", "routing"]
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+torch = ["torch", "torchvision"]
+web = ["flask"]
+all = ["torch", "torchvision", "flask", "scikit-learn", "pandas"]
+
+[project.urls]
+Homepage = "https://github.com/DDMX2022/das-framework"
+
+[tool.setuptools]
+# the NumPy core is the importable package; the PyTorch backend is a top-level module
+packages = ["das"]
+py-modules = ["das_torch"]

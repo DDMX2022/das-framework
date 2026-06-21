@@ -144,6 +144,23 @@ class DASForest(nn.Module):
                 out[mask] = leaf(h[mask])
         return out, leaf_idx
 
+    def predict_canopy(self, h, k=2):
+        """Top-k canopy: blend the k highest-weighted leaves by routing weight.
+        Graceful degradation vs hard top-1; only valid when leaves share an
+        output space."""
+        _, tau, _ = self.router(h)
+        k = min(k, len(self.leaves))
+        topw, topi = tau.topk(k, dim=-1)
+        topw = topw / topw.sum(-1, keepdim=True)
+        out = torch.zeros(h.shape[0], self.leaf_dims[-1], device=h.device)
+        for slot in range(k):
+            idx = topi[:, slot]
+            for i, leaf in enumerate(self.leaves):
+                m = idx == i
+                if m.any():
+                    out[m] += topw[m, slot:slot + 1] * leaf(h[m])
+        return out, topi
+
     def graft(self, new_dims=None):
         """Add a new expert. NOTE: you must also give the router a short update
         so it learns the new route — the experts stay isolated, the router does not."""
@@ -400,6 +417,22 @@ class BackboneForest(nn.Module):
             if mask.any():
                 out[mask] = head(h[mask])
         return out, leaf_idx
+
+    def predict_canopy(self, x, k=2):
+        """Top-k canopy over the shared-backbone heads (blend by routing weight)."""
+        h = self.features(x)
+        _, tau, _ = self.router(h)
+        k = min(k, len(self.heads))
+        topw, topi = tau.topk(k, dim=-1)
+        topw = topw / topw.sum(-1, keepdim=True)
+        out = torch.zeros(x.shape[0], self.head_dims[-1], device=x.device)
+        for slot in range(k):
+            idx = topi[:, slot]
+            for i, head in enumerate(self.heads):
+                m = idx == i
+                if m.any():
+                    out[m] += topw[m, slot:slot + 1] * head(h[m])
+        return out, topi
 
     def freeze_backbone(self):
         self.backbone.freeze()
