@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DAS — Continual Learning Benchmark</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#060d06; --panel:#0c180c; --border:#1a3020;
+  --trunk:#4a7c59; --c0:#56ab2f; --c1:#38a169; --c2:#48bb78;
+  --c3:#68d391; --c4:#9ae6b4; --c5:#b7f0c8;
+  --red:#fc8181; --red-dim:#6b2020; --amber:#f6ad55;
+  --text:#c8e6c9; --muted:#4a7c59; --glow:rgba(86,171,47,.4);
+  --blue:#63b3ed; --orange:#f6ad55;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',monospace;
+     min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+
+/* ── Header ──────────────────────────────────────────────────── */
+header{position:sticky;top:0;z-index:100;display:flex;align-items:center;
+       justify-content:space-between;padding:10px 20px;
+       border-bottom:1px solid var(--border);background:var(--bg)}
+header h1{font-size:.88rem;letter-spacing:.12em;color:var(--c1);text-transform:uppercase}
+.nav-links{display:flex;gap:8px}
+.back-btn{padding:5px 14px;border:1px solid var(--border);border-radius:4px;
+           background:transparent;color:var(--muted);font-family:inherit;
+           font-size:.72rem;cursor:pointer;text-decoration:none;display:inline-block}
+.back-btn:hover{border-color:var(--trunk);color:var(--text)}
+.run-btn{padding:5px 18px;background:var(--trunk);color:#fff;border:none;
+          border-radius:4px;font-family:inherit;font-size:.75rem;cursor:pointer;
+          letter-spacing:.08em}
+.run-btn:hover{background:var(--c0);box-shadow:0 0 12px var(--glow)}
+.run-btn:disabled{background:#1a3020;color:var(--muted);cursor:not-allowed}
+#status{font-size:.7rem;color:var(--muted)}
+
+/* ── Main layout ─────────────────────────────────────────────── */
+main{display:flex;flex:1;overflow:hidden}
+
+/* ── Left sidebar ────────────────────────────────────────────── */
+#left{width:310px;flex-shrink:0;border-right:1px solid var(--border);
+      overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+
+#left h2{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+          text-transform:uppercase;margin-bottom:4px}
+
+.model-card{background:var(--panel);border:1px solid var(--border);
+             border-radius:6px;padding:10px 12px}
+.model-card .mc-head{display:flex;align-items:center;justify-content:space-between;
+                      margin-bottom:6px}
+.model-card .mc-name{font-size:.72rem;color:var(--text);font-weight:bold}
+.mc-badge{font-size:.6rem;padding:2px 7px;border-radius:8px;border:1px solid}
+.mc-badge.das{color:var(--c3);border-color:var(--c1);background:#0a200a}
+.mc-badge.ft {color:var(--amber);border-color:#7a5020;background:#1a1005}
+.mc-badge.mt {color:var(--blue); border-color:#205070;background:#0a1520}
+.model-card .mc-desc{font-size:.62rem;color:var(--muted);line-height:1.6}
+.model-card .mc-status{font-size:.64rem;margin-top:6px;color:var(--muted)}
+
+.task-list{display:flex;flex-direction:column;gap:5px}
+.task-item{display:flex;align-items:center;gap:8px;padding:5px 8px;
+            border-radius:4px;border:1px solid transparent;font-size:.68rem}
+.task-item.waiting{color:var(--muted);border-color:transparent}
+.task-item.active {background:var(--panel);border-color:var(--border);color:var(--text)}
+.task-item.done   {color:var(--c1)}
+.task-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.task-item.active .task-dot{background:var(--c0);box-shadow:0 0 5px var(--glow)}
+.task-item.done   .task-dot{background:var(--c3)}
+
+.explainer{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+            padding:12px 14px;font-size:.67rem;line-height:1.8;color:var(--muted)}
+.explainer h4{font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;
+               color:var(--c1);margin-bottom:8px}
+.explainer strong{color:var(--text)}
+
+/* ── Right panel ─────────────────────────────────────────────── */
+#right{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:14px}
+
+.section-title{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+                text-transform:uppercase;margin-bottom:10px}
+
+/* Phase banner */
+#phase-banner{padding:10px 16px;background:var(--panel);border:1px solid var(--border);
+              border-radius:6px;font-size:.72rem;color:var(--muted)}
+#phase-banner strong{color:var(--c3)}
+
+/* Live chart row */
+#live-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chart-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
+.chart-box h3{font-size:.62rem;color:var(--muted);margin-bottom:8px}
+.chart-box canvas{max-height:120px;width:100%}
+
+/* Accuracy matrix section */
+#matrix-section{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.matrix-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
+.matrix-box h3{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;
+                margin-bottom:10px}
+.matrix-box.das h3{color:var(--c1)}
+.matrix-box.ft  h3{color:var(--amber)}
+
+.acc-matrix{width:100%;border-collapse:separate;border-spacing:3px;font-size:.62rem}
+.acc-matrix th{color:var(--muted);padding:2px 4px;text-align:center;
+               font-size:.58rem;font-weight:normal}
+.acc-matrix td{padding:5px 4px;text-align:center;border-radius:3px;
+               font-size:.64rem;min-width:42px;transition:background .4s,color .4s}
+.cell-empty {background:#0c180c;color:var(--muted)}
+.cell-good  {background:#0d3020;color:var(--c3);font-weight:bold}
+.cell-ok    {background:#1a2a10;color:var(--c2)}
+.cell-bad   {background:#2a1010;color:var(--red)}
+.cell-diag  {background:#0a2a10;color:var(--c0);font-weight:bold;border:1px solid var(--c1)}
+.cell-future{background:#080c08;color:#1a3020}
+.row-label  {color:var(--muted);text-align:right;font-size:.58rem;padding-right:6px}
+
+/* BWT display */
+#bwt-section{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bwt-card{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+           padding:14px;text-align:center}
+.bwt-card.das{border-color:var(--c1)}
+.bwt-card.ft {border-color:var(--red-dim)}
+.bwt-label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;
+             margin-bottom:6px}
+.bwt-value{font-size:1.6rem;font-weight:bold;margin-bottom:4px}
+.bwt-value.good {color:var(--c3)}
+.bwt-value.bad  {color:var(--red)}
+.bwt-explain{font-size:.6rem;color:var(--muted);line-height:1.5}
+
+/* Multi-task row */
+#mt-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* Cost & metrics section */
+#cost-section{display:none}
+.cost-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+.cost-card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
+.cost-card h4{font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;
+               color:var(--muted);margin-bottom:10px}
+.stat-row{display:flex;justify-content:space-between;align-items:center;
+           padding:3px 0;font-size:.67rem;border-bottom:1px solid #0d180d}
+.stat-row:last-child{border-bottom:none}
+.stat-label{color:var(--muted)}
+.stat-val{font-weight:bold}
+.stat-val.good{color:var(--c3)}
+.stat-val.neutral{color:var(--text)}
+.stat-val.warn{color:var(--amber)}
+.stat-val.bad{color:var(--red)}
+
+.param-bar-wrap{margin-top:6px}
+.param-bar-label{display:flex;justify-content:space-between;font-size:.6rem;
+                  color:var(--muted);margin-bottom:2px}
+.param-bar{height:7px;border-radius:3px;margin-bottom:5px;min-width:4px}
+
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metric-table{width:100%;border-collapse:collapse;font-size:.66rem}
+.metric-table th{color:var(--muted);padding:4px 8px;border-bottom:1px solid var(--border);text-align:center;font-size:.6rem}
+.metric-table td{padding:4px 8px;text-align:center;border-bottom:1px solid #0d180d}
+.metric-table .row-h{text-align:left;color:var(--muted)}
+
+/* Final summary */
+#summary-section{display:none}
+#sum-table{width:100%;border-collapse:collapse;font-size:.7rem}
+#sum-table th{color:var(--muted);padding:5px 10px;border-bottom:1px solid var(--border);text-align:center}
+#sum-table td{padding:6px 10px;text-align:center;border-bottom:1px solid #0d1a0d}
+#sum-table .task-col{text-align:left;color:var(--text)}
+.win  {color:var(--c3);font-weight:bold}
+.lose {color:var(--red)}
+.draw {color:var(--amber)}
+
+.proof-bar{padding:12px;text-align:center;border-radius:6px;font-size:.78rem;margin-top:4px}
+.proof-bar.pass{background:#0a1f0a;color:var(--c3);border:1px solid var(--c0)}
+.proof-bar.fail{background:#1f0a0a;color:var(--red);border:1px solid #c53030}
+
+#loading-msg{padding:30px;text-align:center;color:var(--muted);font-size:.78rem}
+#error-msg{display:none;padding:14px;color:var(--red);
+            background:#1a0505;border:1px solid var(--red-dim);border-radius:6px;font-size:.75rem}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 DAS — Split-MNIST Continual Learning</h1>
+  <div class="nav-links">
+    <a href="/" class="back-btn">← Forest</a>
+    <a href="/stress" class="back-btn">🔥 Stress</a>
+    <a href="/real" class="back-btn">⚡ Real</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="status">Ready</span>
+    <button class="run-btn" id="run-btn" onclick="startBench()">▶ Run Benchmark</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ── LEFT ─────────────────────────────────────────────────── -->
+<div id="left">
+
+  <div>
+    <h2>Models</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+
+      <div class="model-card">
+        <div class="mc-head">
+          <span class="mc-name">DAS Forest</span>
+          <span class="mc-badge das">Zero Forgetting</span>
+        </div>
+        <div class="mc-desc">Grafts one frozen leaf per task. Old weights are locked — mathematically impossible to forget previous tasks.</div>
+        <div class="mc-status" id="das-status">Waiting…</div>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-head">
+          <span class="mc-name">Fine-tuned MLP</span>
+          <span class="mc-badge ft">Catastrophic Forgetting</span>
+        </div>
+        <div class="mc-desc">One shared network fine-tuned sequentially. Gradient updates for task N overwrite weights learned for tasks 0…N-1.</div>
+        <div class="mc-status" id="ft-status">Waiting…</div>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-head">
+          <span class="mc-name">Multi-task MLP</span>
+          <span class="mc-badge mt">Upper Bound</span>
+        </div>
+        <div class="mc-desc">Trained on all 10 digits simultaneously. Not a continual learner — shows the ceiling for this architecture.</div>
+        <div class="mc-status" id="mt-status">Waiting…</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2>Tasks (Split-MNIST)</h2>
+    <div class="task-list" id="task-list">
+      <div class="task-item waiting" id="titem-0"><div class="task-dot"></div> Task 0: 0 vs 1</div>
+      <div class="task-item waiting" id="titem-1"><div class="task-dot"></div> Task 1: 2 vs 3</div>
+      <div class="task-item waiting" id="titem-2"><div class="task-dot"></div> Task 2: 4 vs 5</div>
+      <div class="task-item waiting" id="titem-3"><div class="task-dot"></div> Task 3: 6 vs 7</div>
+      <div class="task-item waiting" id="titem-4"><div class="task-dot"></div> Task 4: 8 vs 9</div>
+    </div>
+  </div>
+
+  <div class="explainer">
+    <h4>What is catastrophic forgetting?</h4>
+    Standard neural networks have a single set of shared weights. When you train on a new task, gradient updates shift those weights toward the new task's optimum — <strong>erasing what was learned before</strong>. This is catastrophic forgetting. On Split-MNIST, a fine-tuned MLP's accuracy on earlier tasks often drops to near 50% (random binary chance) by the time it finishes task 4.
+    <br><br>
+    <strong>DAS's structural solution:</strong> each task gets a dedicated frozen leaf. Once trained and locked, its weights can never be touched by subsequent training. The proof is cryptographic — SHA-256 hash verification.
+    <br><br>
+    <strong>BWT (Backward Transfer)</strong> measures average accuracy drop on previous tasks after all training is done. DAS targets BWT ≈ 0.00. Fine-tuned MLP typically shows BWT &lt; −0.20.
+  </div>
+
+</div>
+
+<!-- ── RIGHT ─────────────────────────────────────────────────── -->
+<div id="right">
+
+  <div id="phase-banner">Waiting to start — click <strong>▶ Run Benchmark</strong></div>
+  <div id="error-msg"></div>
+
+  <!-- Live learning curves -->
+  <div>
+    <div class="section-title">Live Training — Current Task</div>
+    <div id="live-row">
+      <div class="chart-box">
+        <h3 id="das-chart-title">DAS Leaf (current task)</h3>
+        <canvas id="das-chart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3 id="ft-chart-title">Fine-tuned MLP (current task)</h3>
+        <canvas id="ft-chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Accuracy matrices -->
+  <div>
+    <div class="section-title">Accuracy Matrix — does the model remember previous tasks?</div>
+    <div id="matrix-section">
+
+      <div class="matrix-box das">
+        <h3>🌿 DAS Forest — Row = after training task N</h3>
+        <table class="acc-matrix" id="das-matrix-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>T0<br><span style="font-size:.55rem;color:#2d5a3d">0v1</span></th>
+              <th>T1<br><span style="font-size:.55rem;color:#2d5a3d">2v3</span></th>
+              <th>T2<br><span style="font-size:.55rem;color:#2d5a3d">4v5</span></th>
+              <th>T3<br><span style="font-size:.55rem;color:#2d5a3d">6v7</span></th>
+              <th>T4<br><span style="font-size:.55rem;color:#2d5a3d">8v9</span></th>
+            </tr>
+          </thead>
+          <tbody id="das-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="matrix-box ft">
+        <h3>⚡ Fine-tuned MLP — watch the forgetting!</h3>
+        <table class="acc-matrix" id="ft-matrix-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>T0<br><span style="font-size:.55rem;color:#5a3d1a">0v1</span></th>
+              <th>T1<br><span style="font-size:.55rem;color:#5a3d1a">2v3</span></th>
+              <th>T2<br><span style="font-size:.55rem;color:#5a3d1a">4v5</span></th>
+              <th>T3<br><span style="font-size:.55rem;color:#5a3d1a">6v7</span></th>
+              <th>T4<br><span style="font-size:.55rem;color:#5a3d1a">8v9</span></th>
+            </tr>
+          </thead>
+          <tbody id="ft-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Multi-task chart -->
+  <div>
+    <div class="section-title">Multi-task MLP — upper bound training</div>
+    <div id="mt-row">
+      <div class="chart-box">
+        <h3 id="mt-chart-title">Multi-task MLP (all 10 digits at once)</h3>
+        <canvas id="mt-chart"></canvas>
+      </div>
+      <div class="chart-box" id="mt-results-box" style="display:none">
+        <h3>Per-task accuracy (upper bound)</h3>
+        <div id="mt-results" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BWT cards -->
+  <div>
+    <div class="section-title">Backward Transfer (BWT)</div>
+    <div id="bwt-section">
+      <div class="bwt-card das">
+        <div class="bwt-label">DAS Forest BWT</div>
+        <div class="bwt-value good" id="das-bwt">—</div>
+        <div class="bwt-explain">Mean accuracy change on tasks 0–3 after all training. ~0.00 means no forgetting. Hash proof verifies it cryptographically.</div>
+      </div>
+      <div class="bwt-card ft">
+        <div class="bwt-label">Fine-tuned MLP BWT</div>
+        <div class="bwt-value bad" id="ft-bwt">—</div>
+        <div class="bwt-explain">Negative = accuracy dropped. A value of −0.25 means the model lost ~25% accuracy on each old task on average.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cost & Metrics -->
+  <div id="cost-section">
+    <div class="section-title">Cost &amp; Efficiency Metrics</div>
+    <div class="cost-grid">
+
+      <div class="cost-card">
+        <h4>Parameters</h4>
+        <div id="param-bars"></div>
+        <div style="margin-top:8px">
+          <div class="stat-row"><span class="stat-label">DAS stored (all leaves)</span><span class="stat-val neutral" id="c-das-stored">—</span></div>
+          <div class="stat-row"><span class="stat-label">DAS active at inference</span><span class="stat-val good" id="c-das-active">—</span></div>
+          <div class="stat-row"><span class="stat-label">Fine-tuned MLP</span><span class="stat-val neutral" id="c-ft-params">—</span></div>
+          <div class="stat-row"><span class="stat-label">Multi-task MLP</span><span class="stat-val neutral" id="c-mt-params">—</span></div>
+        </div>
+      </div>
+
+      <div class="cost-card">
+        <h4>Inference FLOPs per sample</h4>
+        <div id="flops-bars"></div>
+        <div style="margin-top:8px">
+          <div class="stat-row"><span class="stat-label">DAS (router + 1 leaf)</span><span class="stat-val good" id="c-das-flops">—</span></div>
+          <div class="stat-row"><span class="stat-label">Fine-tuned MLP</span><span class="stat-val neutral" id="c-ft-flops">—</span></div>
+          <div class="stat-row"><span class="stat-label">Multi-task MLP</span><span class="stat-val neutral" id="c-mt-flops">—</span></div>
+          <div class="stat-row"><span class="stat-label">DAS vs FT ratio</span><span class="stat-val good" id="c-flops-ratio">—</span></div>
+        </div>
+        <div style="font-size:.58rem;color:var(--muted);margin-top:6px">DAS is <strong style="color:var(--c3)">sparse</strong> — routes each sample to exactly 1 expert leaf, ignoring the other 4.</div>
+      </div>
+
+      <div class="cost-card">
+        <h4>Training Time</h4>
+        <div id="time-bars"></div>
+        <div style="margin-top:8px">
+          <div class="stat-row"><span class="stat-label">DAS router</span><span class="stat-val neutral" id="c-t-router">—</span></div>
+          <div class="stat-row"><span class="stat-label">DAS leaves total</span><span class="stat-val neutral" id="c-t-leaves">—</span></div>
+          <div class="stat-row"><span class="stat-label">DAS total</span><span class="stat-val good" id="c-t-das">—</span></div>
+          <div class="stat-row"><span class="stat-label">Fine-tuned total</span><span class="stat-val neutral" id="c-t-ft">—</span></div>
+          <div class="stat-row"><span class="stat-label">Multi-task</span><span class="stat-val neutral" id="c-t-mt">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extra metrics table -->
+    <div class="metrics-grid">
+      <div class="cost-card">
+        <h4>Plasticity — accuracy when first learning each task</h4>
+        <table class="metric-table">
+          <thead><tr><th class="row-h">Task</th><th>DAS Leaf</th><th>Fine-tuned</th><th>Multi-task</th></tr></thead>
+          <tbody id="plasticity-tbody"></tbody>
+        </table>
+      </div>
+      <div class="cost-card">
+        <h4>Stability — retention of earlier tasks after all training</h4>
+        <table class="metric-table">
+          <thead><tr><th class="row-h">Task</th><th>DAS final</th><th>FT final</th><th>Δ FT drop</th></tr></thead>
+          <tbody id="stability-tbody"></tbody>
+          <tfoot>
+            <tr style="border-top:1px solid var(--border)">
+              <td class="row-h" style="color:var(--muted)">Stability score</td>
+              <td id="m-das-stab" style="color:var(--c3);font-weight:bold">—</td>
+              <td id="m-ft-stab"  style="color:var(--red)">—</td>
+              <td style="color:var(--muted);font-size:.58rem">1.0 = perfect retention</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Final summary -->
+  <div id="summary-section">
+    <div class="section-title">Final Results Summary</div>
+    <div id="proof-bar-final"></div>
+    <br>
+    <table id="sum-table">
+      <thead>
+        <tr>
+          <th style="text-align:left">Task</th>
+          <th>DAS</th>
+          <th>Fine-tuned</th>
+          <th>Multi-task</th>
+          <th>Winner</th>
+        </tr>
+      </thead>
+      <tbody id="sum-tbody"></tbody>
+    </table>
+  </div>
+
+  <div id="loading-msg">Loading MNIST data…</div>
+
+</div>
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+const dasMatrix = Array.from({length:5},()=>Array(5).fill(null));
+const ftMatrix  = Array.from({length:5},()=>Array(5).fill(null));
+const mtAccs    = Array(5).fill(null);
+let running = false;
+let currentPhase = null;
+
+// ── Charts ────────────────────────────────────────────────────
+function makeChart(id, label, color) {
+  return new Chart(document.getElementById(id), {
+    type:'line',
+    data:{labels:[],datasets:[{label,data:[],borderColor:color,backgroundColor:color+'22',
+         borderWidth:1.5,pointRadius:0,tension:.3}]},
+    options:{animation:false,responsive:true,maintainAspectRatio:false,
+             scales:{x:{display:false},
+                     y:{min:0.4,max:1.05,ticks:{color:'#4a7c59',font:{size:9}},
+                        grid:{color:'#1a3020'}}},
+             plugins:{legend:{display:false}}}
+  });
+}
+
+const dasChart = makeChart('das-chart','DAS Leaf acc','#56ab2f');
+const ftChart  = makeChart('ft-chart', 'FT MLP acc',  '#f6ad55');
+const mtChart  = makeChart('mt-chart', 'Multi-task acc','#63b3ed');
+
+function pushChart(chart, step, val) {
+  chart.data.labels.push(step);
+  chart.data.datasets[0].data.push(val);
+  chart.update('none');
+}
+
+function clearChart(chart) {
+  chart.data.labels = [];
+  chart.data.datasets[0].data = [];
+  chart.update('none');
+}
+
+// ── Matrix rendering ──────────────────────────────────────────
+function cellClass(val, isDiag) {
+  if (val === null) return 'cell-empty';
+  if (isDiag) return 'cell-diag';
+  if (val >= 0.82) return 'cell-good';
+  if (val >= 0.68) return 'cell-ok';
+  return 'cell-bad';
+}
+
+function renderMatrix(tbodyId, matrix) {
+  const tbody = document.getElementById(tbodyId);
+  const stageLabels = ['After T0','After T1','After T2','After T3','After T4'];
+  let html = '';
+  for (let row=0; row<5; row++) {
+    html += `<tr><td class="row-label">${stageLabels[row]}</td>`;
+    for (let col=0; col<5; col++) {
+      const v = matrix[row][col];
+      if (v === null) {
+        // Has this stage been filled yet?
+        const cls = row < matrix.findIndex(r=>r.every(c=>c===null)) || matrix[row].some(c=>c!==null)
+                  ? 'cell-future' : 'cell-empty';
+        html += `<td class="${cls}">—</td>`;
+      } else {
+        const cls = cellClass(v, row===col);
+        html += `<td class="${cls}">${(v*100).toFixed(0)}%</td>`;
+      }
+    }
+    html += '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+// initialise both matrices
+renderMatrix('das-tbody', dasMatrix);
+renderMatrix('ft-tbody',  ftMatrix);
+
+// ── Task item helpers ─────────────────────────────────────────
+function setTask(t, state) {
+  const el = document.getElementById(`titem-${t}`);
+  el.className = `task-item ${state}`;
+}
+
+// ── SSE handler ───────────────────────────────────────────────
+function startBench() {
+  if (running) return;
+  running = true;
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('status').textContent = 'Running…';
+  document.getElementById('loading-msg').style.display = 'block';
+  document.getElementById('summary-section').style.display = 'none';
+  document.getElementById('error-msg').style.display = 'none';
+  clearChart(dasChart); clearChart(ftChart); clearChart(mtChart);
+
+  const es = new EventSource('/continual-stream');
+  es.onmessage = function(ev) {
+    const d = JSON.parse(ev.data);
+
+    if (d.e === 'cl_init') {
+      banner('Initialising…');
+    }
+
+    else if (d.e === 'cl_loading') {
+      document.getElementById('loading-msg').style.display = 'block';
+      banner('Loading MNIST data from disk…');
+    }
+
+    else if (d.e === 'cl_loaded') {
+      document.getElementById('loading-msg').style.display = 'none';
+      banner(`Loaded Split-MNIST: 5 tasks, ${d.n_train.map((n,i)=>`T${i}:${n}`).join('  ')} samples`);
+    }
+
+    else if (d.e === 'cl_error') {
+      showError(d.msg);
+      es.close(); done();
+    }
+
+    else if (d.e === 'cl_phase') {
+      banner(`<strong>${d.label}</strong>`);
+      if (d.phase === 'das_router') {
+        document.getElementById('das-status').textContent = 'Training router…';
+      }
+      else if (d.phase === 'das_leaf') {
+        const t = d.task;
+        for (let i=0;i<t;i++) setTask(i,'done');
+        setTask(t,'active');
+        document.getElementById('das-status').textContent = `Grafting Leaf ${t}…`;
+        document.getElementById('das-chart-title').textContent = `DAS Leaf ${t} — ${d.label.split('task ')[1]||''}`;
+        clearChart(dasChart);
+      }
+      else if (d.phase === 'finetune') {
+        const t = d.task;
+        setTask(t,'active');
+        document.getElementById('ft-status').textContent = `Fine-tuning on task ${t}…`;
+        document.getElementById('ft-chart-title').textContent = `Fine-tuned MLP — task ${t}`;
+        clearChart(ftChart);
+      }
+      else if (d.phase === 'multitask') {
+        for (let i=0;i<5;i++) setTask(i,'done');
+        document.getElementById('mt-status').textContent = 'Training on all digits…';
+      }
+    }
+
+    else if (d.e === 'cl_router_step') {
+      document.getElementById('status').textContent = `Router step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+    }
+    else if (d.e === 'cl_router_done') {
+      document.getElementById('das-status').textContent = 'Router done ✓';
+    }
+
+    else if (d.e === 'cl_leaf_step') {
+      pushChart(dasChart, d.step, d.acc);
+      document.getElementById('status').textContent = `DAS T${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+    }
+
+    else if (d.e === 'cl_das_eval') {
+      const t = d.stage;
+      d.accs.forEach((v,col)=>{ dasMatrix[t][col]=v; });
+      renderMatrix('das-tbody', dasMatrix);
+      setTask(t, 'done');
+      document.getElementById('das-status').textContent = `Leaf ${t} done ✓  acc ${(d.accs[t]*100).toFixed(1)}%`;
+    }
+
+    else if (d.e === 'cl_ft_step') {
+      pushChart(ftChart, d.step, d.acc);
+      document.getElementById('status').textContent = `FT T${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+    }
+
+    else if (d.e === 'cl_ft_eval') {
+      const t = d.stage;
+      d.accs.forEach((v,col)=>{ ftMatrix[t][col]=v; });
+      renderMatrix('ft-tbody', ftMatrix);
+      document.getElementById('ft-status').textContent = `Task ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%`;
+    }
+
+    else if (d.e === 'cl_mt_step') {
+      pushChart(mtChart, d.step, d.acc);
+      document.getElementById('status').textContent = `Multi-task step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+    }
+
+    else if (d.e === 'cl_mt_done') {
+      document.getElementById('mt-status').textContent = 'Done ✓';
+      const box = document.getElementById('mt-results-box');
+      const res = document.getElementById('mt-results');
+      box.style.display='block';
+      const labels=['0v1','2v3','4v5','6v7','8v9'];
+      res.innerHTML = d.accs.map((v,i)=>`
+        <div style="display:flex;align-items:center;gap:8px;font-size:.67rem">
+          <span style="color:var(--muted);min-width:32px">T${i}</span>
+          <span style="color:var(--muted);min-width:40px">${labels[i]}</span>
+          <div style="flex:1;background:#0a2010;border-radius:3px;height:8px">
+            <div style="background:var(--blue);height:100%;border-radius:3px;width:${(v*100).toFixed(0)}%"></div>
+          </div>
+          <span style="color:var(--blue);min-width:36px">${(v*100).toFixed(0)}%</span>
+        </div>`).join('');
+    }
+
+    else if (d.e === 'cl_done') {
+      // BWT
+      const dasBWT = d.das_bwt;
+      const ftBWT  = d.ft_bwt;
+      document.getElementById('das-bwt').textContent = (dasBWT >= 0 ? '+':'') + dasBWT.toFixed(3);
+      document.getElementById('ft-bwt').textContent  = (ftBWT  >= 0 ? '+':'') + ftBWT.toFixed(3);
+      document.getElementById('ft-bwt').className = 'bwt-value ' + (ftBWT < -0.05 ? 'bad':'draw');
+
+      // Full matrices
+      d.das_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)dasMatrix[t][c]=v; }); });
+      d.ft_matrix.forEach( (row,t)=>{ row.forEach((v,c)=>{ if(v!==null)ftMatrix[t][c]=v; }); });
+      renderMatrix('das-tbody', dasMatrix);
+      renderMatrix('ft-tbody',  ftMatrix);
+
+      // Cost & metrics
+      if (d.cost)    buildCostSection(d.cost, d.metrics);
+      // Summary
+      buildSummary(d);
+      banner(`<strong>Done!</strong>  DAS BWT: <span style="color:var(--c3)">${dasBWT.toFixed(3)}</span> &nbsp;|&nbsp; Fine-tuned BWT: <span style="color:var(--red)">${ftBWT.toFixed(3)}</span>`);
+
+      es.close(); done();
+    }
+  };
+
+  es.onerror = function() {
+    showError('Stream disconnected — is the server running?');
+    es.close(); done();
+  };
+}
+
+function banner(html) {
+  document.getElementById('phase-banner').innerHTML = html;
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = '⚠ ' + msg;
+  el.style.display = 'block';
+  document.getElementById('loading-msg').style.display = 'none';
+}
+
+function done() {
+  running = false;
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('status').textContent = 'Done';
+  document.getElementById('loading-msg').style.display = 'none';
+}
+
+function fmtK(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return String(n);
+}
+
+function paramBar(label, val, maxVal, color) {
+  const pct = Math.max(2, Math.round(val/maxVal*100));
+  return `<div class="param-bar-wrap">
+    <div class="param-bar-label"><span>${label}</span><span>${fmtK(val)}</span></div>
+    <div class="param-bar" style="background:${color};width:${pct}%"></div>
+  </div>`;
+}
+
+function buildCostSection(cost, metrics) {
+  document.getElementById('cost-section').style.display = 'block';
+
+  // ── Param cards ──
+  document.getElementById('c-das-stored').textContent = fmtK(cost.das_stored_params);
+  document.getElementById('c-das-active').textContent = fmtK(cost.das_active_params);
+  document.getElementById('c-ft-params').textContent  = fmtK(cost.ft_params);
+  document.getElementById('c-mt-params').textContent  = fmtK(cost.mt_params);
+  const maxP = Math.max(cost.das_stored_params, cost.ft_params, cost.mt_params);
+  document.getElementById('param-bars').innerHTML =
+    paramBar('DAS stored (all leaves)', cost.das_stored_params, maxP, '#4a7c59') +
+    paramBar('DAS active (1 leaf + router)', cost.das_active_params, maxP, '#56ab2f') +
+    paramBar('Fine-tuned MLP', cost.ft_params, maxP, '#744210') +
+    paramBar('Multi-task MLP', cost.mt_params, maxP, '#2c4a6e');
+
+  // ── FLOPs cards ──
+  document.getElementById('c-das-flops').textContent = fmtK(cost.das_infer_flops);
+  document.getElementById('c-ft-flops').textContent  = fmtK(cost.ft_infer_flops);
+  document.getElementById('c-mt-flops').textContent  = fmtK(cost.mt_infer_flops);
+  const ratioStr = cost.flops_ratio <= 1
+    ? `${(cost.flops_ratio*100).toFixed(0)}% of FT (DAS is faster!)`
+    : `${cost.flops_ratio.toFixed(2)}× FT`;
+  document.getElementById('c-flops-ratio').textContent = ratioStr;
+  const maxF = Math.max(cost.das_infer_flops, cost.ft_infer_flops, cost.mt_infer_flops);
+  document.getElementById('flops-bars').innerHTML =
+    paramBar('DAS inference', cost.das_infer_flops, maxF, '#56ab2f') +
+    paramBar('Fine-tuned MLP', cost.ft_infer_flops, maxF, '#744210') +
+    paramBar('Multi-task MLP', cost.mt_infer_flops, maxF, '#2c4a6e');
+
+  // ── Timing ──
+  document.getElementById('c-t-router').textContent  = cost.t_das_router + 's';
+  document.getElementById('c-t-leaves').textContent  = cost.t_das_leaves.reduce((a,b)=>a+b,0).toFixed(1) + 's';
+  document.getElementById('c-t-das').textContent     = cost.t_das_total + 's';
+  document.getElementById('c-t-ft').textContent      = cost.t_ft_total  + 's';
+  document.getElementById('c-t-mt').textContent      = cost.t_mt        + 's';
+  const maxT = Math.max(cost.t_das_total, cost.t_ft_total, cost.t_mt);
+  document.getElementById('time-bars').innerHTML =
+    paramBar('DAS total', cost.t_das_total, maxT, '#56ab2f') +
+    paramBar('Fine-tuned total', cost.t_ft_total, maxT, '#744210') +
+    paramBar('Multi-task', cost.t_mt, maxT, '#2c4a6e');
+
+  if (!metrics) return;
+
+  // ── Plasticity table ──
+  const tasks = ['0v1','2v3','4v5','6v7','8v9'];
+  let pHtml = '';
+  for (let t=0; t<5; t++) {
+    const dv = metrics.das_plasticity[t], fv = metrics.ft_plasticity[t], mv = metrics.mt_plasticity[t];
+    pHtml += `<tr>
+      <td class="row-h">T${t}: ${tasks[t]}</td>
+      <td style="color:var(--c3)">${dv!=null?(dv*100).toFixed(1)+'%':'—'}</td>
+      <td style="color:var(--amber)">${fv!=null?(fv*100).toFixed(1)+'%':'—'}</td>
+      <td style="color:var(--blue)">${mv!=null?(mv*100).toFixed(1)+'%':'—'}</td>
+    </tr>`;
+  }
+  document.getElementById('plasticity-tbody').innerHTML = pHtml;
+
+  // ── Stability table ──
+  let sHtml = '';
+  for (let t=0; t<5; t++) {
+    const dv = metrics.das_final[t], fv = metrics.ft_final[t];
+    const dp = metrics.das_plasticity[t], fp = metrics.ft_plasticity[t];
+    const drop = (fv != null && fp != null) ? fv - fp : null;
+    const dropCls = drop === null ? '' : drop < -0.1 ? 'style="color:var(--red)"' : 'style="color:var(--amber)"';
+    sHtml += `<tr>
+      <td class="row-h">T${t}: ${tasks[t]}</td>
+      <td style="color:var(--c3)">${dv!=null?(dv*100).toFixed(1)+'%':'—'}</td>
+      <td style="color:${fv!=null&&fv<0.7?'var(--red)':'var(--amber)'}">${fv!=null?(fv*100).toFixed(1)+'%':'—'}</td>
+      <td ${dropCls}>${drop!=null?(drop>=0?'+':'')+(drop*100).toFixed(1)+'%':'—'}</td>
+    </tr>`;
+  }
+  document.getElementById('stability-tbody').innerHTML = sHtml;
+  document.getElementById('m-das-stab').textContent = metrics.das_stability.toFixed(3);
+  document.getElementById('m-ft-stab').textContent  = metrics.ft_stability.toFixed(3);
+}
+
+function buildSummary(d) {
+  const tasks = d.tasks || ['0v1','2v3','4v5','6v7','8v9'];
+  const dasRow  = d.das_matrix[4];
+  const ftRow   = d.ft_matrix[4];
+  const mtAccs  = d.mt_accs;
+
+  let html = '';
+  for (let t=0; t<5; t++) {
+    const dv = dasRow[t], fv = ftRow[t], mv = mtAccs[t];
+    const vals = [dv, fv, mv];
+    const maxV = Math.max(...vals.filter(v=>v!==null));
+    const winner = dv >= fv && dv >= mv ? 'DAS 🌿' : mv >= dv && mv >= fv ? 'Multi-task' : 'Fine-tuned';
+    html += `<tr>
+      <td class="task-col">Task ${t}: ${tasks[t]}</td>
+      <td class="${dv===maxV?'win':'lose'}">${dv!=null?(dv*100).toFixed(1)+'%':'—'}</td>
+      <td class="${fv===maxV?'win':'lose'}">${fv!=null?(fv*100).toFixed(1)+'%':'—'}</td>
+      <td class="${mv===maxV?'win':'draw'}">${mv!=null?(mv*100).toFixed(1)+'%':'—'}</td>
+      <td style="color:var(--c3)">${winner}</td>
+    </tr>`;
+  }
+
+  // BWT row
+  html += `<tr style="border-top:2px solid var(--border)">
+    <td class="task-col" style="color:var(--muted)">BWT</td>
+    <td class="win">${(d.das_bwt>=0?'+':'') + d.das_bwt.toFixed(3)}</td>
+    <td class="lose">${(d.ft_bwt>=0?'+':'') + d.ft_bwt.toFixed(3)}</td>
+    <td class="draw">N/A</td>
+    <td style="color:var(--c3)">DAS 🌿</td>
+  </tr>`;
+
+  document.getElementById('sum-tbody').innerHTML = html;
+
+  // Proof bar
+  const allDasStable = d.das_bwt >= -0.001;
+  document.getElementById('proof-bar-final').innerHTML = `
+    <div class="proof-bar ${allDasStable?'pass':'fail'}">
+      ${allDasStable
+        ? '✓ DAS Forgetting Proof PASS — all frozen leaves are byte-identical, BWT ≈ 0'
+        : '✗ Unexpected change detected in frozen leaves'}
+    </div>`;
+
+  document.getElementById('summary-section').style.display = 'block';
+}
+</script>
+
+</body>
+</html>

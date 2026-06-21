@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DAS — Real-World Benchmark</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#060d06;--panel:#0c180c;--border:#1a3020;
+  --trunk:#4a7c59;--c0:#56ab2f;--c1:#38a169;--c2:#68d391;--c3:#9ae6b4;
+  --red:#fc8181;--text:#c8e6c9;--muted:#4a7c59;--gold:#f6e05e;
+  --glow:rgba(86,171,47,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',monospace;
+     min-height:100vh;display:flex;flex-direction:column}
+
+header{display:flex;align-items:center;justify-content:space-between;
+       padding:10px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+header h1{font-size:.9rem;letter-spacing:.12em;color:var(--c1);text-transform:uppercase}
+.nav-links{display:flex;gap:6px}
+.back-btn{padding:5px 12px;border:1px solid var(--border);border-radius:4px;
+           background:transparent;color:var(--muted);font-family:inherit;
+           font-size:.7rem;cursor:pointer;text-decoration:none;display:inline-block}
+.back-btn:hover{border-color:var(--trunk);color:var(--text)}
+.run-btn{padding:5px 16px;background:var(--trunk);color:#fff;border:none;
+          border-radius:4px;font-family:inherit;font-size:.75rem;cursor:pointer;letter-spacing:.08em}
+.run-btn:hover{background:var(--c0);box-shadow:0 0 12px var(--glow)}
+.run-btn:disabled{background:#1a3020;color:var(--muted);cursor:not-allowed}
+#status{font-size:.7rem;color:var(--muted)}
+
+main{display:flex;flex:1;overflow:hidden}
+
+/* ── LEFT SIDEBAR ──────────────────────────────────────────── */
+#left{width:310px;flex-shrink:0;border-right:1px solid var(--border);
+      overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+
+.ds-card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:11px;
+          transition:.3s}
+.ds-card.active{border-color:var(--trunk);box-shadow:0 0 8px var(--glow)}
+.ds-card.done  {opacity:.7}
+.ds-card.error {border-color:#c53030;opacity:.6}
+.ds-name{font-size:.78rem;color:var(--c1);margin-bottom:3px}
+.ds-desc{font-size:.63rem;color:var(--muted);line-height:1.6;margin-bottom:6px}
+.ds-stats{font-size:.62rem;color:var(--c2);line-height:1.7}
+.ds-phase{font-size:.62rem;color:var(--gold);margin-top:4px;min-height:14px}
+.ds-badge{display:inline-block;padding:1px 8px;border-radius:8px;font-size:.58rem;margin-top:4px}
+.ds-badge.waiting{background:#0a1a0a;color:var(--muted);border:1px solid var(--border)}
+.ds-badge.loading{background:#1a1a0a;color:var(--gold)}
+.ds-badge.running{background:#0a1a0a;color:var(--c1)}
+.ds-badge.done   {background:#0a2010;color:var(--c2);border:1px solid var(--c0)}
+.ds-badge.error  {background:#1a0a0a;color:var(--red)}
+
+.explainer-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+                padding:12px;font-size:.67rem;color:var(--muted);line-height:1.75;margin-top:4px}
+.explainer-box h4{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;
+                   color:var(--c1);margin-bottom:8px}
+.explainer-box strong{color:var(--text)}
+.kv{display:flex;gap:8px;margin-top:5px}
+.kv .k{color:var(--c2);min-width:90px;flex-shrink:0;font-size:.62rem}
+
+/* ── RIGHT PANEL ───────────────────────────────────────────── */
+#right{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:18px}
+
+.ds-section{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.ds-section-hdr{padding:11px 14px;border-bottom:1px solid var(--border);
+                  display:flex;align-items:center;justify-content:space-between}
+.ds-section-hdr h3{font-size:.75rem;color:var(--c1);letter-spacing:.08em}
+.ds-section-hdr .meta{font-size:.62rem;color:var(--muted)}
+.ds-section-body{padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+
+/* chart rows */
+.chart-row{display:grid;gap:8px}
+.chart-row.r1{grid-template-columns:1fr}
+.chart-row.r2{grid-template-columns:repeat(2,1fr)}
+.chart-row.r3{grid-template-columns:repeat(3,1fr)}
+.chart-row.r4{grid-template-columns:repeat(4,1fr)}
+.chart-row.r5{grid-template-columns:repeat(5,1fr)}
+
+.cbox{background:#060d06;border:1px solid var(--border);border-radius:5px;padding:8px}
+.cbox h4{font-size:.58rem;color:var(--muted);margin-bottom:5px;letter-spacing:.08em;text-transform:uppercase}
+.cbox canvas{max-height:80px;width:100%}
+
+/* result cards */
+.result-grid{display:grid;gap:8px}
+.rc2{grid-template-columns:repeat(2,1fr)}
+.rc3{grid-template-columns:repeat(3,1fr)}
+.rcard{background:#060d06;border:1px solid var(--border);border-radius:5px;padding:9px}
+.rcard .dom{font-size:.6rem;color:var(--muted);margin-bottom:4px}
+.rcard .vals{display:flex;justify-content:space-between;align-items:flex-end}
+.rcard .das-v{font-size:1.1rem;font-weight:bold}
+.rcard .das-v.win{color:var(--c2)}
+.rcard .das-v.lose{color:var(--text)}
+.rcard .bl-v{font-size:.7rem;color:var(--muted)}
+.rcard .winner{font-size:.55rem;margin-top:3px}
+
+/* proof bar */
+.proof-bar{padding:8px 12px;border-radius:5px;text-align:center;font-size:.75rem;display:none}
+.proof-bar.pass{background:#0a1f0a;color:var(--c2);border:1px solid var(--c0);display:block}
+.proof-bar.fail{background:#1f0a0a;color:var(--red);border:1px solid #c53030;display:block}
+
+/* summary table */
+#summary-wrap{display:none}
+#summary-wrap h3{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+                  text-transform:uppercase;margin-bottom:10px}
+#sum-table{width:100%;border-collapse:collapse;font-size:.72rem}
+#sum-table th{color:var(--muted);padding:5px 10px;border-bottom:1px solid var(--border);text-align:left}
+#sum-table td{padding:6px 10px;border-bottom:1px solid #0d200d}
+.win-das{color:var(--c2);font-weight:bold}
+.win-bl {color:var(--red);font-weight:bold}
+.tie    {color:var(--gold)}
+.badge-proof-ok  {background:var(--c0);color:#000;padding:1px 7px;border-radius:8px;font-size:.58rem}
+.badge-proof-fail{background:#c53030;color:#fff;padding:1px 7px;border-radius:8px;font-size:.58rem}
+
+/* ── Loading overlay ───────────────────────────────────────── */
+#loading-overlay{display:none;padding:50px 30px;text-align:center;flex-direction:column;
+                  align-items:center;gap:18px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);
+          border-top-color:var(--c1);border-radius:50%;
+          animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.loader-dots{display:flex;gap:6px;justify-content:center}
+.loader-dots span{width:7px;height:7px;border-radius:50%;background:var(--trunk);
+                   animation:pulse 1.2s ease-in-out infinite}
+.loader-dots span:nth-child(2){animation-delay:.2s}
+.loader-dots span:nth-child(3){animation-delay:.4s}
+@keyframes pulse{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+
+#loader-title{font-size:.82rem;color:var(--c1)}
+#loader-sub{font-size:.68rem;color:var(--muted);line-height:1.7;max-width:400px}
+#loader-timer{font-size:1.1rem;color:var(--c3);font-variant-numeric:tabular-nums}
+#loader-hint{font-size:.62rem;color:var(--muted);padding:8px 14px;border:1px solid var(--border);
+              border-radius:5px;background:var(--panel)}
+#loader-alive{font-size:.62rem;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ DAS — Real-World Benchmark</h1>
+  <div class="nav-links">
+    <a href="/" class="back-btn">← Forest</a>
+    <a href="/stress" class="back-btn">🔥 MNIST Stress</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="status">Ready</span>
+    <button class="run-btn" id="run-btn" onclick="startBench()">▶ Run Benchmark</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: dataset list + explanation -->
+  <div id="left">
+    <div id="ds-card-0" class="ds-card">
+      <div class="ds-name">1 · Adult Income</div>
+      <div class="ds-desc">48K US Census records — predict whether income exceeds $50K/yr</div>
+      <div class="ds-stats" id="ds-stats-0">3 domains · education level</div>
+      <div class="ds-phase" id="ds-phase-0"></div>
+      <span class="ds-badge waiting" id="ds-badge-0">waiting</span>
+    </div>
+    <div id="ds-card-1" class="ds-card">
+      <div class="ds-name">2 · Wine Quality</div>
+      <div class="ds-desc">6.5K wine samples — predict quality score ≥7 (good vs. not good)</div>
+      <div class="ds-stats" id="ds-stats-1">2 domains · red wine vs. white wine</div>
+      <div class="ds-phase" id="ds-phase-1"></div>
+      <span class="ds-badge waiting" id="ds-badge-1">waiting</span>
+    </div>
+    <div id="ds-card-2" class="ds-card">
+      <div class="ds-name">3 · Credit Default</div>
+      <div class="ds-desc">30K credit card clients (Taiwan) — predict payment default next month</div>
+      <div class="ds-stats" id="ds-stats-2">3 domains · education level</div>
+      <div class="ds-phase" id="ds-phase-2"></div>
+      <span class="ds-badge waiting" id="ds-badge-2">waiting</span>
+    </div>
+
+    <div class="explainer-box">
+      <h4>What this benchmark tests</h4>
+      <p>Each dataset has a natural <strong>domain structure</strong> — groups of samples that are
+      statistically distinct. DAS trains one specialist leaf per domain in isolation.
+      The baseline is a single MLP trained on all domains mixed together.</p>
+
+      <div class="kv"><span class="k">DAS leaf</span>
+        <span>Sees only its domain. Trains to convergence without interference from other domains.</span></div>
+      <div class="kv"><span class="k">Baseline MLP</span>
+        <span>Sees all domains at once. Must learn a shared representation — prone to cross-domain interference.</span></div>
+      <div class="kv"><span class="k">Forgetting proof</span>
+        <span>SHA-256 hash of each leaf's weights before and after other leaves train. PASS = zero bytes changed.</span></div>
+      <div class="kv" style="margin-top:8px"><span class="k">Fair comparison</span>
+        <span>Baseline is sized to have roughly the same total parameter count as the DAS forest.</span></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: per-dataset sections + summary -->
+  <div id="right">
+    <div id="loading-overlay">
+      <div id="loader-spinner-wrap">
+        <div class="spinner"></div>
+      </div>
+      <div id="loader-title">Connecting to server…</div>
+      <div class="loader-dots" id="loader-dots"><span></span><span></span><span></span></div>
+      <div id="loader-timer">0s</div>
+      <div id="loader-sub">Opening /real-stream…</div>
+      <div id="loader-alive">Server: <span id="heartbeat-age">waiting…</span></div>
+      <!-- Error shown INSIDE overlay so it's always visible -->
+      <div id="loader-error" style="display:none;margin-top:10px;padding:10px 16px;
+           background:#1a0505;border:1px solid #c53030;border-radius:5px;
+           color:#fc8181;font-size:.72rem;max-width:420px;line-height:1.7;text-align:left"></div>
+      <div id="loader-hint" style="font-size:.6rem;color:var(--muted);
+           padding:6px 12px;border:1px solid var(--border);border-radius:4px;margin-top:4px">
+        ⚡ Tip: if stuck, check Flask terminal for errors, or restart with <code>python app.py</code>
+      </div>
+    </div>
+    <div id="ds-sections"></div>
+    <div id="summary-wrap">
+      <h3>📊 Head-to-Head Summary</h3>
+      <table id="sum-table">
+        <thead><tr>
+          <th>Dataset</th><th>Domain</th>
+          <th>DAS acc</th><th>Baseline acc</th>
+          <th>Winner</th><th>Isolation proof</th>
+        </tr></thead>
+        <tbody id="sum-body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script>
+const charts = {};
+const COLORS = ['#56ab2f','#38a169','#68d391','#9ae6b4'];
+
+function mkChart(id, color, label) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  return new Chart(el, {
+    type:'line',
+    data:{labels:[],datasets:[{data:[],borderColor:color,backgroundColor:color+'18',
+          tension:.4,pointRadius:1.5,fill:true,label:label||''}]},
+    options:{animation:false,
+      scales:{x:{display:false},y:{min:0,max:1,
+              ticks:{color:'#4a7c59',font:{size:7}},grid:{color:'#1a3020'}}},
+      plugins:{legend:{display:false}}}
+  });
+}
+
+function push(c,s,v){if(!c)return;c.data.labels.push(s);c.data.datasets[0].data.push(v);c.update('none');}
+
+function setBadge(n, cls, txt) {
+  const el = document.getElementById('ds-badge-'+n);
+  if (!el) return;
+  el.className = 'ds-badge ' + cls;
+  el.textContent = txt;
+}
+
+function setPhase(n, txt) {
+  const el = document.getElementById('ds-phase-'+n);
+  if (el) el.textContent = txt;
+}
+
+function setCard(n, cls) {
+  const el = document.getElementById('ds-card-'+n);
+  if (el) { el.classList.remove('active','done','error'); el.classList.add(cls); }
+}
+
+function createSection(n, d) {
+  const container = document.getElementById('ds-sections');
+  const nd = d.n_domains;
+  // chart columns: router + nd leaves + baseline = nd+2 total
+  const total = nd + 2;
+  const rowCls = ['','r1','r2','r3','r4','r5'][Math.min(total,5)];
+
+  let leafCols = '';
+  for (let i=0; i<nd; i++) {
+    leafCols += `<div class="cbox">
+      <h4>Leaf ${i} · ${(d.domain_names||[])[i]||'Domain '+i}</h4>
+      <canvas id="c-${n}-leaf-${i}"></canvas></div>`;
+  }
+
+  const sec = document.createElement('div');
+  sec.className = 'ds-section'; sec.id = 'sec-'+n;
+  sec.innerHTML = `
+    <div class="ds-section-hdr">
+      <h3>${n+1} · ${d.name||'Dataset'}</h3>
+      <span class="meta" id="sec-meta-${n}">
+        ${(d.n_samples||'?').toLocaleString()} samples · ${d.n_features||'?'} features · ${nd} domains
+      </span>
+    </div>
+    <div class="ds-section-body">
+      <div style="font-size:.67rem;color:var(--muted);line-height:1.7;padding:4px 0">
+        <strong style="color:var(--text)">Leaf dims:</strong> [${(d.leaf_dims||[]).join(' → ')}] &nbsp;·&nbsp;
+        <strong style="color:var(--text)">Baseline dims:</strong> [${(d.base_dims||[]).join(' → ')}]
+      </div>
+      <div class="chart-row ${rowCls}">
+        <div class="cbox"><h4>Stem Router</h4><canvas id="c-${n}-router"></canvas></div>
+        ${leafCols}
+        <div class="cbox"><h4>Baseline MLP</h4><canvas id="c-${n}-base"></canvas></div>
+      </div>
+      <div class="result-grid ${nd===2?'rc2':'rc3'}" id="rcards-${n}"></div>
+      <div class="proof-bar" id="proof-${n}"></div>
+    </div>`;
+  container.appendChild(sec);
+
+  // Create charts
+  charts[`${n}_router`] = mkChart(`c-${n}-router`, '#56ab2f');
+  charts[`${n}_base`]   = mkChart(`c-${n}-base`,   '#fc8181');
+  for (let i=0; i<nd; i++) {
+    charts[`${n}_leaf_${i}`] = mkChart(`c-${n}-leaf-${i}`, COLORS[i % COLORS.length]);
+  }
+}
+
+function renderResult(d) {
+  const cards = document.getElementById('rcards-'+d.n);
+  if (!cards) return;
+  cards.innerHTML = '';
+  for (let i=0; i<d.n_domains; i++) {
+    const da = d.das_accs[i], bl = d.bl_accs[i];
+    const dasWin = da >= bl;
+    const diff = ((da - bl) * 100).toFixed(1);
+    const sign = diff >= 0 ? '+' : '';
+    cards.innerHTML += `
+      <div class="rcard">
+        <div class="dom">${(d.domain_names||[])[i]||'Domain '+i}</div>
+        <div class="vals">
+          <div>
+            <div style="font-size:.58rem;color:var(--muted)">DAS leaf</div>
+            <div class="das-v ${dasWin?'win':'lose'}">${(da*100).toFixed(1)}%</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:.58rem;color:var(--muted)">Baseline</div>
+            <div class="bl-v">${(bl*100).toFixed(1)}%</div>
+          </div>
+        </div>
+        <div class="winner" style="color:${dasWin?'var(--c2)':'var(--red)'}">
+          ${dasWin ? '▲ DAS +'+Math.abs(diff)+'pp' : '▼ BL +'+ Math.abs(diff)+'pp'}
+        </div>
+      </div>`;
+  }
+
+  // Proof bar
+  const pb = document.getElementById('proof-'+d.n);
+  if (pb) {
+    pb.className = 'proof-bar ' + (d.proof ? 'pass' : 'fail');
+    pb.textContent = d.proof
+      ? `✅  Isolation proof PASSED — all leaf hashes byte-identical after other leaves trained`
+      : `❌  Isolation proof FAILED`;
+  }
+
+  // Summary table
+  const sb = document.getElementById('sum-body');
+  for (let i=0; i<d.n_domains; i++) {
+    const da = d.das_accs[i], bl = d.bl_accs[i];
+    const dasWin = da > bl, tie = da === bl;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:var(--text)">${i===0 ? d.name : ''}</td>
+      <td style="color:var(--muted)">${(d.domain_names||[])[i]||'Domain '+i}</td>
+      <td class="${dasWin?'win-das':''}">${(da*100).toFixed(1)}%</td>
+      <td class="${!dasWin&&!tie?'win-bl':''}">${(bl*100).toFixed(1)}%</td>
+      <td>${dasWin?'<span style="color:var(--c2)">DAS ✓</span>':tie?'<span class="tie">Tie</span>':'<span style="color:var(--red)">Baseline</span>'}</td>
+      ${i===0?`<td rowspan="${d.n_domains}"><span class="${d.proof?'badge-proof-ok':'badge-proof-fail'}">${d.proof?'PASS ✓':'FAIL ✗'}</span></td>`:''}`;
+    sb.appendChild(tr);
+  }
+  document.getElementById('summary-wrap').style.display = 'block';
+}
+
+// ── Loading timer + heartbeat ────────────────────────────────────
+let loaderTimer = null;
+let loaderStart = 0;
+let lastEventAt = 0;
+let heartbeatCheck = null;
+let currentLoadingDs = '';
+
+function setLoaderError(msg) {
+  // Show error INSIDE the overlay so it's always visible regardless of scroll
+  const el = document.getElementById('loader-error');
+  el.textContent = '⚠ ' + msg;
+  el.style.display = 'block';
+  // Stop the spinner animation to signal "not working"
+  const sp = document.querySelector('#loading-overlay .spinner');
+  if (sp) sp.style.animationPlayState = 'paused';
+  const dots = document.getElementById('loader-dots');
+  if (dots) dots.style.display = 'none';
+  document.getElementById('loader-title').style.color = '#fc8181';
+  document.getElementById('status').textContent = '⚠ ' + msg.slice(0, 60);
+}
+
+function clearLoaderError() {
+  const el = document.getElementById('loader-error');
+  if (el) { el.textContent=''; el.style.display='none'; }
+  const sp = document.querySelector('#loading-overlay .spinner');
+  if (sp) sp.style.animationPlayState = 'running';
+  const dots = document.getElementById('loader-dots');
+  if (dots) dots.style.display = 'flex';
+  document.getElementById('loader-title').style.color = '';
+}
+
+function startLoaderTimer(label) {
+  currentLoadingDs = label || 'server';
+  loaderStart = Date.now();
+  lastEventAt = Date.now();
+  clearInterval(loaderTimer);
+  loaderTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - loaderStart) / 1000);
+    document.getElementById('loader-timer').textContent = `${s}s`;
+    document.getElementById('status').textContent = `⏳ ${currentLoadingDs}… ${s}s`;
+    const age = Math.floor((Date.now() - lastEventAt) / 1000);
+    const hb  = document.getElementById('heartbeat-age');
+    if (age < 4) {
+      hb.textContent = 'live ✓';
+      hb.style.color = '#56ab2f';
+    } else {
+      hb.textContent = `no event for ${age}s`;
+      hb.style.color = age > 15 ? '#fc8181' : '#f6ad55';
+    }
+    // Auto-warn if OpenML seems stuck (no rb_tick for >15s)
+    if (age === 15) {
+      setLoaderError(`No server response for ${age}s — OpenML may be slow or unreachable. Will timeout at 90s.`);
+    }
+    if (age === 95) {
+      setLoaderError('90s timeout hit — OpenML download failed. Check Flask terminal, then retry.');
+    }
+  }, 1000);
+}
+
+function showLoader(dsName) {
+  clearLoaderError();
+  currentLoadingDs = dsName || 'dataset';
+  document.getElementById('loader-title').textContent = `Downloading ${currentLoadingDs} from OpenML…`;
+  document.getElementById('loader-sub').textContent =
+    'First run only — data cached locally after this. Can take 30–90s on slow connections.';
+  document.getElementById('loading-overlay').style.display = 'flex';
+  startLoaderTimer(currentLoadingDs);
+}
+
+function hideLoader() {
+  document.getElementById('loading-overlay').style.display = 'none';
+  clearInterval(loaderTimer);
+  clearLoaderError();
+}
+
+// ── SSE ──────────────────────────────────────────────────────────
+let es = null;
+let noEventTimeout = null;
+
+function startBench() {
+  if (es) { es.close(); es = null; }
+  clearTimeout(noEventTimeout);
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('ds-sections').innerHTML = '';
+  document.getElementById('sum-body').innerHTML = '';
+  document.getElementById('summary-wrap').style.display = 'none';
+  Object.keys(charts).forEach(k=>delete charts[k]);
+  [0,1,2].forEach(n=>{ setBadge(n,'waiting','waiting'); setCard(n,''); setPhase(n,''); });
+
+  // Show loader immediately — visible feedback before SSE opens
+  clearLoaderError();
+  document.getElementById('loader-title').textContent = 'Connecting to /real-stream…';
+  document.getElementById('loader-sub').textContent =
+    'Opening SSE stream — if stuck here, restart Flask: python app.py';
+  document.getElementById('heartbeat-age').textContent = 'waiting…';
+  document.getElementById('loading-overlay').style.display = 'flex';
+  startLoaderTimer('Connecting');
+
+  // If SSE never opens within 8s, show error inside the overlay
+  noEventTimeout = setTimeout(() => {
+    setLoaderError('No response from server in 8s — make sure Flask is running on port 5050 (python app.py)');
+    document.getElementById('run-btn').disabled = false;
+  }, 8000);
+
+  es = new EventSource('/real-stream');
+
+  es.onopen = () => {
+    lastEventAt = Date.now();
+    clearLoaderError();
+    document.getElementById('loader-title').textContent = 'Connected — waiting for first event…';
+    document.getElementById('heartbeat-age').textContent = 'connected ✓';
+    clearTimeout(noEventTimeout);
+    // If connected but server sends nothing within 10s, warn
+    noEventTimeout = setTimeout(() => {
+      setLoaderError('Connected but no data received in 10s — check Flask terminal for Python errors');
+    }, 10000);
+  };
+
+  es.onmessage = function(ev) {
+    lastEventAt = Date.now();
+    clearTimeout(noEventTimeout);
+    const d = JSON.parse(ev.data);
+
+    if (d.e === 'rb_init') {
+      document.getElementById('loader-title').textContent = 'Initialised — starting dataset 1…';
+      document.getElementById('loader-sub').textContent =
+        `${d.datasets.length} datasets queued: ${d.datasets.map(x=>x.name).join(' · ')}`;
+    }
+    if (d.e === 'rb_loading') {
+      currentLoadingDs = d.name || 'dataset';
+      loaderStart = Date.now();
+      lastEventAt = Date.now();
+      document.getElementById('loader-title').textContent = `Downloading ${currentLoadingDs} from OpenML…`;
+      document.getElementById('loader-sub').textContent =
+        'First run only — data is cached locally after download. Can take 30–120s on slow connections.';
+      document.getElementById('loading-overlay').style.display = 'flex';
+      setCard(d.n, 'active'); setBadge(d.n, 'loading', '⏳ loading…');
+      setPhase(d.n, 'Downloading from OpenML…');
+    }
+    if (d.e === 'rb_tick') {
+      const s = d.elapsed || 0;
+      document.getElementById('loader-title').textContent =
+        `Downloading ${currentLoadingDs}… (${s}s — server is working)`;
+      setPhase(d.n, `⏳ Downloading… ${s}s`);
+    }
+    if (d.e === 'rb_error') {
+      hideLoader();
+      setCard(d.n,'error'); setBadge(d.n,'error','error');
+      setPhase(d.n, '⚠ '+d.msg);
+      document.getElementById('status').textContent = `⚠ ${d.name || 'Error'}: ${d.msg}`;
+    }
+    if (d.e === 'rb_loaded') {
+      hideLoader();
+      document.getElementById('status').textContent = `✓ ${d.n_samples?.toLocaleString()||''} samples loaded — training…`;
+      const el = document.getElementById('ds-stats-'+d.n);
+      if (el) el.textContent =
+        `${(d.n_samples||0).toLocaleString()} samples · ${d.n_features} features · ${d.n_domains} domains`;
+      setBadge(d.n,'running','▶ training');
+      createSection(d.n, d);
+    }
+    if (d.e === 'rb_phase') {
+      if (d.phase==='router')   setPhase(d.n, '🔀 Router training…');
+      if (d.phase==='leaf')     setPhase(d.n, `🌿 Leaf ${d.leaf} — ${d.label||''}…`);
+      if (d.phase==='baseline') setPhase(d.n, '📉 Baseline MLP…');
+      document.getElementById('status').textContent =
+        `⚡ Dataset ${d.n+1}/3 — ${d.phase}`;
+    }
+    if (d.e === 'rb_router')      push(charts[`${d.n}_router`], d.step, d.acc);
+    if (d.e === 'rb_router_done') setPhase(d.n, `Router done: ${(d.acc*100).toFixed(1)}% acc`);
+    if (d.e === 'rb_leaf')        push(charts[`${d.n}_leaf_${d.leaf}`], d.step, d.acc);
+    if (d.e === 'rb_leaf_done')   {}
+    if (d.e === 'rb_baseline')    push(charts[`${d.n}_base`], d.step, d.acc);
+    if (d.e === 'rb_result') {
+      setCard(d.n,'done'); setBadge(d.n,'done','✓ done');
+      setPhase(d.n, `DAS avg ${((d.das_accs.reduce((a,b)=>a+b,0)/d.das_accs.length)*100).toFixed(1)}%`);
+      renderResult(d);
+    }
+    if (d.e === 'rb_done') {
+      es.close(); es = null;
+      hideLoader();
+      document.getElementById('status').textContent = '✅ Done';
+      const btn = document.getElementById('run-btn');
+      btn.disabled = false; btn.textContent = '↺ Re-run';
+    }
+  };
+
+  es.onerror = (err) => {
+    clearTimeout(noEventTimeout);
+    hideLoader();
+    // Show error inside the overlay (which is still visible)
+    setLoaderError('Stream failed — make sure Flask is running: python app.py');
+    document.getElementById('run-btn').disabled = false;
+    clearInterval(loaderTimer);
+    es.close(); es = null;
+  };
+}
+</script>
+</body>
+</html>

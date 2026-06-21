@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DAS — MNIST Stress Test</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#060d06; --panel:#0c180c; --border:#1a3020;
+  --trunk:#4a7c59; --c0:#56ab2f; --c1:#38a169; --c2:#48bb78;
+  --c3:#68d391; --c4:#9ae6b4; --c5:#b7f0c8;
+  --red:#fc8181; --text:#c8e6c9; --muted:#4a7c59;
+  --glow:rgba(86,171,47,.4);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',monospace;
+     min-height:100vh;display:flex;flex-direction:column}
+
+header{display:flex;align-items:center;justify-content:space-between;
+       padding:10px 20px;border-bottom:1px solid var(--border)}
+header h1{font-size:.9rem;letter-spacing:.12em;color:var(--c1);text-transform:uppercase}
+.back-btn{padding:5px 14px;border:1px solid var(--border);border-radius:4px;
+           background:transparent;color:var(--muted);font-family:inherit;
+           font-size:.72rem;cursor:pointer;text-decoration:none;display:inline-block}
+.back-btn:hover{border-color:var(--trunk);color:var(--text)}
+.run-btn{padding:5px 16px;background:var(--trunk);color:#fff;border:none;
+          border-radius:4px;font-family:inherit;font-size:.75rem;cursor:pointer;
+          letter-spacing:.08em}
+.run-btn:hover{background:var(--c0);box-shadow:0 0 12px var(--glow)}
+.run-btn:disabled{background:#1a3020;color:var(--muted);cursor:not-allowed}
+#status{font-size:.7rem;color:var(--muted)}
+
+main{display:flex;flex:1;overflow:hidden}
+
+/* ── LEFT: forest of 10 ─────────────────────────────────────── */
+#left{width:360px;flex-shrink:0;border-right:1px solid var(--border);
+      overflow-y:auto;padding:16px}
+
+#left h2{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+          text-transform:uppercase;margin-bottom:12px}
+
+/* 10-leaf mini tree */
+#mini-tree{width:100%;height:200px;margin-bottom:14px}
+
+.leaf-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;
+           padding:5px 8px;border-radius:4px;border:1px solid transparent;
+           transition:.3s}
+.leaf-row.active{background:var(--panel);border-color:var(--border)}
+.leaf-row.done  {opacity:.7}
+.leaf-num{width:24px;height:24px;border-radius:50%;border:1px solid var(--trunk);
+           display:flex;align-items:center;justify-content:center;font-size:.65rem;
+           flex-shrink:0;color:var(--muted)}
+.leaf-row.active .leaf-num{background:var(--trunk);color:#fff;box-shadow:0 0 7px var(--glow)}
+.leaf-row.done   .leaf-num{background:var(--c0);color:#000;border-color:var(--c0)}
+.leaf-txt{font-size:.7rem;flex:1}
+.leaf-acc{font-size:.65rem;color:var(--c3);margin-top:1px}
+
+.info-box{background:var(--panel);border:1px solid var(--border);border-radius:5px;
+           padding:10px;margin-top:14px;font-size:.68rem;color:var(--muted);line-height:1.7}
+.info-box .val{color:var(--c3);font-size:.9rem;font-weight:bold}
+
+/* explainer panels */
+.explainer{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+            padding:14px 16px;font-size:.7rem;line-height:1.75;color:var(--muted)}
+.explainer h4{font-size:.65rem;letter-spacing:.13em;text-transform:uppercase;
+               color:var(--c1);margin-bottom:8px}
+.explainer strong{color:var(--text)}
+.explainer .kv{display:flex;gap:8px;margin-top:6px}
+.explainer .kv .k{color:var(--c3);min-width:110px;flex-shrink:0}
+.explainer .pill{display:inline-block;background:#0a2010;border:1px solid var(--border);
+                  border-radius:4px;padding:1px 7px;font-size:.62rem;margin:1px}
+
+/* ── RIGHT: charts + results ────────────────────────────────── */
+#right{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:14px}
+
+.section-title{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+                text-transform:uppercase;margin-bottom:10px}
+
+/* Router chart */
+#router-wrap{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
+#router-wrap h3{font-size:.65rem;color:var(--muted);margin-bottom:8px}
+#router-wrap canvas{max-height:100px;width:100%}
+
+/* 10 leaf charts in 5×2 grid */
+#leaf-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.lc{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:8px}
+.lc h4{font-size:.6rem;color:var(--muted);margin-bottom:6px}
+.lc canvas{max-height:80px}
+
+/* baseline chart */
+#base-wrap{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
+#base-wrap h3{font-size:.65rem;color:var(--muted);margin-bottom:8px}
+#base-wrap canvas{max-height:100px;width:100%}
+
+/* results table */
+#results-wrap{display:none}
+#res-table{width:100%;border-collapse:collapse;font-size:.72rem}
+#res-table th{color:var(--muted);padding:4px 8px;border-bottom:1px solid var(--border);text-align:left}
+#res-table td{padding:5px 8px}
+.good{color:var(--c3);font-weight:bold}
+.bad{color:var(--red)}
+.badge-ok  {background:var(--c0);color:#000;padding:1px 7px;border-radius:8px;font-size:.6rem}
+.badge-fail{background:#c53030;color:#fff;padding:1px 7px;border-radius:8px;font-size:.6rem}
+
+#proof-bar{display:none;padding:12px;text-align:center;border-radius:6px;font-size:.82rem}
+#proof-bar.pass{background:#0a1f0a;color:var(--c3);border:1px solid var(--c0);display:block}
+#proof-bar.fail{background:#1f0a0a;color:var(--red);border:1px solid #c53030;display:block}
+
+#loading-msg{padding:20px;text-align:center;color:var(--muted);font-size:.78rem;
+              display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔥 DAS — MNIST Stress Test (10 Leaves × 784 Features)</h1>
+  <a href="/" class="back-btn">← Forest</a>
+  <a href="/real" class="back-btn">⚡ Real</a>
+  <a href="/continual" class="back-btn">🧠 Continual</a>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="status">Ready</span>
+    <button class="run-btn" id="run-btn" onclick="startStress()">▶ Run Stress Test</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: mini 10-leaf tree -->
+  <div id="left">
+    <h2>10-Leaf Forest</h2>
+
+    <!-- Mini SVG tree: trunk + 10 branches fan -->
+    <svg id="mini-tree" viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="gf"><feGaussianBlur stdDeviation="3" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <!-- ground -->
+      <ellipse cx="170" cy="195" rx="70" ry="6" fill="#1a3020" opacity=".5"/>
+      <!-- trunk -->
+      <rect id="st-trunk" x="166" y="100" width="8" height="90" rx="4"
+            fill="#4a7c59" opacity="0" style="transition:opacity 1s"/>
+      <!-- router -->
+      <circle id="st-router" cx="170" cy="95" r="16" fill="#0c180c"
+              stroke="#4a7c59" stroke-width="1.5" opacity="0" style="transition:opacity .8s"/>
+      <text id="st-rl" x="170" y="92" text-anchor="middle" font-size="7"
+            fill="#4a7c59" opacity="0" style="transition:opacity .8s">STEM</text>
+      <text id="st-rl2" x="170" y="102" text-anchor="middle" font-size="7"
+            fill="#4a7c59" opacity="0" style="transition:opacity .8s">ROUTER</text>
+
+      <!-- 10 branches & leaf nodes, evenly fanned -->
+      <!-- positions: x from 14 to 326, step 34.7; y around 30-55 -->
+      <g id="branches">
+        <!-- branch 0 --><path id="br0" d="M165,80 Q90,50 14,35" stroke="#56ab2f" stroke-width="2" fill="none" opacity="0" stroke-dasharray="110" stroke-dashoffset="110" style="transition:opacity .3s"/>
+        <!-- branch 1 --><path id="br1" d="M166,80 Q115,48 57,30" stroke="#4db82a" stroke-width="2" fill="none" opacity="0" stroke-dasharray="100" stroke-dashoffset="100" style="transition:opacity .3s"/>
+        <!-- branch 2 --><path id="br2" d="M167,80 Q135,48 100,32" stroke="#47b026" stroke-width="2" fill="none" opacity="0" stroke-dasharray="90" stroke-dashoffset="90" style="transition:opacity .3s"/>
+        <!-- branch 3 --><path id="br3" d="M168,80 Q152,50 140,32" stroke="#3fa321" stroke-width="2" fill="none" opacity="0" stroke-dasharray="75" stroke-dashoffset="75" style="transition:opacity .3s"/>
+        <!-- branch 4 --><path id="br4" d="M169,80 Q162,54 162,32" stroke="#38a169" stroke-width="2" fill="none" opacity="0" stroke-dasharray="50" stroke-dashoffset="50" style="transition:opacity .3s"/>
+        <!-- branch 5 --><path id="br5" d="M171,80 Q178,54 178,32" stroke="#48bb78" stroke-width="2" fill="none" opacity="0" stroke-dasharray="50" stroke-dashoffset="50" style="transition:opacity .3s"/>
+        <!-- branch 6 --><path id="br6" d="M172,80 Q188,50 200,32" stroke="#56c97a" stroke-width="2" fill="none" opacity="0" stroke-dasharray="75" stroke-dashoffset="75" style="transition:opacity .3s"/>
+        <!-- branch 7 --><path id="br7" d="M173,80 Q205,50 240,32" stroke="#68d391" stroke-width="2" fill="none" opacity="0" stroke-dasharray="90" stroke-dashoffset="90" style="transition:opacity .3s"/>
+        <!-- branch 8 --><path id="br8" d="M174,80 Q225,48 283,30" stroke="#7edba0" stroke-width="2" fill="none" opacity="0" stroke-dasharray="100" stroke-dashoffset="100" style="transition:opacity .3s"/>
+        <!-- branch 9 --><path id="br9" d="M175,80 Q250,50 326,35" stroke="#9ae6b4" stroke-width="2" fill="none" opacity="0" stroke-dasharray="110" stroke-dashoffset="110" style="transition:opacity .3s"/>
+      </g>
+
+      <!-- Leaf nodes -->
+      <g id="leaf-nodes">
+        <circle id="ln0" cx="14"  cy="35" r="10" fill="#0c180c" stroke="#56ab2f" stroke-width="1.2" opacity="0"/>
+        <circle id="ln1" cx="57"  cy="30" r="10" fill="#0c180c" stroke="#4db82a" stroke-width="1.2" opacity="0"/>
+        <circle id="ln2" cx="100" cy="32" r="10" fill="#0c180c" stroke="#47b026" stroke-width="1.2" opacity="0"/>
+        <circle id="ln3" cx="140" cy="32" r="10" fill="#0c180c" stroke="#3fa321" stroke-width="1.2" opacity="0"/>
+        <circle id="ln4" cx="162" cy="32" r="10" fill="#0c180c" stroke="#38a169" stroke-width="1.2" opacity="0"/>
+        <circle id="ln5" cx="178" cy="32" r="10" fill="#0c180c" stroke="#48bb78" stroke-width="1.2" opacity="0"/>
+        <circle id="ln6" cx="200" cy="32" r="10" fill="#0c180c" stroke="#56c97a" stroke-width="1.2" opacity="0"/>
+        <circle id="ln7" cx="240" cy="32" r="10" fill="#0c180c" stroke="#68d391" stroke-width="1.2" opacity="0"/>
+        <circle id="ln8" cx="283" cy="30" r="10" fill="#0c180c" stroke="#7edba0" stroke-width="1.2" opacity="0"/>
+        <circle id="ln9" cx="326" cy="35" r="10" fill="#0c180c" stroke="#9ae6b4" stroke-width="1.2" opacity="0"/>
+      </g>
+      <!-- Digit labels -->
+      <g id="digit-labels" opacity="0" style="transition:opacity 1s">
+        <text x="14"  y="37" text-anchor="middle" font-size="8" fill="#56ab2f">0</text>
+        <text x="57"  y="32" text-anchor="middle" font-size="8" fill="#4db82a">1</text>
+        <text x="100" y="34" text-anchor="middle" font-size="8" fill="#47b026">2</text>
+        <text x="140" y="34" text-anchor="middle" font-size="8" fill="#3fa321">3</text>
+        <text x="162" y="34" text-anchor="middle" font-size="8" fill="#38a169">4</text>
+        <text x="178" y="34" text-anchor="middle" font-size="8" fill="#48bb78">5</text>
+        <text x="200" y="34" text-anchor="middle" font-size="8" fill="#56c97a">6</text>
+        <text x="240" y="34" text-anchor="middle" font-size="8" fill="#68d391">7</text>
+        <text x="283" y="32" text-anchor="middle" font-size="8" fill="#7edba0">8</text>
+        <text x="326" y="37" text-anchor="middle" font-size="8" fill="#9ae6b4">9</text>
+      </g>
+      <!-- Router accuracy -->
+      <text id="st-racc" x="170" y="75" text-anchor="middle" font-size="8"
+            fill="#a8e6a3" opacity="0">—</text>
+
+      <!-- Data particles -->
+      <circle r="2" fill="#56ab2f" opacity="0" id="sp0">
+        <animateMotion dur="1.2s" repeatCount="indefinite" path="M170,170 Q90,100 14,35"/>
+      </circle>
+      <circle r="2" fill="#68d391" opacity="0" id="sp5">
+        <animateMotion dur="1.4s" repeatCount="indefinite" path="M170,170 Q178,100 178,32"/>
+      </circle>
+      <circle r="2" fill="#9ae6b4" opacity="0" id="sp9">
+        <animateMotion dur="1.0s" repeatCount="indefinite" path="M170,170 Q250,100 326,35"/>
+      </circle>
+    </svg>
+
+    <!-- 10 leaf status rows -->
+    <div id="leaf-rows">
+      <div class="leaf-row" id="lr-router">
+        <div class="leaf-num" style="border-color:#888">R</div>
+        <div><div class="leaf-txt">Stem Router — 10-way routing</div>
+             <div class="leaf-acc" id="lr-router-acc"></div></div>
+      </div>
+      <script>
+        const DIGIT_NAMES = ['0','1','2','3','4','5','6','7','8','9'];
+        const wrap = document.getElementById('leaf-rows');
+        for (let d=0; d<10; d++) {
+          wrap.innerHTML += `
+            <div class="leaf-row" id="lr${d}">
+              <div class="leaf-num">${d}</div>
+              <div><div class="leaf-txt">Leaf ${d} — digit ${d} (1-vs-rest)</div>
+                   <div class="leaf-acc" id="lr${d}-acc"></div></div>
+            </div>`;
+        }
+      </script>
+    </div>
+
+    <div class="info-box">
+      <div>DAS params</div>
+      <div class="val" id="das-p">—</div>
+      <div style="margin-top:8px">Baseline params</div>
+      <div class="val" id="bl-p">—</div>
+      <div style="margin-top:8px;font-size:.62rem">
+        70,000 samples · 784 features<br>
+        10 leaves · deep [784→256→64→2]<br>
+        Each leaf: 1-vs-rest binary task<br>
+        Baseline: 10-class softmax MLP
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div id="right">
+    <div id="loading-msg" id="loading">⏳ Loading MNIST dataset (first run: ~20s download)…</div>
+
+    <!-- ── EXPLAINER ─────────────────────────────────────────────── -->
+    <div class="explainer">
+      <h4>What this stress test does</h4>
+      <p>
+        <strong>Dataset:</strong> MNIST — 70,000 handwritten digit images (60k train / 10k test),
+        each flattened to <strong>784 pixel features</strong>. This is the canonical deep-learning benchmark.<br><br>
+
+        <strong>Architecture:</strong> A 10-leaf DAS Forest. Each leaf is a deep specialist MLP
+        [784 → 256 → 64 → 2]. They are trained <strong>one at a time, in complete isolation</strong> —
+        no shared weights, no joint loss, no cross-contamination between leaves.
+      </p>
+      <div style="margin-top:10px">
+        <div class="kv"><span class="k">Phase 1 — Router</span><span>The Stem Router learns 10-way routing on raw pixels. It decides which leaf should handle each incoming digit image.</span></div>
+        <div class="kv"><span class="k">Phases 2–11 — Leaves</span><span>Each leaf trains on a <strong>1-vs-rest binary task</strong>: "is this digit N, or not?" Balanced dataset: equal positive and negative examples. All other leaves are frozen during this phase.</span></div>
+        <div class="kv"><span class="k">Phase 12 — Baseline</span><span>A single monolithic MLP [784 → 512 → 256 → 2] trains on all 10 classes simultaneously, the standard approach. Used as the comparison point.</span></div>
+      </div>
+    </div>
+
+    <div class="explainer" style="margin-top:0">
+      <h4>How to read the results</h4>
+      <div class="kv"><span class="k">DAS leaf acc</span><span>Each leaf's accuracy on its own 1-vs-rest binary test set. High accuracy = the leaf correctly identifies its digit vs. all others.</span></div>
+      <div class="kv"><span class="k">Baseline acc</span><span>The monolithic MLP's accuracy across all 10 classes. A different (harder) task — included so you can see both approaches reach ~98%, but DAS gets there with fully isolated specialists.</span></div>
+      <div class="kv"><span class="k">Hash unchanged?</span><span>After each leaf is frozen, its full weight tensor is SHA-256 hashed. Every subsequent training round (other leaves) is verified against that hash. <strong>UNCHANGED ✓</strong> means zero bytes changed — cryptographic proof of isolation.</span></div>
+      <div class="kv"><span class="k">Forgetting proof</span><span>45 pairwise checks total (leaf 0 verified during leaves 1–9, leaf 1 during 2–9, etc.). All must pass. This is the core claim of DAS: you can add specialists without disturbing what already exists.</span></div>
+    </div>
+
+    <div id="router-wrap">
+      <h3>STEM ROUTER — 10-WAY ROUTING ACCURACY</h3>
+      <canvas id="cr"></canvas>
+    </div>
+
+    <div>
+      <div class="section-title">Leaf Learning Curves (1-vs-rest binary)</div>
+      <div id="leaf-grid">
+        <!-- 10 chart boxes generated by JS -->
+      </div>
+    </div>
+
+    <div id="base-wrap">
+      <h3>BASELINE MLP — 10-CLASS (all digits mixed)</h3>
+      <canvas id="cb"></canvas>
+    </div>
+
+    <div id="results-wrap">
+      <div class="section-title">Final Results</div>
+      <table id="res-table">
+        <thead><tr>
+          <th>Digit / Leaf</th>
+          <th>DAS 1-vs-rest acc</th>
+          <th>Hash unchanged?</th>
+        </tr></thead>
+        <tbody id="res-body"></tbody>
+        <tfoot id="res-foot"></tfoot>
+      </table>
+    </div>
+
+    <div id="proof-bar"></div>
+  </div>
+</main>
+
+<script>
+// ── Build leaf chart grid ────────────────────────────────────────
+const COLORS = ['#56ab2f','#4db82a','#47b026','#3fa321','#38a169',
+                '#48bb78','#56c97a','#68d391','#7edba0','#9ae6b4'];
+const leafGrid = document.getElementById('leaf-grid');
+for (let d=0; d<10; d++) {
+  const box = document.createElement('div'); box.className='lc';
+  box.innerHTML = `<h4>DIGIT ${d}</h4><canvas id="cl${d}"></canvas>`;
+  leafGrid.appendChild(box);
+}
+
+// ── Charts ───────────────────────────────────────────────────────
+function mkChart(id, color) {
+  return new Chart(document.getElementById(id), {
+    type:'line',
+    data:{labels:[],datasets:[{data:[],borderColor:color,backgroundColor:color+'18',
+          tension:.4,pointRadius:1.5,fill:true}]},
+    options:{animation:false,
+      scales:{x:{display:false},y:{min:0,max:1,
+              ticks:{color:'#4a7c59',font:{size:7}},grid:{color:'#1a3020'}}},
+      plugins:{legend:{display:false}}}
+  });
+}
+
+const routerChart = mkChart('cr', '#56ab2f');
+const baseChart   = mkChart('cb', '#fc8181');
+const leafCharts  = Array.from({length:10},(_,i)=>mkChart('cl'+i, COLORS[i]));
+
+function push(c,s,v){c.data.labels.push(s);c.data.datasets[0].data.push(v);c.update('none');}
+
+// ── Tree animation ───────────────────────────────────────────────
+let grownLeaves = 0;
+function growRouter() {
+  ['st-trunk','st-router','st-rl','st-rl2'].forEach(id=>
+    document.getElementById(id).style.opacity='1');
+  ['sp0','sp5','sp9'].forEach(id=>document.getElementById(id).style.opacity='1');
+  document.getElementById('digit-labels').style.opacity='1';
+}
+function growLeaf(d) {
+  const br = document.getElementById('br'+d);
+  const ln = document.getElementById('ln'+d);
+  br.style.opacity='1';
+  setTimeout(()=>{
+    br.style.transition='opacity .3s, stroke-dashoffset .8s ease-in-out';
+    br.style.strokeDashoffset='0';
+  },50);
+  setTimeout(()=>{ ln.style.opacity='1'; }, 900);
+}
+function setRouterAcc(a) {
+  const el = document.getElementById('st-racc');
+  el.textContent=(a*100).toFixed(1)+'%'; el.style.opacity='1';
+}
+function setLeafAcc(d,a) {
+  document.getElementById('lr'+d+'-acc').textContent='test: '+(a*100).toFixed(1)+'%';
+}
+
+// leaf row state
+function setLR(n, state) {  // n: 'router' or 0-9
+  const id = n==='router' ? 'lr-router' : 'lr'+n;
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('active','done');
+  if (state==='active') el.classList.add('active');
+  if (state==='done')   el.classList.add('done');
+}
+
+// results state
+const dasAccs = {};
+let leafStable = {};   // populated from sproof event
+function renderResults() {
+  const tb = document.getElementById('res-body');
+  tb.innerHTML = '';
+  for (let d=0; d<10; d++) {
+    if (dasAccs[d] === undefined) continue;
+    const stable = leafStable[d];  // true/false/undefined
+    const badge = stable === undefined ? '—'
+                : stable ? '<span class="badge-ok">UNCHANGED ✓</span>'
+                         : '<span class="badge-fail">CHANGED</span>';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>Digit ${d} / Leaf ${d}</td>
+      <td class="good">${((dasAccs[d]||0)*100).toFixed(1)}%</td>
+      <td>${badge}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// ── SSE ─────────────────────────────────────────────────────────
+let es = null;
+function startStress() {
+  if (es) es.close();
+  document.getElementById('run-btn').disabled=true;
+  document.getElementById('status').textContent='🔥 Running…';
+  document.getElementById('loading-msg').style.display='block';
+  document.getElementById('results-wrap').style.display='none';
+  document.getElementById('proof-bar').className='';
+  document.getElementById('proof-bar').style.display='none';
+  [routerChart,baseChart,...leafCharts].forEach(c=>{
+    c.data.labels=[]; c.data.datasets[0].data=[]; c.update('none');
+  });
+  // reset tree
+  ['st-trunk','st-router','st-rl','st-rl2','digit-labels','st-racc',
+   ...Array.from({length:10},(_,i)=>'br'+i),
+   ...Array.from({length:10},(_,i)=>'ln'+i),
+   'sp0','sp5','sp9'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.style.opacity='0';
+      if(el.getAttribute('stroke-dasharray'))
+        el.style.strokeDashoffset=el.getAttribute('stroke-dasharray');}
+  });
+
+  es = new EventSource('/stress-stream');
+  es.onmessage = function(ev) {
+    const d = JSON.parse(ev.data);
+
+    if (d.e==='sloaded') {
+      document.getElementById('loading-msg').style.display='none';
+      growRouter();
+    }
+    if (d.e==='serror') {
+      alert(d.msg); es.close();
+      document.getElementById('run-btn').disabled=false;
+      document.getElementById('status').textContent='Error'; return;
+    }
+    if (d.e==='sphase') {
+      if (d.n===1) setLR('router','active');
+      else { setLR('router','done'); setLR(d.leaf,'active'); growLeaf(d.leaf); }
+    }
+    if (d.e==='srouter')  { push(routerChart, d.step, d.acc); setRouterAcc(d.acc); }
+    if (d.e==='sleaf')    { push(leafCharts[d.leaf], d.step, d.acc); }
+    if (d.e==='sbaseline'){ push(baseChart, d.step, d.acc); }
+
+    if (d.e==='sphase_done') {
+      if (d.n===1) {
+        document.getElementById('lr-router-acc').textContent='routing: '+(d.acc*100).toFixed(1)+'%';
+      } else if (d.leaf!==undefined) {
+        dasAccs[d.leaf] = d.test_acc;
+        setLeafAcc(d.leaf, d.test_acc);
+        setLR(d.leaf,'done');
+        renderResults(); document.getElementById('results-wrap').style.display='block';
+      }
+    }
+    if (d.e==='sparams') {
+      document.getElementById('das-p').textContent = d.das.toLocaleString();
+    }
+    if (d.e==='sparams_bl') {
+      document.getElementById('bl-p').textContent = d.bl.toLocaleString();
+    }
+    if (d.e==='ssnap') { /* hashes archived server-side; proof in sproof event */ }
+    if (d.e==='sbphase') {
+      setLR(9,'done');
+    }
+    if (d.e==='sproof') {
+      // populate per-leaf stability badges
+      if (d.leaf_stable) {
+        Object.keys(d.leaf_stable).forEach(k => { leafStable[parseInt(k)] = d.leaf_stable[k]; });
+        renderResults();
+      }
+      const el = document.getElementById('proof-bar');
+      el.className = d.passed ? 'pass' : 'fail';
+      el.textContent = d.passed
+        ? `✅  PROOF PASSED — 45 pairwise hash checks, all frozen leaves byte-identical`
+        : '❌  PROOF FAILED — a frozen leaf changed during subsequent training';
+    }
+    if (d.e==='sdone') {
+      es.close();
+      document.getElementById('status').textContent='✅ Done';
+      const btn=document.getElementById('run-btn');
+      btn.disabled=false; btn.textContent='↺ Re-run';
+    }
+  };
+  es.onerror = () => {
+    document.getElementById('status').textContent='Error';
+    document.getElementById('run-btn').disabled=false; es.close();
+  };
+}
+</script>
+</body>
+</html>

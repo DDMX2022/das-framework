@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DAS — Forest Visualiser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#060d06; --panel:#0c180c; --border:#1a3020;
+  --root:#2d5a27; --trunk:#4a7c59; --branch0:#56ab2f;
+  --branch1:#38a169; --branch2:#68d391; --canopy:#a8e6c0;
+  --text:#c8e6c9; --muted:#4a7c59; --gold:#f6e05e;
+  --glow:rgba(86,171,47,0.4); --glow2:rgba(104,211,145,0.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',monospace;
+     min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+
+/* ── TABS ───────────────────────────────────────────────────── */
+header{display:flex;align-items:center;justify-content:space-between;
+       padding:10px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+       position:sticky;top:0;z-index:10;background:var(--bg)}
+header h1{font-size:.95rem;letter-spacing:.12em;color:var(--branch1);text-transform:uppercase}
+.tabs{display:flex;gap:4px}
+.tab{padding:5px 16px;border:1px solid var(--border);border-radius:4px;
+     font-family:inherit;font-size:.75rem;cursor:pointer;
+     background:transparent;color:var(--muted);letter-spacing:.08em;transition:.2s}
+.tab.active{background:var(--trunk);color:#fff;border-color:var(--trunk)}
+.run-btn{padding:5px 16px;background:var(--trunk);color:#fff;border:none;
+          border-radius:4px;font-family:inherit;font-size:.75rem;cursor:pointer;
+          letter-spacing:.08em;transition:.2s}
+.run-btn:hover{background:var(--branch0);box-shadow:0 0 12px var(--glow)}
+.run-btn:disabled{background:#1a3020;color:var(--muted);cursor:not-allowed}
+#status{font-size:.72rem;color:var(--muted);min-width:120px;text-align:right}
+
+/* ── TAB CONTENT ────────────────────────────────────────────── */
+.tab-view{display:none}
+.tab-view.active{display:flex;flex-direction:column}
+
+/* ── FOREST VIEW ─────────────────────────────────────────────── */
+#view-forest{flex-direction:row;min-height:0}
+#left-panel{width:420px;flex-shrink:0;border-right:1px solid var(--border);
+             display:flex;flex-direction:column;overflow-y:auto}
+#forest-canvas-wrap{flex:1;display:flex;justify-content:center;align-items:center;
+                     padding:10px}
+#forest-svg{width:100%;height:auto;max-height:520px}
+
+#phase-panel{padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0}
+#phase-panel h2{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+                 text-transform:uppercase;margin-bottom:8px}
+.ph{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;opacity:.3;transition:opacity .4s}
+.ph.active{opacity:1}.ph.done{opacity:.65}
+.ph-num{width:22px;height:22px;border-radius:50%;border:1px solid var(--trunk);
+         display:flex;align-items:center;justify-content:center;font-size:.65rem;
+         flex-shrink:0;color:var(--muted)}
+.ph.active .ph-num{background:var(--trunk);color:#fff;box-shadow:0 0 8px var(--glow)}
+.ph.done   .ph-num{background:var(--branch0);color:#000;border-color:var(--branch0)}
+.ph-text{font-size:.72rem;line-height:1.5}
+.ph-acc{font-size:.65rem;color:var(--branch2);margin-top:1px}
+
+#right-panel{flex:1;display:flex;flex-direction:column;min-width:0}
+.section{padding:16px 20px;border-bottom:1px solid var(--border)}
+.section h2{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+             text-transform:uppercase;margin-bottom:12px}
+#charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.chart-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
+.chart-box h3{font-size:.65rem;color:var(--muted);margin-bottom:8px;letter-spacing:.08em}
+.chart-box canvas{max-height:130px}
+
+/* fingerprints */
+#fp-table{width:100%;border-collapse:collapse;font-size:.7rem}
+#fp-table th{color:var(--muted);text-align:left;padding:3px 8px;
+              border-bottom:1px solid var(--border)}
+#fp-table td{padding:5px 8px}
+.hash{color:var(--trunk);letter-spacing:.05em}
+.hash-ok{color:var(--branch2)}
+.badge-ok{background:var(--branch0);color:#000;padding:1px 6px;border-radius:8px;font-size:.6rem}
+.badge-fail{background:#c53030;color:#fff;padding:1px 6px;border-radius:8px;font-size:.6rem}
+
+#final-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.rc{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+    padding:12px;text-align:center}
+.rc .dom{font-size:.65rem;color:var(--muted);margin-bottom:6px}
+.rc .big{font-size:1.4rem;color:var(--branch2);font-weight:bold}
+.rc .sub{font-size:.6rem;color:var(--muted);margin-top:3px}
+
+#proof-banner{display:none;padding:14px 20px;text-align:center;font-size:.95rem;
+               letter-spacing:.08em;border-top:1px solid var(--border)}
+#proof-banner.pass{background:#0a1f0a;color:var(--branch2);border-color:var(--branch0);display:block}
+#proof-banner.fail{background:#1f0a0a;color:#fc8181;display:block}
+
+/* ── BENCHMARK VIEW ──────────────────────────────────────────── */
+#view-bench{flex-direction:row;min-height:0}
+#bench-left{width:300px;flex-shrink:0;border-right:1px solid var(--border);padding:16px}
+#bench-left h2{font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+                text-transform:uppercase;margin-bottom:12px}
+#bench-right{flex:1;display:flex;flex-direction:column;min-width:0}
+
+.bench-ph{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;opacity:.3;transition:opacity .4s}
+.bench-ph.active{opacity:1}.bench-ph.done{opacity:.65}
+.bench-ph-num{width:20px;height:20px;border-radius:50%;border:1px solid var(--trunk);
+               display:flex;align-items:center;justify-content:center;font-size:.6rem;
+               flex-shrink:0;color:var(--muted)}
+.bench-ph.active .bench-ph-num{background:var(--trunk);color:#fff}
+.bench-ph.done   .bench-ph-num{background:var(--branch0);color:#000;border-color:var(--branch0)}
+.bench-ph-txt{font-size:.7rem;line-height:1.5}
+.bench-ph-acc{font-size:.62rem;color:var(--branch2);margin-top:1px}
+
+.param-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+            padding:10px;margin-top:16px;font-size:.7rem}
+.param-box .label{color:var(--muted);font-size:.62rem;margin-bottom:4px}
+.param-val{color:var(--branch2);font-size:1rem;font-weight:bold}
+
+#bench-charts{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px}
+#bench-charts .chart-box canvas{max-height:120px}
+#bench-result-wrap{padding:0 16px 16px}
+#bench-result-table{width:100%;border-collapse:collapse;font-size:.73rem}
+#bench-result-table th{color:var(--muted);padding:4px 10px;border-bottom:1px solid var(--border);text-align:left}
+#bench-result-table td{padding:6px 10px}
+.winner-das{color:var(--branch2);font-weight:bold}
+.winner-mlp{color:#fc8181;font-weight:bold}
+#bench-proof{display:none;margin:12px 16px;padding:10px;text-align:center;
+              border-radius:6px;font-size:.8rem}
+#bench-proof.pass{background:#0a1f0a;color:var(--branch2);border:1px solid var(--branch0);display:block}
+#bench-proof.fail{background:#1f0a0a;color:#fc8181;border:1px solid #c53030;display:block}
+
+/* ── FIBONACCI SPIRAL (canvas overlay) ───────────────────────── */
+#spiral-canvas{position:absolute;top:0;left:0;pointer-events:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌿 DAS Framework</h1>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('forest')">🌳 Forest Demo</button>
+    <button class="tab" onclick="switchTab('bench')">📊 Benchmark</button>
+    <a href="/stress" class="tab" style="text-decoration:none">🔥 MNIST Stress</a>
+    <a href="/real" class="tab" style="text-decoration:none">⚡ Real Benchmark</a>
+    <a href="/continual" class="tab" style="text-decoration:none">🧠 Continual</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="status">Ready</span>
+    <button class="run-btn" id="run-btn" onclick="startDemo()">▶ Grow Forest</button>
+  </div>
+</header>
+
+<!-- ══ FOREST TAB ═══════════════════════════════════════════════ -->
+<div class="tab-view active" id="view-forest">
+
+  <div id="left-panel">
+    <div id="forest-canvas-wrap" style="position:relative">
+      <svg id="forest-svg" viewBox="0 0 400 520" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="gf"><feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="gf2"><feGaussianBlur stdDeviation="6" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <radialGradient id="soil" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#1a3020" stop-opacity=".8"/>
+            <stop offset="100%" stop-color="#060d06" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="trunk-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#5a9c6a"/>
+            <stop offset="100%" stop-color="#2d5a27"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Soil / ground -->
+        <ellipse cx="200" cy="500" rx="130" ry="18" fill="url(#soil)"/>
+
+        <!-- ROOT SYSTEM (visible from start, animates) -->
+        <g id="roots" opacity="0" style="transition:opacity 1.5s">
+          <path d="M200,480 Q175,495 155,490" stroke="#2d5a27" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M200,480 Q210,498 230,492" stroke="#2d5a27" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M200,480 Q185,500 168,498" stroke="#2d5a27" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <path d="M200,480 Q215,500 240,497" stroke="#2d5a27" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <path d="M200,480 Q200,505 200,510" stroke="#2d5a27" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+          <text x="200" y="515" text-anchor="middle" font-size="7" fill="#2d5a27" letter-spacing="1">ROOT SYSTEM</text>
+        </g>
+
+        <!-- TRUNK -->
+        <rect id="trunk-bar" x="193" y="260" width="14" height="220" rx="7"
+              fill="url(#trunk-grad)" opacity="0" style="transition:opacity 1s"/>
+        <!-- Trunk detail lines -->
+        <g id="trunk-detail" opacity="0" style="transition:opacity 1.5s">
+          <path d="M196,300 Q201,320 196,340" stroke="#3a6e48" stroke-width=".8" fill="none"/>
+          <path d="M204,310 Q199,330 204,350" stroke="#3a6e48" stroke-width=".8" fill="none"/>
+        </g>
+
+        <!-- ROUTER NODE (center of trunk) -->
+        <circle id="router-node" cx="200" cy="285" r="26"
+                fill="#0c180c" stroke="#4a7c59" stroke-width="2" opacity="0"
+                style="transition:all .8s"/>
+        <text id="router-t1" x="200" y="281" text-anchor="middle" font-size="8"
+              fill="#4a7c59" opacity="0" style="transition:opacity .8s">STEM</text>
+        <text id="router-t2" x="200" y="293" text-anchor="middle" font-size="8"
+              fill="#4a7c59" opacity="0" style="transition:opacity .8s">ROUTER</text>
+        <text id="router-acc-txt" x="200" y="265" text-anchor="middle" font-size="9"
+              fill="#a8e6a3" opacity="0" style="transition:opacity .5s">—</text>
+
+        <!-- BRANCH 0 (left-ish) -->
+        <path id="branch0" d="M192,262 C170,220 110,180 72,148"
+              stroke="#56ab2f" stroke-width="4" fill="none" stroke-linecap="round"
+              opacity="0" style="transition:opacity .5s;stroke-dasharray:160;stroke-dashoffset:160"/>
+
+        <!-- BRANCH 1 (right) -->
+        <path id="branch1" d="M208,262 C230,220 290,180 328,148"
+              stroke="#38a169" stroke-width="4" fill="none" stroke-linecap="round"
+              opacity="0" style="transition:opacity .5s;stroke-dasharray:160;stroke-dashoffset:160"/>
+
+        <!-- BRANCH 2 (far right, grafted) -->
+        <path id="branch2" d="M208,272 C240,240 310,200 350,165"
+              stroke="#68d391" stroke-width="3" fill="none" stroke-linecap="round"
+              opacity="0" style="transition:opacity .8s;stroke-dasharray:180;stroke-dashoffset:180"/>
+
+        <!-- FIBONACCI SPIRALS (drawn per leaf via JS canvas, but SVG spirals as base) -->
+        <!-- Leaf 0 cluster -->
+        <g id="leaf0-g" opacity="0" style="transition:opacity 1.2s">
+          <!-- spiral petals -->
+          <path d="M72,148 Q55,128 60,108 Q65,88 80,84 Q95,80 102,96 Q109,112 95,126 Q81,140 72,148"
+                stroke="#56ab2f" stroke-width="1.5" fill="#56ab2f" fill-opacity=".12"/>
+          <path d="M72,148 Q42,138 38,118 Q34,98 50,90 Q66,82 76,100 Q86,118 72,148"
+                stroke="#56ab2f" stroke-width="1" fill="#56ab2f" fill-opacity=".08"/>
+          <path d="M72,148 Q58,168 40,162 Q22,156 24,138 Q26,120 46,120 Q66,120 72,148"
+                stroke="#56ab2f" stroke-width="1" fill="#56ab2f" fill-opacity=".06"/>
+          <!-- center -->
+          <circle cx="72" cy="128" r="18" fill="#0c180c" stroke="#56ab2f" stroke-width="1.5"/>
+          <text x="72" y="124" text-anchor="middle" font-size="8" fill="#56ab2f">LEAF 0</text>
+          <text x="72" y="135" text-anchor="middle" font-size="7" fill="#4a7c59">Domain 0</text>
+          <text id="acc0" x="72" y="108" text-anchor="middle" font-size="10" fill="#a8e6a3">—</text>
+        </g>
+
+        <!-- Leaf 1 cluster -->
+        <g id="leaf1-g" opacity="0" style="transition:opacity 1.2s">
+          <path d="M328,148 Q345,128 340,108 Q335,88 320,84 Q305,80 298,96 Q291,112 305,126 Q319,140 328,148"
+                stroke="#38a169" stroke-width="1.5" fill="#38a169" fill-opacity=".12"/>
+          <path d="M328,148 Q358,138 362,118 Q366,98 350,90 Q334,82 324,100 Q314,118 328,148"
+                stroke="#38a169" stroke-width="1" fill="#38a169" fill-opacity=".08"/>
+          <path d="M328,148 Q342,168 360,162 Q378,156 376,138 Q374,120 354,120 Q334,120 328,148"
+                stroke="#38a169" stroke-width="1" fill="#38a169" fill-opacity=".06"/>
+          <circle cx="328" cy="128" r="18" fill="#0c180c" stroke="#38a169" stroke-width="1.5"/>
+          <text x="328" y="124" text-anchor="middle" font-size="8" fill="#38a169">LEAF 1</text>
+          <text x="328" y="135" text-anchor="middle" font-size="7" fill="#4a7c59">Domain 1</text>
+          <text id="acc1" x="328" y="108" text-anchor="middle" font-size="10" fill="#a8e6a3">—</text>
+        </g>
+
+        <!-- Leaf 2 cluster (grafted) -->
+        <g id="leaf2-g" opacity="0" style="transition:opacity 1.5s">
+          <path d="M350,165 Q370,142 368,118 Q366,94 348,90 Q330,86 326,106 Q322,126 340,148 Q358,170 350,165"
+                stroke="#68d391" stroke-width="1.5" fill="#68d391" fill-opacity=".15" filter="url(#gf)"/>
+          <path d="M350,165 Q375,158 382,136 Q389,114 372,104 Q355,94 345,112 Q335,130 350,165"
+                stroke="#68d391" stroke-width="1" fill="#68d391" fill-opacity=".08"/>
+          <circle cx="354" cy="140" r="16" fill="#0c180c" stroke="#68d391" stroke-width="1.5" filter="url(#gf)"/>
+          <text x="354" y="137" text-anchor="middle" font-size="7.5" fill="#68d391">LEAF 2</text>
+          <text x="354" y="147" text-anchor="middle" font-size="6.5" fill="#4a7c59">Domain 2</text>
+          <text id="acc2" x="354" y="122" text-anchor="middle" font-size="9" fill="#a8e6a3">—</text>
+          <text x="354" y="162" text-anchor="middle" font-size="6" fill="#68d391">✦ GRAFTED</text>
+        </g>
+
+        <!-- CANOPY (top) -->
+        <g id="canopy-g" opacity="0" style="transition:opacity 2s">
+          <!-- big canopy blob -->
+          <ellipse cx="200" cy="78" rx="90" ry="48" fill="#56ab2f" fill-opacity=".07"
+                   stroke="#56ab2f" stroke-width="1" stroke-dasharray="4 4"/>
+          <ellipse cx="200" cy="72" rx="68" ry="36" fill="#56ab2f" fill-opacity=".05"
+                   stroke="#56ab2f" stroke-width=".5"/>
+          <text x="200" y="58" text-anchor="middle" font-size="8" fill="#56ab2f" letter-spacing="2">CANOPY</text>
+          <text x="200" y="70" text-anchor="middle" font-size="7" fill="#4a7c59">synthesis layer</text>
+          <!-- canopy connectors to leaves -->
+          <path d="M140,98 Q160,68 200,68" stroke="#56ab2f" stroke-width=".8" fill="none" stroke-dasharray="3 3" opacity=".5"/>
+          <path d="M260,98 Q240,68 200,68" stroke="#38a169" stroke-width=".8" fill="none" stroke-dasharray="3 3" opacity=".5"/>
+          <path d="M338,124 Q290,80 200,68" stroke="#68d391" stroke-width=".8" fill="none" stroke-dasharray="3 3" opacity=".4"/>
+        </g>
+
+        <!-- DATA PARTICLES -->
+        <circle id="p0" r="3" fill="#56ab2f" opacity="0">
+          <animateMotion dur="1.6s" repeatCount="indefinite"
+            path="M200,460 C192,380 170,320 72,128"/>
+        </circle>
+        <circle id="p1" r="3" fill="#38a169" opacity="0">
+          <animateMotion dur="1.8s" repeatCount="indefinite"
+            path="M200,460 C208,380 230,320 328,128"/>
+        </circle>
+        <circle id="p2" r="2.5" fill="#68d391" opacity="0">
+          <animateMotion dur="1.4s" repeatCount="indefinite"
+            path="M200,460 C210,380 250,300 354,140"/>
+        </circle>
+        <!-- upward synthesis particles -->
+        <circle id="pu0" r="2" fill="#56ab2f" opacity="0">
+          <animateMotion dur="1.2s" repeatCount="indefinite"
+            path="M72,128 Q160,68 200,45"/>
+        </circle>
+        <circle id="pu1" r="2" fill="#38a169" opacity="0">
+          <animateMotion dur="1.4s" repeatCount="indefinite"
+            path="M328,128 Q240,68 200,45"/>
+        </circle>
+        <circle id="pu2" r="2" fill="#68d391" opacity="0">
+          <animateMotion dur="1.0s" repeatCount="indefinite"
+            path="M354,140 Q290,80 200,45"/>
+        </circle>
+
+        <!-- FROZEN BADGES (appear after training) -->
+        <text id="frozen0" x="72" y="152" text-anchor="middle" font-size="7"
+              fill="#2d5a27" opacity="0">❄ frozen</text>
+        <text id="frozen1" x="328" y="152" text-anchor="middle" font-size="7"
+              fill="#2d5a27" opacity="0">❄ frozen</text>
+      </svg>
+    </div>
+
+    <div id="phase-panel">
+      <h2>Growth Phases</h2>
+      <div class="ph" id="ph1">
+        <div class="ph-num">1</div>
+        <div><div class="ph-text">Roots + Router — domain routing</div>
+             <div class="ph-acc" id="ph1-acc"></div></div>
+      </div>
+      <div class="ph" id="ph2">
+        <div class="ph-num">2</div>
+        <div><div class="ph-text">Branch 0 — Leaf 0 isolated training</div>
+             <div class="ph-acc" id="ph2-acc"></div></div>
+      </div>
+      <div class="ph" id="ph3">
+        <div class="ph-num">3</div>
+        <div><div class="ph-text">Branch 1 — Leaf 1 isolated training</div>
+             <div class="ph-acc" id="ph3-acc"></div></div>
+      </div>
+      <div class="ph" id="ph4">
+        <div class="ph-num">4</div>
+        <div><div class="ph-text">✦ Graft — Leaf 2 sprouts new branch</div>
+             <div class="ph-acc" id="ph4-acc"></div></div>
+      </div>
+    </div>
+  </div><!-- /left-panel -->
+
+  <div id="right-panel">
+    <!-- Forest explainer -->
+    <div class="section">
+      <h2>What you're watching</h2>
+      <div style="font-size:.71rem;line-height:1.85;color:var(--muted)">
+        <p>
+          This demo walks through the full DAS lifecycle on synthetic data —
+          three distinct domains, each with its own decision boundary.
+          The tree metaphor is literal: <strong style="color:var(--text)">roots</strong> anchor the routing system,
+          the <strong style="color:var(--text)">trunk</strong> is the shared Stem Router,
+          each <strong style="color:var(--text)">branch</strong> carries data to a specialist leaf,
+          and the <strong style="color:var(--text)">canopy</strong> emerges when all leaves are active.
+        </p>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:8px;font-size:.67rem">
+            <div style="color:var(--branch0);margin-bottom:3px">Phase 1</div>
+            <strong style="color:var(--text)">Router trains</strong><br>
+            Learns to sort 600 samples from 2 domains into the right branch using a linear gate + softmax.
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:8px;font-size:.67rem">
+            <div style="color:var(--branch0);margin-bottom:3px">Phases 2–3</div>
+            <strong style="color:var(--text)">Leaves train in isolation</strong><br>
+            Leaf 0 and Leaf 1 each train on their own domain only. The other leaf's weights are frozen and untouched.
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:8px;font-size:.67rem">
+            <div style="color:var(--gold);margin-bottom:3px">Phase 4 ✦</div>
+            <strong style="color:var(--text)">Grafting</strong><br>
+            A third domain arrives. A new leaf sprouts — existing leaves stay frozen. This is modular growth.
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:8px;font-size:.67rem">
+            <div style="color:var(--branch2);margin-bottom:3px">Proof</div>
+            <strong style="color:var(--text)">SHA-256 fingerprints</strong><br>
+            Leaf weights are hashed before and after grafting. Byte-identical = zero catastrophic forgetting.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="section">
+      <h2>Live Learning Curves</h2>
+      <div id="charts-grid">
+        <div class="chart-box"><h3>STEM ROUTER</h3><canvas id="c-router"></canvas></div>
+        <div class="chart-box"><h3>LEAF 0 — DOMAIN 0</h3><canvas id="c-leaf0"></canvas></div>
+        <div class="chart-box"><h3>LEAF 1 — DOMAIN 1</h3><canvas id="c-leaf1"></canvas></div>
+        <div class="chart-box"><h3>LEAF 2 — DOMAIN 2 ✦</h3><canvas id="c-leaf2"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Fingerprints -->
+    <div class="section">
+      <h2>Weight Fingerprints — Isolation Proof</h2>
+      <table id="fp-table">
+        <thead><tr><th>Leaf</th><th>Before Graft</th><th>After Graft</th><th>Status</th></tr></thead>
+        <tbody id="fp-body">
+          <tr><td colspan="4" style="color:var(--muted);font-size:.68rem;padding:8px">
+            — appears after grafting phase —</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Final -->
+    <div class="section" id="final-sec" style="display:none">
+      <h2>Forest Accuracy — All 3 Domains</h2>
+      <div id="final-grid"></div>
+    </div>
+  </div><!-- /right-panel -->
+
+</div><!-- /view-forest -->
+
+<div id="proof-banner"></div>
+
+<!-- ══ BENCHMARK TAB ════════════════════════════════════════════ -->
+<div class="tab-view" id="view-bench">
+
+  <div id="bench-left">
+    <h2>Benchmark Phases</h2>
+    <div class="bench-ph" id="bph1">
+      <div class="bench-ph-num">1</div>
+      <div><div class="bench-ph-txt">Router trains on real pixels</div>
+           <div class="bench-ph-acc" id="bph1-acc"></div></div>
+    </div>
+    <div class="bench-ph" id="bph2">
+      <div class="bench-ph-num">2</div>
+      <div><div class="bench-ph-txt">Leaf 0 — digits 0-3 (isolated)</div>
+           <div class="bench-ph-acc" id="bph2-acc"></div></div>
+    </div>
+    <div class="bench-ph" id="bph3">
+      <div class="bench-ph-num">3</div>
+      <div><div class="bench-ph-txt">Leaf 1 — digits 4-6 (isolated)</div>
+           <div class="bench-ph-acc" id="bph3-acc"></div></div>
+    </div>
+    <div class="bench-ph" id="bph4">
+      <div class="bench-ph-num">4</div>
+      <div><div class="bench-ph-txt">Leaf 2 — digits 7-9 (isolated)</div>
+           <div class="bench-ph-acc" id="bph4-acc"></div></div>
+    </div>
+    <div class="bench-ph" id="bph5">
+      <div class="bench-ph-num">5</div>
+      <div><div class="bench-ph-txt">Baseline MLP — all mixed</div>
+           <div class="bench-ph-acc" id="bph5-acc"></div></div>
+    </div>
+
+    <div class="param-box">
+      <div class="label">DAS FOREST PARAMS</div>
+      <div class="param-val" id="das-params">—</div>
+    </div>
+    <div class="param-box">
+      <div class="label">BASELINE MLP PARAMS</div>
+      <div class="param-val" id="bl-params">—</div>
+    </div>
+
+    <div style="margin-top:16px;font-size:.65rem;color:var(--muted);line-height:1.6">
+      Dataset: sklearn digits<br>
+      1,797 samples · 64 features<br>
+      3 domains · binary task each<br><br>
+      Domain 0: even/odd (digits 0-3)<br>
+      Domain 1: ≤5 vs 6 (digits 4-6)<br>
+      Domain 2: ≤8 vs 9 (digits 7-9)
+    </div>
+  </div>
+
+  <div id="bench-right">
+
+    <!-- ── BENCHMARK EXPLAINER ──────────────────────────────────── -->
+    <div style="padding:16px 16px 0">
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;
+                  padding:14px 16px;font-size:.7rem;line-height:1.8;color:var(--muted);margin-bottom:12px">
+        <div style="font-size:.65rem;letter-spacing:.13em;text-transform:uppercase;
+                    color:var(--branch1);margin-bottom:10px">▸ What the benchmark measures</div>
+        <p>
+          <strong style="color:var(--text)">Dataset:</strong>
+          sklearn's handwritten digits — 1,797 real digit images (8×8 px, 64 features, 10 classes).
+          Split into <strong style="color:var(--text)">3 domains</strong> by digit group, each with
+          a distinct binary classification task. The router is trained on all 3 domains together,
+          then each leaf trains in isolation on only its own domain.
+        </p>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
+          <div style="background:#060d06;border:1px solid var(--border);border-radius:5px;padding:9px">
+            <div style="color:var(--branch0);font-size:.65rem;margin-bottom:4px">DOMAIN 0</div>
+            <div style="color:var(--text)">Digits 0–3</div>
+            <div>Task: even digit vs. odd digit</div>
+          </div>
+          <div style="background:#060d06;border:1px solid var(--border);border-radius:5px;padding:9px">
+            <div style="color:var(--branch1);font-size:.65rem;margin-bottom:4px">DOMAIN 1</div>
+            <div style="color:var(--text)">Digits 4–6</div>
+            <div>Task: digit ≤5 vs. digit 6</div>
+          </div>
+          <div style="background:#060d06;border:1px solid var(--border);border-radius:5px;padding:9px">
+            <div style="color:var(--branch2);font-size:.65rem;margin-bottom:4px">DOMAIN 2</div>
+            <div style="color:var(--text)">Digits 7–9</div>
+            <div>Task: digit ≤8 vs. digit 9</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;
+                  padding:14px 16px;font-size:.7rem;line-height:1.8;color:var(--muted);margin-bottom:4px">
+        <div style="font-size:.65rem;letter-spacing:.13em;text-transform:uppercase;
+                    color:var(--branch1);margin-bottom:10px">▸ DAS Forest vs. Baseline MLP — how they differ</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div style="color:var(--branch2);margin-bottom:5px">DAS Forest</div>
+            <div>Router hard-routes each sample to exactly one leaf.
+            Each leaf trains <strong style="color:var(--text)">only on its domain</strong> — it never sees data from other domains.
+            Leaves are frozen after training. A new domain can be added by grafting a new leaf without touching existing ones.</div>
+          </div>
+          <div>
+            <div style="color:#fc8181;margin-bottom:5px">Baseline MLP</div>
+            <div>A single network sees <strong style="color:var(--text)">all domains at once</strong>.
+            It must learn all three binary tasks simultaneously using the same shared weights.
+            Learning one task can interfere with another — this is <em>catastrophic forgetting</em>.</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+          <strong style="color:var(--text)">Reading the results table:</strong>
+          Domain test accuracy tells you how well each approach solved its specific binary task on held-out data.
+          Same parameter budget — any accuracy gap is structural, not a size advantage.
+          The isolation proof SHA-256 hashes leaf weights before and after grafting —
+          <strong style="color:var(--text)">UNCHANGED</strong> means zero bytes moved in existing leaves while the new one was added.
+        </div>
+      </div>
+    </div>
+
+    <div id="bench-charts">
+      <div class="chart-box"><h3>ROUTER (real pixels)</h3><canvas id="bc-router"></canvas></div>
+      <div class="chart-box"><h3>LEAF 0 train acc</h3><canvas id="bc-leaf0"></canvas></div>
+      <div class="chart-box"><h3>LEAF 1 train acc</h3><canvas id="bc-leaf1"></canvas></div>
+      <div class="chart-box"><h3>LEAF 2 train acc</h3><canvas id="bc-leaf2"></canvas></div>
+      <div class="chart-box"><h3>BASELINE MLP (all data)</h3><canvas id="bc-base"></canvas></div>
+    </div>
+
+    <div id="bench-result-wrap" style="display:none">
+      <h2 style="font-size:.65rem;letter-spacing:.15em;color:var(--muted);
+                  text-transform:uppercase;margin-bottom:10px">Test Accuracy Comparison</h2>
+      <table id="bench-result-table">
+        <thead><tr><th>Domain</th><th>DAS Test Acc</th><th>Baseline Test Acc</th><th>Winner</th></tr></thead>
+        <tbody id="bench-result-body"></tbody>
+      </table>
+    </div>
+
+    <div id="bench-proof"></div>
+  </div>
+</div><!-- /view-bench -->
+
+<script>
+// ── Tab switching ───────────────────────────────────────────────
+let currentTab = 'forest';
+function switchTab(t) {
+  currentTab = t;
+  document.querySelectorAll('.tab').forEach((b,i) => {
+    b.classList.toggle('active', ['forest','bench'][i] === t);
+  });
+  document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-'+t).classList.add('active');
+  const btn = document.getElementById('run-btn');
+  if (t === 'forest') { btn.textContent = '▶ Grow Forest'; btn.onclick = startDemo; }
+  else                { btn.textContent = '▶ Run Benchmark'; btn.onclick = startBenchmark; }
+}
+
+// ── Chart factory ───────────────────────────────────────────────
+function mkChart(id, label, color) {
+  return new Chart(document.getElementById(id), {
+    type: 'line',
+    data: { labels: [], datasets: [{ label, data: [], borderColor: color,
+      backgroundColor: color+'18', tension: 0.4, pointRadius: 1.5, fill: true }] },
+    options: { animation: false,
+      scales: { x:{display:false},
+                y:{min:0,max:1,ticks:{color:'#4a7c59',font:{size:8}},grid:{color:'#1a3020'}} },
+      plugins: { legend:{display:false} } }
+  });
+}
+
+const C = {
+  router: mkChart('c-router','Router','#56ab2f'),
+  leaf0:  mkChart('c-leaf0', 'Leaf 0','#56ab2f'),
+  leaf1:  mkChart('c-leaf1', 'Leaf 1','#38a169'),
+  leaf2:  mkChart('c-leaf2', 'Leaf 2','#68d391'),
+};
+const BC = {
+  router: mkChart('bc-router','Router','#56ab2f'),
+  leaf0:  mkChart('bc-leaf0', 'L0','#56ab2f'),
+  leaf1:  mkChart('bc-leaf1', 'L1','#38a169'),
+  leaf2:  mkChart('bc-leaf2', 'L2','#68d391'),
+  base:   mkChart('bc-base',  'MLP','#fc8181'),
+};
+
+function push(c, step, val) {
+  c.data.labels.push(step);
+  c.data.datasets[0].data.push(val);
+  c.update('none');
+}
+
+// ── Tree helpers ────────────────────────────────────────────────
+function op(id, v) { document.getElementById(id).style.opacity = String(v); }
+function show(...ids) { ids.forEach(id => op(id, 1)); }
+
+function setPhase(n) {
+  [1,2,3,4].forEach(i => {
+    const el = document.getElementById('ph'+i);
+    el.classList.toggle('active', i===n);
+    el.classList.toggle('done',   i<n);
+  });
+}
+
+function growBranch(n) {
+  const b = document.getElementById('branch'+n);
+  b.style.opacity = '1';
+  setTimeout(() => { b.style.strokeDashoffset = '0';
+    b.style.transition = 'opacity .5s, stroke-dashoffset 1.2s ease-in-out'; }, 50);
+  setTimeout(() => op('leaf'+n+'-g', 1), 1200);
+  op('p'+n, 1);
+}
+
+function setLeafAcc(n, a) {
+  document.getElementById('acc'+n).textContent = (a*100).toFixed(1)+'%';
+}
+function setRouterAcc(a) {
+  const el = document.getElementById('router-acc-txt');
+  el.textContent = (a*100).toFixed(1)+'%';
+  el.style.opacity = '1';
+}
+
+// fingerprint state
+const snapB = {}, snapA = {};
+function renderFP() {
+  const tb = document.getElementById('fp-body'); tb.innerHTML = '';
+  Object.keys(snapB).forEach(k => {
+    const b = snapB[k], a = snapA[k], match = a && b===a;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="color:var(--muted)">Leaf ${k}</td>
+      <td class="hash">${b||'—'}</td>
+      <td class="${a?'hash-ok':'hash'}">${a||'—'}</td>
+      <td>${a?(match?'<span class="badge-ok">UNCHANGED ✓</span>'
+                    :'<span class="badge-fail">CHANGED ✗</span>'):'—'}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+// ── FOREST DEMO ─────────────────────────────────────────────────
+let demoES = null;
+function startDemo() {
+  if (demoES) demoES.close();
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('status').textContent = '🌱 Growing…';
+  document.getElementById('proof-banner').className = '';
+  document.getElementById('proof-banner').style.display = 'none';
+  document.getElementById('final-sec').style.display = 'none';
+  document.getElementById('fp-body').innerHTML =
+    '<tr><td colspan="4" style="color:var(--muted);font-size:.68rem;padding:8px">— appears after grafting phase —</td></tr>';
+  Object.assign(snapB,{}); Object.assign(snapA,{});
+  [C.router,C.leaf0,C.leaf1,C.leaf2].forEach(c=>{c.data.labels=[];c.data.datasets[0].data=[];c.update('none')});
+  ['roots','trunk-bar','trunk-detail','router-node','router-t1','router-t2',
+   'leaf0-g','leaf1-g','leaf2-g','branch0','branch1','branch2','canopy-g',
+   'p0','p1','p2','pu0','pu1','pu2','frozen0','frozen1','router-acc-txt'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.style.opacity='0';if(el.tagName==='path')el.style.strokeDashoffset=el.getAttribute('stroke-dasharray')||'0';}
+  });
+
+  demoES = new EventSource('/train');
+  demoES.onmessage = function(ev) {
+    const d = JSON.parse(ev.data);
+
+    if (d.e==='phase') {
+      setPhase(d.n);
+      if (d.n===1) { show('roots','trunk-bar','trunk-detail','router-node','router-t1','router-t2'); }
+      if (d.n===2) growBranch(0);
+      if (d.n===3) growBranch(1);
+      if (d.n===4) growBranch(2);
+    }
+    if (d.e==='router') { push(C.router,d.step,d.acc); setRouterAcc(d.acc); }
+    if (d.e==='leaf')   {
+      push([C.leaf0,C.leaf1,C.leaf2][d.leaf], d.step, d.acc);
+      setLeafAcc(d.leaf, d.acc);
+    }
+    if (d.e==='phase_done') {
+      const pct = (d.acc*100).toFixed(1)+'%';
+      if (d.n===1) document.getElementById('ph1-acc').textContent='Router: '+pct;
+      else document.getElementById('ph'+d.n+'-acc').textContent='Leaf '+d.leaf+': '+pct;
+    }
+    if (d.e==='snap') {
+      if (d.when==='before') Object.assign(snapB, d.h);
+      if (d.when==='after')  { Object.assign(snapA, d.h); renderFP(); }
+      else renderFP();
+    }
+    if (d.e==='proof') {
+      const bn = document.getElementById('proof-banner');
+      bn.className = d.passed ? 'pass' : 'fail';
+      bn.textContent = d.passed
+        ? '✅  PROOF PASSED — Old leaves byte-identical after grafting. Zero catastrophic forgetting.'
+        : '❌  PROOF FAILED';
+      // show canopy + upward particles + frozen badges
+      show('canopy-g','pu0','pu1','pu2','frozen0','frozen1');
+    }
+    if (d.e==='final') {
+      const sec=document.getElementById('final-sec'), gr=document.getElementById('final-grid');
+      sec.style.display='block';
+      gr.innerHTML=d.results.map(r=>`
+        <div class="rc">
+          <div class="dom">${r.name}</div>
+          <div class="big">${(r.acc*100).toFixed(1)}%</div>
+          <div class="sub">task accuracy</div>
+          <div class="sub" style="margin-top:4px">routed: ${(r.routed*100).toFixed(0)}%</div>
+        </div>`).join('');
+    }
+    if (d.e==='done') {
+      demoES.close();
+      [1,2,3,4].forEach(i=>{
+        const el=document.getElementById('ph'+i);
+        el.classList.remove('active'); el.classList.add('done');
+      });
+      document.getElementById('status').textContent='🌳 Forest complete';
+      const btn=document.getElementById('run-btn');
+      btn.disabled=false; btn.textContent='↺ Regrow';
+    }
+  };
+  demoES.onerror=()=>{ document.getElementById('status').textContent='Error';
+    document.getElementById('run-btn').disabled=false; demoES.close(); };
+}
+
+// ── BENCHMARK ───────────────────────────────────────────────────
+let benchES = null;
+function startBenchmark() {
+  if (benchES) benchES.close();
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('status').textContent = '⚗️ Benchmarking…';
+  document.getElementById('bench-result-wrap').style.display = 'none';
+  document.getElementById('bench-proof').className = '';
+  document.getElementById('bench-proof').style.display = 'none';
+  [BC.router,BC.leaf0,BC.leaf1,BC.leaf2,BC.base].forEach(c=>{
+    c.data.labels=[];c.data.datasets[0].data=[];c.update('none');});
+  [1,2,3,4,5].forEach(n=>{
+    const el=document.getElementById('bph'+n);
+    el.classList.remove('active','done');
+  });
+
+  function setBP(n) {
+    [1,2,3,4,5].forEach(i=>{
+      const el=document.getElementById('bph'+i);
+      el.classList.toggle('active',i===n); el.classList.toggle('done',i<n);
+    });
+  }
+
+  benchES = new EventSource('/benchmark');
+  benchES.onmessage = function(ev) {
+    const d = JSON.parse(ev.data);
+    if (d.e==='berror') {
+      alert(d.msg);
+      document.getElementById('run-btn').disabled=false;
+      document.getElementById('status').textContent='Error';
+      benchES.close(); return;
+    }
+    if (d.e==='bphase')     setBP(d.n);
+    if (d.e==='brouter')    push(BC.router, d.step, d.acc);
+    if (d.e==='bleaf')      push([BC.leaf0,BC.leaf1,BC.leaf2][d.leaf], d.step, d.acc);
+    if (d.e==='bbaseline')  push(BC.base, d.step, d.acc);
+    if (d.e==='bphase_done') {
+      const pct = v => (v*100).toFixed(1)+'%';
+      if (d.n===1) document.getElementById('bph1-acc').textContent='Router: '+pct(d.acc);
+      else if (d.leaf!==undefined) document.getElementById('bph'+(d.n)+'-acc').textContent='Test: '+pct(d.test_acc);
+      else document.getElementById('bph5-acc').textContent='Done';
+    }
+    if (d.e==='bresult') {
+      document.getElementById('das-params').textContent = d.das_params.toLocaleString();
+      document.getElementById('bl-params').textContent  = d.bl_params.toLocaleString();
+      const wrap=document.getElementById('bench-result-wrap');
+      const tb=document.getElementById('bench-result-body');
+      wrap.style.display='block'; tb.innerHTML='';
+      ['Domain 0','Domain 1','Domain 2'].forEach((name,i)=>{
+        const da=d.das_accs[i], ba=d.bl_accs[i], dasWins=da>=ba;
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${name}</td>
+          <td class="${dasWins?'winner-das':''}">${(da*100).toFixed(1)}%</td>
+          <td class="${!dasWins?'winner-mlp':''}">${(ba*100).toFixed(1)}%</td>
+          <td>${dasWins?'<span class="badge-ok">DAS ✓</span>':'<span class="badge-fail">MLP</span>'}</td>`;
+        tb.appendChild(tr);
+      });
+    }
+    if (d.e==='bproof') {
+      const el=document.getElementById('bench-proof');
+      el.className=d.passed?'pass':'fail';
+      el.textContent=d.passed?'✅ Forgetting proof PASSED on real data — leaves byte-identical'
+                              :'❌ Forgetting proof FAILED';
+    }
+    if (d.e==='bdone') {
+      benchES.close();
+      [1,2,3,4,5].forEach(n=>{
+        const el=document.getElementById('bph'+n);
+        el.classList.remove('active'); el.classList.add('done');
+      });
+      document.getElementById('status').textContent='✅ Benchmark done';
+      const btn=document.getElementById('run-btn');
+      btn.disabled=false; btn.textContent='↺ Re-run';
+    }
+  };
+  benchES.onerror=()=>{ document.getElementById('status').textContent='Error';
+    document.getElementById('run-btn').disabled=false; benchES.close(); };
+}
+</script>
+</body>
+</html>
