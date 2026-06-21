@@ -11,7 +11,6 @@ from flask import Flask, render_template, Response
 sys.path.insert(0, '.')
 from das.model import DASForest
 from das.functional import FibonacciLeaf, softmax
-from das.routing import StemRouter
 from das.packnet import PackNetMLP
 
 app = Flask(__name__)
@@ -866,26 +865,27 @@ def run_permuted_bench():
                 'label':f'Router: learning {PM_N_PERM} permutation identities'})
     Xr = np.vstack([Xp(t, Xs_tr) for t in range(PM_N_PERM)])
     dr = np.concatenate([np.full(len(Xs_tr), t) for t in range(PM_N_PERM)])
-    router = StemRouter(784, PM_N_PERM, seed=7)
+    # Use the DASForest abstraction (same as /continual): it owns the StemRouter
+    # and one leaf per permutation, kept consistent across both CL pages.
+    forest = DASForest(784, PM_LEAF_10, num_leaves=PM_N_PERM, seed=7)
     for s in range(PM_ROUTER_STEPS):
         idx = rng.integers(0, len(Xr), PM_B)
-        _, a = router.train_step(Xr[idx], dr[idx], lr=0.3)
+        _, a = forest.router.train_step(Xr[idx], dr[idx], lr=0.3)
         if s % 80 == 0:
             yield emit({'e':'pm_router_step','step':s,'acc':round(a,4)})
     t_pm_router = round(_time.time()-t0, 1)
-    ridx, _ = router.route(Xr)
+    ridx, _ = forest.router.route(Xr)
     router_acc = round(float((ridx==dr).mean()), 4)
-    router_params = router.W.size + router.b.size
+    router_params = forest.router.W.size + forest.router.b.size
     yield emit({'e':'pm_router_done','acc':router_acc})
 
     # ── DAS: one 10-class leaf per permutation, frozen once trained ──────
     das_matrix = [[None]*PM_N_PERM for _ in range(PM_N_PERM)]
-    das_leaves = []
     t_pm_das_leaves = []
     for t in range(PM_N_PERM):
         yield emit({'e':'pm_phase','phase':'das_leaf','task':t,
                     'label':f'DAS grafts Leaf {t} — permutation {t}'})
-        leaf = FibonacciLeaf(PM_LEAF_10, seed=1+t)
+        leaf = forest.leaves[t]
         Xt = Xp(t, Xs_tr)
         t1 = _time.time()
         for s in range(PM_TASK_STEPS):
@@ -895,13 +895,12 @@ def run_permuted_bench():
                 yield emit({'e':'pm_leaf_step','task':t,'step':s,
                             'acc':round(acc(leaf.forward(Xt[:300]),ys_tr[:300]),4)})
         leaf.frozen = True
-        das_leaves.append(leaf)
         t_pm_das_leaves.append(round(_time.time()-t1, 1))
         for ev in range(t+1):
-            das_matrix[t][ev] = round(acc(das_leaves[ev].forward(Xp(ev, Xs_te)), ys_te), 4)
+            das_matrix[t][ev] = round(acc(forest.leaves[ev].forward(Xp(ev, Xs_te)), ys_te), 4)
         yield emit({'e':'pm_das_eval','stage':t,'accs':das_matrix[t][:t+1]})
 
-    das_leaf_params = n_params(das_leaves[0])
+    das_leaf_params = n_params(forest.leaves[0])
     das_stored_params = router_params + PM_N_PERM * das_leaf_params
     das_active_params = router_params + das_leaf_params
     das_infer_flops = _dims_flops([784, PM_N_PERM]) + _dims_flops(PM_LEAF_10)

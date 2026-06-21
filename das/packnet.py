@@ -43,19 +43,24 @@ class PackNetMLP:
         # subnetwork gets the bias values that were in effect when IT finished.
         self.task_bias = {}   # task id -> [b.copy() ...]
 
-    # -- internal: plain forward/backward, identical math to FibonacciLeaf --
-    def _forward(self, x):
+    # -- internal: plain forward/backward, identical math to FibonacciLeaf.
+    #    `eff_W` lets a caller run the forward/backward through a MASKED copy of
+    #    the weights (used by the refinetune pass so it sees exactly the
+    #    subnetwork that inference will use — see train_task step 3). --
+    def _forward(self, x, eff_W=None):
+        Ws = eff_W if eff_W is not None else self.W
         self.cache = [x]
         self.pre = []
         a = x
-        for i in range(len(self.W)):
-            z = a @ self.W[i] + self.b[i]
+        for i in range(len(Ws)):
+            z = a @ Ws[i] + self.b[i]
             self.pre.append(z)
-            a = relu(z) if i < len(self.W) - 1 else z
+            a = relu(z) if i < len(Ws) - 1 else z
             self.cache.append(a)
         return a
 
-    def _grads(self, dlogits):
+    def _grads(self, dlogits, eff_W=None):
+        Ws = eff_W if eff_W is not None else self.W   # backprop through the same weights forward used
         gW = [None] * len(self.W)
         gb = [None] * len(self.b)
         d = dlogits
@@ -64,7 +69,7 @@ class PackNetMLP:
             gW[i] = a_prev.T @ d
             gb[i] = d.sum(axis=0)
             if i > 0:
-                d = (d @ self.W[i].T) * relu_grad(self.pre[i - 1])
+                d = (d @ Ws[i].T) * relu_grad(self.pre[i - 1])
         return gW, gb
 
     def train_task(self, t, X, y, ce_grad, lr, steps, batch, n_tasks, rng=None,
@@ -112,12 +117,17 @@ class PackNetMLP:
             # NB: we do not zero it; it just remains free (-1) for next task.
 
         # 3) Brief re-finetune restricted to task-t-owned positions only, to
-        #    recover accuracy lost from pruning away the rest of the gradient signal.
+        #    recover accuracy lost from pruning. The forward/backward run through
+        #    the EXACT subnetwork inference will use for task t — weights owned by
+        #    tasks 0..t, with still-free weights masked to zero — so refinetune
+        #    optimises the real deployed network, not a larger one it can't keep.
         owned_mask = [(own == t) for own in self.owner]
+        eff_mask = [((own != -1) & (own <= t)) for own in self.owner]
         for s in range(refinetune_steps):
             idx = rng.integers(0, n, min(batch, n))
-            logits = self._forward(X[idx])
-            gW, gb = self._grads(ce_grad(logits, y[idx]))
+            eff_W = [self.W[i] * eff_mask[i] for i in range(len(self.W))]
+            logits = self._forward(X[idx], eff_W=eff_W)
+            gW, gb = self._grads(ce_grad(logits, y[idx]), eff_W=eff_W)
             for i in range(len(self.W)):
                 self.W[i] -= lr * gW[i] * owned_mask[i]
                 self.b[i] -= lr * gb[i]
