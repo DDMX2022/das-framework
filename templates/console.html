@@ -1,116 +1,133 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>DAS Console</title>
+<html lang="en"><head><meta charset="UTF-8"><title>DAS Console — grow a forest</title>
 <style>
-:root{--bg:#070d12;--panel:#0e1620;--border:#1d2a38;--c1:#38a169;--c3:#68d391;
+:root{--bg:#060d08;--panel:#0e1a12;--border:#1d3024;--c1:#38a169;--c3:#68d391;
       --blue:#63b3ed;--amber:#f6ad55;--red:#fc8181;--text:#cdd9e5;--muted:#5b6b7c}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,monospace;padding:18px;line-height:1.5}
-header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,monospace;padding:16px;line-height:1.5}
+header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:12px}
 h1{font-size:1rem;letter-spacing:.1em;color:var(--c3)}
-.sub{font-size:.66rem;color:var(--muted);margin-top:2px}
+.sub{font-size:.64rem;color:var(--muted);margin-top:2px}
 button{background:var(--c1);color:#fff;border:none;border-radius:5px;padding:7px 14px;font-family:inherit;font-size:.74rem;cursor:pointer}
 button:hover{background:var(--c3)}
 button.ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
-button.danger{background:transparent;border:1px solid #5a2020;color:var(--red);padding:3px 9px;font-size:.66rem}
 select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px;font-family:inherit;font-size:.74rem}
-.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px}
-.card h2{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:10px}
-.experts{display:flex;flex-direction:column;gap:8px}
-.expert{display:flex;align-items:center;gap:10px;background:#0a121b;border:1px solid var(--border);border-radius:6px;padding:8px 10px}
-.expert .nm{font-weight:bold;min-width:78px;color:var(--text)}
-.expert .hash{font-size:.58rem;color:var(--muted);min-width:120px}
-.bar{flex:1;height:7px;background:#0a1a12;border-radius:4px;overflow:hidden}
-.bar>div{height:100%;background:var(--blue);width:0;transition:.4s}
-.pct{font-size:.62rem;color:var(--blue);min-width:34px;text-align:right}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-#qresult{margin-top:10px;font-size:.76rem;min-height:20px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px}
+.bar .grp{display:flex;gap:6px;align-items:center}
+.bar .lbl{font-size:.64rem;color:var(--muted)}
+.stage{background:linear-gradient(#08120c,#0c1810);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+#forest{width:100%;height:440px;display:block}
+.tree{transform-box:fill-box;transform-origin:bottom center;cursor:pointer}
+.tree.grow{animation:grow .7s cubic-bezier(.2,.8,.2,1)}
+@keyframes grow{from{transform:scale(.01)}to{transform:scale(1)}}
+.tree.active{animation:pulse 1.1s ease-out}
+@keyframes pulse{0%{filter:none}25%{filter:drop-shadow(0 0 18px #68d391)}100%{filter:none}}
+.tree:hover .hov{opacity:1}
+#result{font-size:.78rem;margin:10px 2px;min-height:20px}
 .ok{color:var(--c3)}.bad{color:var(--amber)}
-#audit{font-size:.66rem;max-height:340px;overflow-y:auto}
-#audit .a{padding:6px 0;border-bottom:1px solid #0d1620}
+.cols{display:grid;grid-template-columns:1fr 360px;gap:14px;margin-top:12px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px}
+.card h2{font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px}
+#audit{font-size:.66rem;max-height:300px;overflow-y:auto}
+#audit .a{padding:5px 0;border-bottom:1px solid #0d1a12}
 #audit .t{color:var(--muted)}#audit .ev{color:var(--c3);font-weight:bold}
 .badge{font-size:.55rem;padding:1px 6px;border-radius:8px;border:1px solid var(--c1);color:var(--c3)}
+.hint{font-size:.62rem;color:var(--muted)}
 </style></head><body>
 <header>
-  <div><h1>🌳 DAS Console</h1><div class="sub">a governed fleet of isolated, auditable experts — route · graft · prune · audit</div></div>
-  <button class="ghost" onclick="reset()">↻ Reset</button>
+  <div><h1>🌳 DAS Console — grow your forest</h1>
+       <div class="sub">each tree is an isolated, auditable expert · graft to grow · click a tree to prune</div></div>
+  <button class="ghost" onclick="reset()">↻ Reset forest</button>
 </header>
 
-<div class="grid">
-  <div>
-    <div class="card">
-      <h2>Expert fleet</h2>
-      <div class="experts" id="experts"></div>
-      <div class="row" style="margin-top:12px">
-        <select id="graftSel"></select>
-        <button onclick="graft()">＋ Graft expert</button>
-        <span class="sub">adds a new expert in isolation — existing ones provably untouched</span>
-      </div>
-    </div>
+<div class="bar">
+  <div class="grp"><span class="lbl">🌱 grow</span><select id="graftSel"></select><button onclick="graft()">Graft tree</button></div>
+  <div class="grp"><span class="lbl">▶ query from</span><select id="qSel"></select><button onclick="query()">Route</button></div>
+  <span class="hint">grafting adds a tree without disturbing the others (provably) · routing lights up the chosen tree</span>
+</div>
 
-    <div class="card">
-      <h2>Route a query</h2>
-      <div class="row">
-        <span class="sub">send a request from domain</span>
-        <select id="qSel"></select>
-        <button onclick="query()">▶ Send</button>
-      </div>
-      <div id="qresult">—</div>
+<div class="stage"><svg id="forest" viewBox="0 0 960 440" preserveAspectRatio="xMidYMid meet"></svg></div>
+<div id="result">—</div>
+
+<div class="cols">
+  <div class="card"><h2>Why this is different</h2>
+    <div class="hint" style="line-height:1.8">
+      Every tree trains in isolation and freezes — its SHA-256 fingerprint never changes once grown.
+      <b style="color:var(--c3)">Graft</b> a new tree and the existing ones stay byte-identical (non-interference).
+      <b style="color:var(--red)">Prune</b> a tree and that capability is gone, the rest untouched (right-to-be-forgotten).
+      The audit trail is the compliance record — this is governed, not just sparse, AI.
     </div>
   </div>
-
-  <div class="card">
-    <h2>Audit trail <span class="badge">SHA-256</span></h2>
-    <div id="audit"></div>
-  </div>
+  <div class="card"><h2>Audit trail <span class="badge">SHA-256</span></h2><div id="audit"></div></div>
 </div>
 
 <script>
 const DOMAINS = {{ domains|tojson }};
-let state = {experts:[]};
+let state={experts:[]}, prev=[];
 
-async function api(path, body){
-  const o = body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {};
-  return (await fetch(path, o)).json();
-}
-function activeNames(){return state.experts.map(e=>e.name)}
-function fillSelect(sel, names){sel.innerHTML=names.map(n=>`<option>${n}</option>`).join('')}
+async function api(p,b){const o=b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:{};return (await fetch(p,o)).json()}
+function names(){return state.experts.map(e=>e.name)}
+function fill(sel,arr){sel.innerHTML=arr.map(n=>`<option>${n}</option>`).join('')}
 
-async function refresh(){
-  state = await api('/api/state');
-  document.getElementById('experts').innerHTML = state.experts.map(e=>`
-    <div class="expert">
-      <span class="nm">${e.name}</span>
-      <span class="hash">${e.hash}</span>
-      <div class="bar"><div style="width:${Math.round(e.share*100)}%"></div></div>
-      <span class="pct">${Math.round(e.share*100)}%</span>
-      <button class="danger" onclick="prune('${e.name}')">prune</button>
-    </div>`).join('');
-  const avail = DOMAINS.filter(d=>!activeNames().includes(d));
-  fillSelect(document.getElementById('graftSel'), avail.length?avail:['(all deployed)']);
-  fillSelect(document.getElementById('qSel'), activeNames());
-  await refreshAudit();
+const PALETTE=['#2e7d32','#388e3c','#43a047','#2e7d52','#356e3a','#3a7d4a','#2f8f5a','#47a06a'];
+
+function drawForest(activeName){
+  const svg=document.getElementById('forest'), W=960, soil=380;
+  const n=state.experts.length, gap=W/(n+1);
+  let s=`<defs></defs>`;
+  // ground + root/mycelial line
+  s+=`<rect x=0 y=${soil} width=${W} height=60 fill="#0a1410"/>`;
+  s+=`<line x1=40 y1=${soil} x2=${W-40} y2=${soil} stroke="#24402c" stroke-width=2/>`;
+  s+=`<line x1=60 y1=${soil+14} x2=${W-60} y2=${soil+14} stroke="#16281b" stroke-width=1 stroke-dasharray="3 5"/>`;
+  s+=`<text x=${W-46} y=${soil+30} text-anchor=end fill="#3a5043" font-size=10>mycelial router</text>`;
+  state.experts.forEach((e,i)=>{
+    const x=gap*(i+1), col=PALETTE[i%PALETTE.length];
+    const r=30+Math.min(e.share,1)*34;                 // canopy grows with usage
+    const cls='tree'+(prev.includes(e.name)?'':' grow')+(e.name===activeName?' active':'');
+    s+=`<g class="${cls}" onclick="pruneTree('${e.name}')">`;
+    s+=`<rect x=${x-7} y=${soil-92} width=14 height=92 rx=4 fill="#5a3d22"/>`;
+    s+=`<circle cx=${x} cy=${soil-118} r=${r} fill="${col}" opacity=.9/>`;
+    s+=`<circle cx=${x-r*0.55} cy=${soil-100} r=${r*0.68} fill="${col}" opacity=.8/>`;
+    s+=`<circle cx=${x+r*0.55} cy=${soil-100} r=${r*0.68} fill="${col}" opacity=.8/>`;
+    s+=`<circle cx=${x} cy=${soil-150} r=${r*0.6} fill="${col}" opacity=.75/>`;
+    s+=`<text x=${x} y=${soil-114} text-anchor=middle fill="#06210f" font-size=12 font-weight=bold>${Math.round(e.share*100)}%</text>`;
+    s+=`<text x=${x} y=${soil+26} text-anchor=middle fill="#cdd9e5" font-size=14>${e.name}</text>`;
+    s+=`<text x=${x} y=${soil+42} text-anchor=middle fill="#3a5043" font-size=9>${e.hash}</text>`;
+    s+=`<text class="hov" x=${x} y=${soil-200} text-anchor=middle fill="#fc8181" font-size=10 opacity=0>click to prune ✕</text>`;
+    s+=`</g>`;
+  });
+  svg.innerHTML=s;
 }
-async function refreshAudit(){
-  const a = await api('/api/audit');
-  document.getElementById('audit').innerHTML = a.audit.map(x=>`
-    <div class="a"><span class="t">${x.t}</span> <span class="ev">${x.event}</span> — ${x.detail}</div>`).join('');
+
+async function refresh(active){
+  prev=names();
+  state=await api('/api/state');
+  drawForest(active);
+  const avail=DOMAINS.filter(d=>!names().includes(d));
+  fill(document.getElementById('graftSel'),avail.length?avail:['(forest full)']);
+  fill(document.getElementById('qSel'),names());
+  const a=await api('/api/audit');
+  document.getElementById('audit').innerHTML=a.audit.map(x=>`<div class="a"><span class="t">${x.t}</span> <span class="ev">${x.event}</span> — ${x.detail}</div>`).join('');
 }
 async function query(){
-  const d = document.getElementById('qSel').value;
-  const r = await api('/api/predict', {domain:d});
-  document.getElementById('qresult').innerHTML =
-    `sent from <b>${r.sent_from}</b> → routed to <b>${r.routed_to}</b> (${(r.confidence*100).toFixed(0)}%) ` +
-    `<span class="${r.correct?'ok':'bad'}">${r.correct?'✓ correct expert':'✗ misroute'}</span>`;
-  await refresh();
+  const d=document.getElementById('qSel').value;
+  const r=await api('/api/predict',{domain:d});
+  document.getElementById('result').innerHTML=`query from <b>${r.sent_from}</b> → routed to <b>${r.routed_to}</b> (${(r.confidence*100).toFixed(0)}%) <span class="${r.correct?'ok':'bad'}">${r.correct?'✓ correct tree':'✗ misroute'}</span>`;
+  await refresh(r.routed_to);
 }
 async function graft(){
-  const d = document.getElementById('graftSel').value;
-  if(d.startsWith('(')) return;
-  const r = await api('/api/graft', {domain:d});
+  const d=document.getElementById('graftSel').value; if(d.startsWith('('))return;
+  const r=await api('/api/graft',{domain:d});
+  document.getElementById('result').innerHTML=r.ok?`🌱 grew <b>${d}</b> — existing trees byte-identical: <span class="ok">${r.non_interference}</span>`:`<span class="bad">${r.error}</span>`;
   await refresh();
 }
-async function prune(name){ await api('/api/prune', {domain:name}); await refresh(); }
-async function reset(){ await api('/api/reset', {}); await refresh(); }
+async function pruneTree(name){
+  if(state.experts.length<=1){document.getElementById('result').innerHTML='<span class="bad">keep at least one tree</span>';return}
+  if(!confirm(`Prune the '${name}' tree? Its capability is removed; other trees stay byte-identical.`))return;
+  const r=await api('/api/prune',{domain:name});
+  document.getElementById('result').innerHTML=r.ok?`✂️ pruned <b>${name}</b> — others byte-identical: <span class="ok">${r.non_interference}</span>`:`<span class="bad">${r.error}</span>`;
+  await refresh();
+}
+async function reset(){await api('/api/reset',{});document.getElementById('result').textContent='—';prev=[];await refresh()}
 refresh();
 </script></body></html>
