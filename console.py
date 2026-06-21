@@ -22,6 +22,11 @@ from das.functional import softmax
 from das.lifecycle import ForestLifecycle
 
 app = Flask(__name__)
+
+@app.after_request
+def _no_cache(resp):
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    return resp
 D, LEAF, N = 21, [21, 13, 8, 2], 300
 ALL_DOMAINS = ["math", "vision", "language", "audio", "finance", "medical", "legal", "weather"]
 CENTER = {name: i * 2 for i, name in enumerate(ALL_DOMAINS)}   # distinct cluster per domain
