@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>DAS Console</title>
+<style>
+:root{--bg:#070d12;--panel:#0e1620;--border:#1d2a38;--c1:#38a169;--c3:#68d391;
+      --blue:#63b3ed;--amber:#f6ad55;--red:#fc8181;--text:#cdd9e5;--muted:#5b6b7c}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,monospace;padding:18px;line-height:1.5}
+header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px}
+h1{font-size:1rem;letter-spacing:.1em;color:var(--c3)}
+.sub{font-size:.66rem;color:var(--muted);margin-top:2px}
+button{background:var(--c1);color:#fff;border:none;border-radius:5px;padding:7px 14px;font-family:inherit;font-size:.74rem;cursor:pointer}
+button:hover{background:var(--c3)}
+button.ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+button.danger{background:transparent;border:1px solid #5a2020;color:var(--red);padding:3px 9px;font-size:.66rem}
+select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px;font-family:inherit;font-size:.74rem}
+.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px}
+.card h2{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:10px}
+.experts{display:flex;flex-direction:column;gap:8px}
+.expert{display:flex;align-items:center;gap:10px;background:#0a121b;border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+.expert .nm{font-weight:bold;min-width:78px;color:var(--text)}
+.expert .hash{font-size:.58rem;color:var(--muted);min-width:120px}
+.bar{flex:1;height:7px;background:#0a1a12;border-radius:4px;overflow:hidden}
+.bar>div{height:100%;background:var(--blue);width:0;transition:.4s}
+.pct{font-size:.62rem;color:var(--blue);min-width:34px;text-align:right}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#qresult{margin-top:10px;font-size:.76rem;min-height:20px}
+.ok{color:var(--c3)}.bad{color:var(--amber)}
+#audit{font-size:.66rem;max-height:340px;overflow-y:auto}
+#audit .a{padding:6px 0;border-bottom:1px solid #0d1620}
+#audit .t{color:var(--muted)}#audit .ev{color:var(--c3);font-weight:bold}
+.badge{font-size:.55rem;padding:1px 6px;border-radius:8px;border:1px solid var(--c1);color:var(--c3)}
+</style></head><body>
+<header>
+  <div><h1>🌳 DAS Console</h1><div class="sub">a governed fleet of isolated, auditable experts — route · graft · prune · audit</div></div>
+  <button class="ghost" onclick="reset()">↻ Reset</button>
+</header>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <h2>Expert fleet</h2>
+      <div class="experts" id="experts"></div>
+      <div class="row" style="margin-top:12px">
+        <select id="graftSel"></select>
+        <button onclick="graft()">＋ Graft expert</button>
+        <span class="sub">adds a new expert in isolation — existing ones provably untouched</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Route a query</h2>
+      <div class="row">
+        <span class="sub">send a request from domain</span>
+        <select id="qSel"></select>
+        <button onclick="query()">▶ Send</button>
+      </div>
+      <div id="qresult">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Audit trail <span class="badge">SHA-256</span></h2>
+    <div id="audit"></div>
+  </div>
+</div>
+
+<script>
+const DOMAINS = {{ domains|tojson }};
+let state = {experts:[]};
+
+async function api(path, body){
+  const o = body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {};
+  return (await fetch(path, o)).json();
+}
+function activeNames(){return state.experts.map(e=>e.name)}
+function fillSelect(sel, names){sel.innerHTML=names.map(n=>`<option>${n}</option>`).join('')}
+
+async function refresh(){
+  state = await api('/api/state');
+  document.getElementById('experts').innerHTML = state.experts.map(e=>`
+    <div class="expert">
+      <span class="nm">${e.name}</span>
+      <span class="hash">${e.hash}</span>
+      <div class="bar"><div style="width:${Math.round(e.share*100)}%"></div></div>
+      <span class="pct">${Math.round(e.share*100)}%</span>
+      <button class="danger" onclick="prune('${e.name}')">prune</button>
+    </div>`).join('');
+  const avail = DOMAINS.filter(d=>!activeNames().includes(d));
+  fillSelect(document.getElementById('graftSel'), avail.length?avail:['(all deployed)']);
+  fillSelect(document.getElementById('qSel'), activeNames());
+  await refreshAudit();
+}
+async function refreshAudit(){
+  const a = await api('/api/audit');
+  document.getElementById('audit').innerHTML = a.audit.map(x=>`
+    <div class="a"><span class="t">${x.t}</span> <span class="ev">${x.event}</span> — ${x.detail}</div>`).join('');
+}
+async function query(){
+  const d = document.getElementById('qSel').value;
+  const r = await api('/api/predict', {domain:d});
+  document.getElementById('qresult').innerHTML =
+    `sent from <b>${r.sent_from}</b> → routed to <b>${r.routed_to}</b> (${(r.confidence*100).toFixed(0)}%) ` +
+    `<span class="${r.correct?'ok':'bad'}">${r.correct?'✓ correct expert':'✗ misroute'}</span>`;
+  await refresh();
+}
+async function graft(){
+  const d = document.getElementById('graftSel').value;
+  if(d.startsWith('(')) return;
+  const r = await api('/api/graft', {domain:d});
+  await refresh();
+}
+async function prune(name){ await api('/api/prune', {domain:name}); await refresh(); }
+async function reset(){ await api('/api/reset', {}); await refresh(); }
+refresh();
+</script></body></html>

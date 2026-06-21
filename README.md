@@ -48,6 +48,7 @@ das-framework/
 ├── csrc/pager.cpp          C++ torch extension for the page-in copy
 ├── pager_demo.py           Compiles + runs the C++ pager (CUDA path noted, untested)
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
+├── console.py              DAS Console — product UI: route · graft · prune · audit
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 7 live, browser-streamed experiments
 ├── templates/              UI for the web app (SSE + Chart.js)
@@ -56,7 +57,8 @@ das-framework/
 │   ├── real_bench.html     Real-world multi-dataset benchmark
 │   ├── continual_bench.html Split-MNIST continual learning
 │   ├── permuted_bench.html  Permuted-MNIST continual learning
-│   └── lifecycle.html       live grow → graft → prune → regrow visualizer
+│   ├── lifecycle.html       live grow → graft → prune → regrow visualizer
+│   └── console.html         DAS Console — the product UI
 ├── checkpoints/            saved leaves/forests (gitignored; written by the demos)
 └── data/MNIST/raw/         MNIST IDX files (downloaded by mnist_stress.py)
 ```
@@ -120,6 +122,15 @@ python mnist_stress.py      # 10-leaf MNIST, ~20s on M-series (auto-selects mps)
 ```
 
 The proof demos force CPU for bit-reproducible hashes; heavy training auto-selects MPS.
+
+### DAS Console (the product UI)
+
+The product-facing app — operate a live forest as a governed fleet of experts:
+
+```bash
+python console.py        # → http://localhost:5070
+```
+Route a query (watch it hit the right expert), graft a new expert (existing ones stay byte-identical), prune one (right-to-be-forgotten), and watch the SHA-256 audit trail update in real time. This is the governance pitch made tangible.
 
 ### REST inference API
 
