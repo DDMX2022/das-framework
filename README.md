@@ -26,6 +26,7 @@ das-framework/
 ├── canopy_demo.py          Phase 10: top-k canopy merge (graceful degradation)
 ├── text_demo.py            Phase 11: forest on text via a tokenizer front-end
 ├── embedding_demo.py       Learned order-aware embedding vs bag-of-words
+├── encoder_demo.py         Pretrained (frozen) encoder front-end — transfer
 ├── governance_demo.py      Multi-tenant isolation + deletion/unlearning + audit
 ├── mycelial_demo.py        Phase 13: orchestrator decomposes + routes to trees
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
