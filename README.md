@@ -29,6 +29,7 @@ das-framework/
 ├── checkpoint_demo.py      Per-leaf + whole-forest save/load byte-exact restore proofs
 ├── conv_demo.py            ConvLeaf (CNN expert) trained, frozen, checkpointed
 ├── backbone_demo.py        Phase 9: shared frozen backbone + isolated heads (MNIST)
+├── backbone_cifar_bench.py Phase 9 on CIFAR: conv backbone, router on features
 ├── cifar_bench.py          Phase 8: Split-CIFAR — CNN forest vs fine-tuned vs multi-task
 ├── lora_bench.py           Phase 14: DAS isolated heads vs per-task LoRA adapters
 ├── pnn_bench.py            Progressive Neural Nets baseline (laterals) vs isolation
@@ -256,7 +257,7 @@ The first benchmark on real images (CIFAR-10, 5 binary tasks, CNN leaves). It wa
 | Fine-tuned CNN (BWT) | −0.22 | Forgets, as expected. |
 | Multi-task CNN (upper bound) | 79–94% | The ceiling. |
 
-The honest takeaway: on real images the **experts work and the forgetting guarantee holds, but the linear-on-raw-pixels router collapses** — so end-to-end DAS is bottlenecked by routing. This is exactly what motivates Phase 9 (route on *learned features* via a shared backbone, where the router recovers to ~98%).
+The honest takeaway: on real images the **experts work and the forgetting guarantee holds, but the linear-on-raw-pixels router collapses** — so end-to-end DAS is bottlenecked by routing. Routing on *learned features* via a shared backbone (Phase 9) helps but **does not fully fix it on CIFAR**: a shared conv backbone lifts routing from 0.42 → **0.66** (`backbone_cifar_bench.py`), far short of the ~0.98 it reaches on MNIST. CIFAR task-routing is essentially the hard 10-class problem, so it's capped by how well the backbone separates classes. The experts stay strong (mean head acc 0.91) and forgetting holds — the router remains the real ceiling on hard images.
 
 ### DAS vs LoRA — the make-or-break test (`lora_bench.py`)
 
@@ -310,11 +311,11 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 
 **Where this leaves the project (honest):** the architecture is a competent re-implementation of hard-routed MoE + parameter isolation, equivalent to per-task LoRA plus a router. Its defensible real-world home is **auditable, governed model fleets** — provable non-interference, deletion/unlearning, multi-tenant isolation — not "better/cheaper AI." Sensible directions from here:
 1. Prove the governance story on one concrete scenario (per-tenant isolation + deletion + audit trail).
-2. Wire the Phase 9 shared backbone into Split-CIFAR to confirm the router recovers on learned features.
+2. ✅ Phase 9 on CIFAR (`backbone_cifar_bench.py`): shared conv backbone lifts routing 0.42 → 0.66 (helps, but CIFAR routing stays partly hard — not the ~0.98 MNIST gave).
 ✅ **Done (Phase 11):** tokenizer text front-end (`das/text.py`, `text_demo.py`) — the forest routes 4 text domains (math / sentiment / command / greeting) at 100%, each binary task solved, forgetting proof holds across grafting. Bag-of-words for now; swap in a real embedding/LM encoder later.
 
 ✅ **Also done:** Progressive Neural Nets baseline (`pnn_bench.py`) — both PNN and DAS-style isolation get BWT 0; PNN's lateral connections add marginal forward transfer at growing parameter cost, DAS stays flat. Same tradeoff family as DAS vs LoRA (isolation is cheap; reuse costs parameters).
 
-✅ **Also done:** expressive router study (`router_bench.py`) — a non-linear MLP router beats a linear gate on raw pixels (MNIST 0.88→0.96, CIFAR 0.40→0.45) but raw CIFAR routing stays poor; routing on *learned features* (Phase 9) is the real fix (~0.98).
+✅ **Also done:** expressive router study (`router_bench.py`) — a non-linear MLP router beats a linear gate on raw pixels (MNIST 0.88→0.96, CIFAR 0.40→0.45) but raw CIFAR routing stays poor; routing on *learned features* (Phase 9) helps more (0.42→0.66 on CIFAR, ~0.98 on MNIST) but doesn't fully fix CIFAR.
 
 The grand-vision pieces from the original framing (JIT paging → "100B on a laptop", a mycelial-LLM forest, 90% cost cuts, beating frontier models) remain unbuilt and unsupported by the evidence gathered so far.
