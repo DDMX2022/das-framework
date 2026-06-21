@@ -87,7 +87,7 @@ conda activate das
 python demo.py
 ```
 
-### The five web experiments
+### The web experiments
 
 ```bash
 pip install flask scikit-learn
@@ -315,6 +315,40 @@ Per-task LoRA adapters on a frozen backbone are the industry-standard way to "ad
 - **"You never touch the router when adding a domain" is false.** Experts stay isolated, but the router must learn the new route — see `graft()`.
 - **Running 100B-param models on a laptop** does not follow from routing alone.
 - This classifies small vectors/images. It is a scaffold, not an LLM.
+
+---
+
+## Theory vs. what was built
+
+The original "DAS" pitch and what actually exists after building and measuring every piece. **Every row is implemented** — the difference is between the *claim* and the *measured reality*.
+
+| Original theory | Built | Measured verdict |
+|---|---|---|
+| Fibonacci leaves → "smoother distillation" | ✅ (layer dims) | **Cosmetic.** Fib ≈ pow2 ≈ linear within 0.006 (`leaf_shapes_bench.py`) |
+| Stem router / "vector torque τ" | ✅ | It's a softmax. Works as routing |
+| Hard top-1 routing | ✅ | Works; top-k **canopy** added for graceful degradation |
+| Zero catastrophic forgetting via isolation | ✅ | **Real & proven** — byte-identical, BWT 0 |
+| Modular grafting (add domain, no retrain) | ✅ | Real |
+| Pruning / dormancy / organic growth | ✅ | Full grow→graft→prune→regrow loop (`/lifecycle`) |
+| Canopy synthesis / "combinatorial creativity" | ✅ (top-k) | Works — but *contradicts* pure isolation; it's a tradeoff |
+| Heterogeneous (CNN) leaves | ✅ | Works (`ConvLeaf`) |
+| Tokenizer / embedding front-end ("coiled strings") | ✅ | Learned embedding beats BoW 1.0 vs 0.5; pretrained-encoder transfers |
+| Unsupervised / learned routing + load balancing | ✅ | Discovers domains (purity 0.77) — **but destroys isolation** |
+| JIT memory paging → "100B on a laptop" | ✅ (measured) | Hardware-dependent: cheap on unified memory, costly on PCIe |
+| Predictive prefetching | ✅ | Hides transfer only when compute ≥ transfer |
+| Mycelial-LLM hybrid forest | ✅ | Orchestration works; always-on soil ≈ 100% of compute |
+| Cost reduction ("$100 → $10", sparse) | ✅ (measured) | Collapses once the orchestrator is counted |
+| Scale (100B params) | ⚠️ to ~100M | Sparse mechanic scales; real-LLM quality not shown |
+| C++/CUDA pager | ⚠️ C++ only | Compiles & pages on CPU/MPS; CUDA path needs NVIDIA |
+| Leaf marketplace | ✅ | Publish/pull/graft, hash-verified (`das/hub.py`) |
+| "Beats DeepSeek / frontier models" | ❌ | Unsupported by any measurement |
+| Router survives real images | ❌ measured false | Collapses to 0.42 on raw CIFAR; 0.66 even on backbone features |
+
+### The essential difference
+- **Theory:** a new paradigm — a biomimetic forest that is *better and cheaper* than frontier AI, running 100B models on a laptop.
+- **Built:** a competent, honestly-measured **hard-routed Mixture-of-Experts** — equivalent to per-task LoRA + a router (`lora_bench.py`). The branding (Fibonacci, torque, coiled strings) is cosmetic; the economics claims don't survive counting the orchestrator; routing is the real bottleneck on hard data.
+- **The one genuine, durable property:** auditable, isolated, hot-swappable experts (zero-forgetting, deletion, multi-tenant) — which is **governance**, not capability.
+- **The deepest finding the build surfaced:** isolation (DAS's actual value) and learned routing (the headline MoE capability) are **mutually exclusive** — you can have one or the other, not both (`unsupervised_routing.py`).
 
 ---
 
