@@ -29,6 +29,7 @@ das-framework/
 ├── backbone_demo.py        Phase 9: shared frozen backbone + isolated heads (MNIST)
 ├── cifar_bench.py          Phase 8: Split-CIFAR — CNN forest vs fine-tuned vs multi-task
 ├── lora_bench.py           Phase 14: DAS isolated heads vs per-task LoRA adapters
+├── pnn_bench.py            Progressive Neural Nets baseline (laterals) vs isolation
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments
@@ -308,5 +309,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 1. Prove the governance story on one concrete scenario (per-tenant isolation + deletion + audit trail).
 2. Wire the Phase 9 shared backbone into Split-CIFAR to confirm the router recovers on learned features.
 3. (Optional) tokenizer+embedding front-end for a text domain.
+
+✅ **Also done:** Progressive Neural Nets baseline (`pnn_bench.py`) — both PNN and DAS-style isolation get BWT 0; PNN's lateral connections add marginal forward transfer at growing parameter cost, DAS stays flat. Same tradeoff family as DAS vs LoRA (isolation is cheap; reuse costs parameters).
 
 The grand-vision pieces from the original framing (JIT paging → "100B on a laptop", a mycelial-LLM forest, 90% cost cuts, beating frontier models) remain unbuilt and unsupported by the evidence gathered so far.
