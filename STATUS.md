@@ -59,6 +59,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Load-balancing can over-balance | forcing even usage dropped purity 0.77 → 0.55 | `unsupervised_routing.py` |
 | Fibonacci widths are cosmetic | Fib/pow2/linear within 0.006 (noise) | `leaf_shapes_bench.py` |
 | Learned embedding beats BoW on word order | BoW 0.50 → embedding 1.00 | `embedding_demo.py` |
+| Prefetch hides page-in (when compute ≥ transfer) | 2 ms transfer: 40% hidden; 10 ms: only 15% (transfer-bound) | `prefetch_demo.py` |
 
 ## Not built / out of scope
 - "100B on a laptop" at low latency on PCIe GPUs (paging cost is real there).
