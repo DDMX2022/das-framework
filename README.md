@@ -40,6 +40,8 @@ das-framework/
 │   ├── packnet.py          PackNetMLP     — pruning + per-task weight masks (CL baseline)
 │   ├── lifecycle.py        ForestLifecycle — usage monitor, prune, regrow loop
 │   ├── text.py             Tokenizer — bag-of-words text front-end
+│   ├── audit.py            AuditLog — tamper-evident, HMAC-signed, hash-chained log
+│   ├── governance.py       ControlPlane — RBAC + multi-tenancy + audit over a forest
 │   └── hub.py              Leaf marketplace — publish / list / pull / graft (hash-verified)
 ├── demo.py                 Full lifecycle on synthetic data + forgetting proof (NumPy)
 ├── benchmark.py            DAS vs matched-size MLP on sklearn digits (NumPy)
@@ -50,6 +52,7 @@ das-framework/
 ├── embedding_demo.py       Learned order-aware embedding vs bag-of-words
 ├── encoder_demo.py         Pretrained (frozen) encoder front-end — transfer
 ├── governance_demo.py      Multi-tenant isolation + deletion/unlearning + audit
+├── control_plane_demo.py   Governance control plane — RBAC · multi-tenancy · audit
 ├── hub_demo.py             Leaf marketplace: publish → pull → graft, hash-verified
 ├── mycelial_demo.py        Phase 13: orchestrator decomposes + routes to trees
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
@@ -401,7 +404,7 @@ DAS today is a **complete, honestly-measured research prototype**: NumPy + PyTor
 |---|---|---|
 | **0 · Foundation** | Credible engineering + a design partner | Versioned PyPI release, green CI, docs site; wedge use case + 1 partner |
 | **1 · Real backend** | Stop being toy-scale | Forest of **real LoRA/HF experts** serving traffic under a latency SLA; router fixed |
-| **2 · Governance control plane** *(the product)* | The differentiator, production-grade | Tamper-evident **signed audit log**, multi-tenancy, RBAC, expert registry, persistence |
+| **2 · Governance control plane** *(the product)* | The differentiator, production-grade | Tamper-evident **signed audit log** ✅, **multi-tenancy + RBAC + expert registry** ✅ (`das/governance.py`); persistence still to do |
 | **3 · Integrations** | Fit existing stacks | LangGraph node, HF Hub interop, Docker/k8s deploy |
 | **4 · Prove & launch** | Evidence + GTM | Public governance benchmark, partner case study, security review, open-core 1.0 |
 
