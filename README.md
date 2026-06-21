@@ -1,10 +1,14 @@
-# DAS Framework
+# DAS — a framework for governed, auditable AI capability fleets
 
-A runnable research prototype of a **hard-routed Mixture-of-Experts** — branded "DAS" (a forest of *leaves*, a *stem router*, a *canopy*). Stripped of the branding, it is a clean, honest implementation of an idea worth testing: route each input to exactly **one** expert network, train each expert in **isolation**, and **graft** new experts without touching the old ones.
+**Add, remove, and audit AI capabilities without ever touching what's already certified.**
 
-The one property this design genuinely delivers — and that this repo cryptographically proves — is **zero catastrophic forgetting**: training a new expert leaves every existing expert *byte-identical* (verified by SHA-256).
+DAS is a hard-routed Mixture-of-Experts where every expert ("leaf") is **isolated, hot-swappable, and cryptographically auditable**. Route a request to exactly one expert; **graft** a new capability without disturbing the others; **prune** one to remove it cleanly; and get a **SHA-256 audit trail** proving non-interference. It's the **governance layer** for a fleet of specialist models — it sits *under* orchestration (LangGraph) and serving (vLLM), not against them.
 
-> This is a learning/benchmarking scaffold, not a language model. See [What is real vs. hype](#what-is-real-vs-hype).
+**Who it's for:** regulated / multi-tenant settings where you must *prove* that adding capability B didn't alter capability A, delete one tenant's capability on request (unlearning), or keep tenants' models provably isolated.
+
+**The one property it genuinely guarantees** — and this repo proves it cryptographically — is **zero catastrophic forgetting**: training or grafting a new expert leaves every existing expert *byte-identical* (verified by SHA-256).
+
+> **Status: research prototype → production framework.** The core, lifecycle, baselines, demos, a web console, and a REST API are built and measured; the path to production-grade is the [Roadmap to production](#roadmap-to-production). We keep the honest evaluation ([Theory vs. what was built](#theory-vs-what-was-built)) front and center — credibility is the point.
 
 ---
 
@@ -367,27 +371,24 @@ The original "DAS" pitch and what actually exists after building and measuring e
 
 DAS is not "better AI." It's **modular, auditable AI** for one specific pain: adding new capabilities without disturbing what's already deployed — zero-downtime domain expansion, compliance isolation (the hash proof is an audit trail), and incremental cost. The defensible angle vs. Avalanche / Flower / transformer-MoE is the **auditability + proof-of-isolation** story.
 
-## Next steps
+## Roadmap to production
 
-- ✅ **Done (Phase 5):** EWC baseline + cross-domain contamination test on `/continual`.
-- ✅ **Done (Phase 6):** PackNet baseline and the Permuted-MNIST regime (`/permuted`).
-- ✅ **Done (Phase 7):** PyTorch backend — autograd trainer, per-leaf & whole-forest checkpoint/restore (byte-exact), `ConvLeaf` CNN expert, and a REST inference API (`serve.py`).
-- ✅ **Done (Lifecycle):** `ForestLifecycle` — usage monitoring, dormancy-based pruning (with router-gate shrink), regrow, **redundancy pruning** (drop a leaf that duplicates another, by output agreement), and **usage persistence**. The full grow → graft → prune → regrow loop with the forgetting proof holding throughout (`lifecycle_demo.py`).
-- ✅ **Done (Phase 10):** top-k **canopy** merge — `DASForest.predict_canopy` blends the top-k leaves by routing weight for graceful degradation under routing uncertainty (top-2 ≥ top-1). Only valid when leaves share an output space; for disjoint-domain experts top-1 is correct (`canopy_demo.py`).
-- ✅ **Done (Phase 9):** `BackboneForest` — a shared frozen backbone feeds a router that routes on *learned features* (not raw pixels), with tiny isolated heads (130 params each, ~1672× smaller than the backbone) sharing those features. Forgetting proof holds when grafting a new head (`backbone_demo.py`). Tradeoff: the backbone is a shared trainable component.
-- ✅ **Done (Phase 8):** Split-CIFAR — CNN forest vs fine-tuned vs multi-task (`cifar_bench.py`). Finding: experts work, forgetting holds, but the raw-pixel router collapses to 42% — the bottleneck on real images.
-- ✅ **Done (Phase 14):** DAS vs LoRA (`lora_bench.py`). Finding: they tie on isolation/forgetting/deletion; DAS's only structural edge is the built-in task-free router. **DAS's value is the governance niche, not raw capability.**
+DAS today is a **complete, honestly-measured research prototype**: NumPy + PyTorch cores, the full grow→graft→prune→regrow lifecycle, five continual-learning baselines, ~25 benchmarks/demos, a web visualizer, a REST API, a product **console**, and a `pip`-installable package. The path from here to a mature, production framework is deliberately **narrow** — it commits to the governance lane and drops the unsupported "better/cheaper AI" claims. Full detail in **[PRODUCT_PLAN.md](PRODUCT_PLAN.md)**.
 
-**Where this leaves the project (honest):** the architecture is a competent re-implementation of hard-routed MoE + parameter isolation, equivalent to per-task LoRA plus a router. Its defensible real-world home is **auditable, governed model fleets** — provable non-interference, deletion/unlearning, multi-tenant isolation — not "better/cheaper AI." Sensible directions from here:
-1. ✅ Governance scenario proven (`governance_demo.py`): multi-tenant onboarding shows non-interference (prior tenants byte-identical), deletion/unlearning (a tenant's leaf is pruned → their task-acc falls 0.995 → 0.52 while others stay byte-identical), and a hash audit trail. A monolithic model can prove neither — this is DAS's real defensible edge.
-2. ✅ Phase 9 on CIFAR (`backbone_cifar_bench.py`): shared conv backbone lifts routing 0.42 → 0.66 (helps, but CIFAR routing stays partly hard — not the ~0.98 MNIST gave).
-✅ **Done (Phase 11):** tokenizer text front-end (`das/text.py`, `text_demo.py`) — the forest routes 4 text domains (math / sentiment / command / greeting) at 100%, each binary task solved, forgetting proof holds across grafting. **Front-end upgraded** (`embedding_demo.py`): a learned order-aware embedding beats bag-of-words on a word-order task (BoW stuck at 0.50 — identical word bags, opposite labels — vs embedding 1.00, generalising to unseen tokens). A pretrained LM encoder would slot in the same way.
+**North star:** *governed AI capabilities you can add, remove, and audit without touching what's already certified.* DAS integrates **under** LangGraph/vLLM and adopts **LoRA/PEFT adapters** as the expert format (we measured DAS ≈ LoRA + a router — so use LoRA).
 
-✅ **Also done:** Progressive Neural Nets baseline (`pnn_bench.py`) — both PNN and DAS-style isolation get BWT 0; PNN's lateral connections add marginal forward transfer at growing parameter cost, DAS stays flat. Same tradeoff family as DAS vs LoRA (isolation is cheap; reuse costs parameters).
+| Phase | Goal | Exit criteria |
+|---|---|---|
+| **0 · Foundation** | Credible engineering + a design partner | Versioned PyPI release, green CI, docs site; wedge use case + 1 partner |
+| **1 · Real backend** | Stop being toy-scale | Forest of **real LoRA/HF experts** serving traffic under a latency SLA; router fixed |
+| **2 · Governance control plane** *(the product)* | The differentiator, production-grade | Tamper-evident **signed audit log**, multi-tenancy, RBAC, expert registry, persistence |
+| **3 · Integrations** | Fit existing stacks | LangGraph node, HF Hub interop, Docker/k8s deploy |
+| **4 · Prove & launch** | Evidence + GTM | Public governance benchmark, partner case study, security review, open-core 1.0 |
 
-✅ **Also done:** expressive router study (`router_bench.py`) — a non-linear MLP router beats a linear gate on raw pixels (MNIST 0.88→0.96, CIFAR 0.40→0.45) but raw CIFAR routing stays poor; routing on *learned features* (Phase 9) helps more (0.42→0.66 on CIFAR, ~0.98 on MNIST) but doesn't fully fix CIFAR.
+**Success metrics:** one design partner in production · reproducible benchmark vs LoRA/PEFT/Avalanche on *governance* axes · latency/throughput SLA at real scale · audit log accepted as a compliance artifact · semver releases on green CI.
 
-On the grand-vision pieces from the original framing — now built and measured rather than asserted:
-- **JIT paging** (`paging_demo.py`): genuinely cuts device memory ~8× for a small latency tax, but **hardware-dependent** — nearly free on Apple Silicon's unified memory, far costlier on the discrete-GPU/PCIe systems the "100B on a laptop" pitch targets. Real technique, hardware-conditional claim.
-- **Mycelial-LLM forest** (`mycelial_demo.py`): the orchestrator-decomposes-and-routes-to-trees pattern *works* (clauses route to the right specialist trees and synthesise). But the honest cost is `soil + k activated trees`, not "one tiny leaf" — a dense orchestrator runs on every query and dominates compute, and multi-domain queries fire multiple trees. The architecture holds; the "run a tiny fraction" economics don't.
-- "90% cost cuts" and "beating frontier models" remain unsupported by the evidence.
+**First milestone (start here):** (1) back the console with **real LoRA-adapter experts on a HuggingFace model** (kills "it's synthetic"); (2) **tests + CI + PyPI**; (3) **signed, exportable audit log**.
+
+**Top risk (honest):** a framework matures around *real usage* — secure a design partner before building Phases 1–2, or it stays a demo. The moat is the **governance + audit** story, not the architecture (which is LoRA-equivalent).
+
+> Everything already built (Phases 5–14, lifecycle, baselines, vision experiments) is logged with measured results in **[STATUS.md](STATUS.md)** and the [Theory vs. what was built](#theory-vs-what-was-built) table.
