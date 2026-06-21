@@ -60,6 +60,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Fibonacci widths are cosmetic | Fib/pow2/linear within 0.006 (noise) | `leaf_shapes_bench.py` |
 | Learned embedding beats BoW on word order | BoW 0.50 → embedding 1.00 | `embedding_demo.py` |
 | Prefetch hides page-in (when compute ≥ transfer) | 2 ms transfer: 40% hidden; 10 ms: only 15% (transfer-bound) | `prefetch_demo.py` |
+| Sparse activation scales | stored 12.7M→101.5M (8×), active+latency flat (~1 ms) | `scale_bench.py` |
 
 ## Not built / out of scope
 - "100B on a laptop" at low latency on PCIe GPUs (paging cost is real there).
