@@ -192,6 +192,30 @@ class ControlPlane:
         self._check(actor, "predict")
         return self.forest.predict(h)
 
+    def route_explain(self, actor, h):
+        """Governed predict that returns routing PROVENANCE for each input: which
+        expert (eid / tenant / name) the hard router chose, the router's
+        confidence in that choice, and the prediction. Permission-checked
+        ('predict') — and a denied attempt is logged like any other — but allowed
+        predictions are NOT appended to the audit log (they're high-volume reads;
+        the log stays the record of privileged *changes*). This is the hook an
+        orchestrator uses to make a routed answer attributable."""
+        self._check(actor, "predict")
+        h = np.asarray(h, dtype=float)
+        if h.ndim == 1:
+            h = h[None, :]
+        leaf_idx, tau = self.forest.router.route(h)
+        out, _ = self.forest.predict(h)
+        rows = []
+        for n in range(h.shape[0]):
+            i = int(leaf_idx[n])
+            rec = self.experts[i]
+            rows.append({
+                "eid": rec["eid"], "tenant": rec["tenant"], "name": rec["name"],
+                "confidence": float(tau[n, i]), "prediction": out[n].tolist(),
+            })
+        return rows
+
     def list_experts(self, actor):
         """Tenant-scoped view: global users see all experts; a tenant-bound user
         sees only their own."""

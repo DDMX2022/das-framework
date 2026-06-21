@@ -41,6 +41,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Continual baselines | EWC, PackNet, fine-tuned, multi-task, Progressive Nets | DAS/PackNet/PNN BWT 0 |
 | Governance | multi-tenant isolation + deletion + audit trail | non-interference + unlearning PASS |
 | Control plane | RBAC + multi-tenancy + signed audit + save/restore | role/tenant denials + tenant-delete isolation + persistence + tamper-detect PASS |
+| Orchestrator integration | governed DAS node under LangGraph (provenance + RBAC) | correct routing + provenance per query; denial surfaced as state + audited PASS |
 | REST API | `serve.py` + interactive page | live predictions |
 
 ## Key measured findings
@@ -67,6 +68,7 @@ toy scale, with a governance angle that's its real defensible value.
 | LoRALeaf experts (LoRA on frozen backbone) | isolation byte-identical + checkpoint byte-exact, PASS | `lora_leaf_demo.py` |
 | Governance control plane (RBAC + tenancy) | cross-tenant/role denials enforced + logged; tenant-delete leaves others byte-identical | `control_plane_demo.py` |
 | Control-plane persistence | save→reload byte-identical; weight-file swap caught by state↔audit binding | `control_plane_demo.py` |
+| DAS as a LangGraph node | every routed answer carries tenant/expert/confidence provenance; RBAC denial surfaces as state + is audited | `langgraph_demo.py` |
 
 ## Not built / out of scope
 - "100B on a laptop" at low latency on PCIe GPUs (paging cost is real there).

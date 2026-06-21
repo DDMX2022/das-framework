@@ -47,7 +47,9 @@ def make_train_fn(key, cp):
         for _ in range(400):
             i = rng.integers(0, len(X), 64); leaf.backward(ce_grad(leaf.forward(X[i]), y[i]), 0.05)
         leaf.frozen = True
-        keys = [r["name"] for r in cp.experts]            # router slots, in leaf order
+        # graft() appends the new record after this callback, so add `key` (lands
+        # at leaf index `idx`) to cover the expert currently being grafted.
+        keys = [r["name"] for r in cp.experts] + [key]    # router slots, in leaf order
         Xr = np.vstack([DATA[k][0] for k in keys])
         dr = np.concatenate([np.full(N, s) for s, _ in enumerate(keys)])
         for _ in range(600):
