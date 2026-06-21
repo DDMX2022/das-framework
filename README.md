@@ -180,6 +180,40 @@ flowchart LR
     class note2 bad;
 ```
 
+### The forest concept
+
+The evolved design (Phase 9): one **shared frozen backbone** extracts features once; the **router routes on those features**; each leaf is a tiny **isolated head**; a **canopy** merges the active head(s) into a prediction. Dormant heads cost nothing; new heads graft on; stale heads are pruned.
+
+```mermaid
+flowchart LR
+    X([Input]) --> BB["Shared backbone 🧊<br/>learns features once"]
+    BB -->|features| R{{"Stem router<br/>routes on features"}}
+    R -->|argmax| H0["Head 0 🧊 active"]
+    R --> H1["Head 1 🧊 active"]
+    R -. dormant .-> H2["Head 2 🧊"]
+    R -. dormant .-> H3["Head 3 🧊"]
+    H0 --> C[["Canopy<br/>merge → prediction"]]
+    H1 --> C
+    classDef on fill:#2e7d32,stroke:#1b5e20,color:#fff;
+    classDef off fill:#555,stroke:#333,color:#ddd;
+    class BB,H0,H1,C on;
+    class H2,H3 off;
+```
+
+It behaves like a living forest — a continuous **grow → graft → prune → regrow** loop, with every frozen head provably byte-identical across the whole cycle (`lifecycle_demo.py`):
+
+```mermaid
+flowchart LR
+    Seed["🌱 Seed<br/>router + first leaf"] --> Grow["🌳 Grow<br/>train in isolation"]
+    Grow --> Graft["🌿 Graft<br/>add domain, widen gate"]
+    Graft --> Route["☀️ Route & serve<br/>log usage"]
+    Route --> Monitor["📊 Monitor<br/>usage · accuracy"]
+    Monitor --> Prune["✂️ Prune<br/>drop dormant head"]
+    Prune -->|regrow| Graft
+```
+
+> Roadmap (Phase 13): many such trees linked underneath by a dense LLM — the "mycelial soil" — that decomposes a prompt across trees and synthesises their outputs. Not built yet.
+
 ---
 
 ## Benchmarks & metrics
