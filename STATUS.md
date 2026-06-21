@@ -40,7 +40,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Phase 11 | tokenizer text front-end | 4 text domains @ 100% |
 | Continual baselines | EWC, PackNet, fine-tuned, multi-task, Progressive Nets | DAS/PackNet/PNN BWT 0 |
 | Governance | multi-tenant isolation + deletion + audit trail | non-interference + unlearning PASS |
-| Control plane | RBAC + multi-tenancy + signed audit over a forest | role/tenant denials + tenant-delete isolation + tamper-detect PASS |
+| Control plane | RBAC + multi-tenancy + signed audit + save/restore | role/tenant denials + tenant-delete isolation + persistence + tamper-detect PASS |
 | REST API | `serve.py` + interactive page | live predictions |
 
 ## Key measured findings
@@ -66,6 +66,7 @@ toy scale, with a governance angle that's its real defensible value.
 | C++ pager compiles & pages correctly | C++ layer real (CPU/MPS); CUDA async path untestable (no NVIDIA) | `csrc/pager.cpp`, `pager_demo.py` |
 | LoRALeaf experts (LoRA on frozen backbone) | isolation byte-identical + checkpoint byte-exact, PASS | `lora_leaf_demo.py` |
 | Governance control plane (RBAC + tenancy) | cross-tenant/role denials enforced + logged; tenant-delete leaves others byte-identical | `control_plane_demo.py` |
+| Control-plane persistence | save→reload byte-identical; weight-file swap caught by state↔audit binding | `control_plane_demo.py` |
 
 ## Not built / out of scope
 - "100B on a laptop" at low latency on PCIe GPUs (paging cost is real there).

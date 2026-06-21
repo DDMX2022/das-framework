@@ -14,6 +14,8 @@ things that make DAS a *governed* fleet rather than just a sparse model:
 Plus the tamper-evident audit log catches any after-the-fact edit.
 Pure NumPy, synthetic data, no downloads.
 """
+import tempfile
+
 import numpy as np
 from das.model import DASForest
 from das.functional import softmax
@@ -100,6 +102,21 @@ except AccessDenied as e:
 v = cp.verify_audit("carol")
 print(f"\n[carol] audit verify: ok={v['ok']}  entries={v['entries']} (denials are logged too)")
 
+# ── persistence: survive a restart, byte-for-byte ───────────────────
+snap = [forest.leaves[i].weight_hash() for i in range(len(cp.experts))]
+d = tempfile.mkdtemp(); cp.save(d)
+reloaded = ControlPlane.load(d)
+persist_ok = (
+    [reloaded.forest.leaves[i].weight_hash() for i in range(len(reloaded.experts))] == snap
+    and reloaded.users == cp.users and reloaded.tenants == cp.tenants
+    and reloaded.verify_audit("carol")["ok"] and reloaded.state_matches_audit()
+)
+print(f"\n[persist] saved + reloaded control plane: experts byte-identical, "
+      f"users/tenants/audit intact: {persist_ok}")
+swapped = ControlPlane.load(d)
+swapped.forest.leaves[0].W[0][0, 0] += 1.0               # tamper the (unsigned) weights file
+print(f"[persist] weight-file tamper after load -> state_matches_audit: {swapped.state_matches_audit()} (caught)")
+
 # ── right-to-be-forgotten at tenant granularity ─────────────────────
 globex_before = [r for r in cp.experts if r["tenant"] == "globex"]
 globex_hashes = {r["eid"]: forest.leaves[i].weight_hash()
@@ -118,9 +135,11 @@ print(f"[tamper] edited audit entry 1 -> verify now ok={ok} at index {idx}: {rea
 
 print("\n" + "=" * 66)
 passed = (all(rbac.get(k) for k in ("cross_tenant", "viewer_prune", "auditor_manage"))
-          and res["non_interference"] and forgotten and v["ok"] and not ok)
+          and res["non_interference"] and forgotten and v["ok"] and not ok
+          and persist_ok and not swapped.state_matches_audit())
 print(f"  RBAC denials enforced:        {'PASS' if all(rbac.get(k) for k in ('cross_tenant','viewer_prune','auditor_manage')) else 'FAIL'}")
 print(f"  Tenant deletion + isolation:  {'PASS' if res['non_interference'] and forgotten else 'FAIL'}")
+print(f"  Persistence + state-binding:  {'PASS' if persist_ok and not swapped.state_matches_audit() else 'FAIL'}")
 print(f"  Audit verify then tamper:     {'PASS' if v['ok'] and not ok else 'FAIL'}")
 print(f"  Overall control-plane proof:  {'PASS' if passed else 'FAIL'}")
 print("=" * 66)

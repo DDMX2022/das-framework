@@ -404,7 +404,7 @@ DAS today is a **complete, honestly-measured research prototype**: NumPy + PyTor
 |---|---|---|
 | **0 · Foundation** | Credible engineering + a design partner | Versioned PyPI release, green CI, docs site; wedge use case + 1 partner |
 | **1 · Real backend** | Stop being toy-scale | Forest of **real LoRA/HF experts** serving traffic under a latency SLA; router fixed |
-| **2 · Governance control plane** *(the product)* | The differentiator, production-grade | Tamper-evident **signed audit log** ✅, **multi-tenancy + RBAC + expert registry** ✅ (`das/governance.py`); persistence still to do |
+| **2 · Governance control plane** *(the product)* | The differentiator, production-grade | ✅ Tamper-evident **signed audit log**, **multi-tenancy + RBAC + expert registry**, **save/restore persistence** with state↔audit binding (`das/governance.py`) |
 | **3 · Integrations** | Fit existing stacks | LangGraph node, HF Hub interop, Docker/k8s deploy |
 | **4 · Prove & launch** | Evidence + GTM | Public governance benchmark, partner case study, security review, open-core 1.0 |
 

@@ -26,10 +26,18 @@ itself. Graft takes a `train_fn(forest, leaf_index)` callback, so it works
 identically over the NumPy DASForest or (wrapped) the torch LoRAForest — the
 governance guarantees don't depend on the expert format.
 
-No third-party dependencies.
+Only depends on numpy (for forest persistence).
 """
+import hashlib
+import json
+import os
+
+import numpy as np
+
 from das.audit import AuditLog
 from das.lifecycle import ForestLifecycle
+from das.model import DASForest
+from das.functional import FibonacciLeaf
 
 # role -> set of permitted actions. Tenant scoping is enforced separately:
 # a user with tenant=None is global (e.g. admin); a user bound to a tenant may
@@ -200,3 +208,76 @@ class ControlPlane:
         self._check(actor, "verify_audit")
         ok, idx, reason = self.audit.verify()
         return {"ok": ok, "broken_index": idx, "reason": reason, "entries": len(self.audit.entries)}
+
+    # ── persistence ────────────────────────────────────────────────
+    def save(self, path):
+        """Persist the whole control plane to a directory: the forest weights
+        (NumPy), the governance state (tenants/users/registry, JSON), and the
+        signed audit log (JSON). The forest is saved verbatim so every expert's
+        weight_hash is preserved byte-for-byte across a restart."""
+        os.makedirs(path, exist_ok=True)
+        f = self.forest
+        arrays = {"router_W": f.router.W, "router_b": f.router.b}
+        leaf_meta = []
+        for li, leaf in enumerate(f.leaves):
+            leaf_meta.append({"dims": leaf.dims, "frozen": bool(leaf.frozen), "depth": len(leaf.W)})
+            for wi, (W, b) in enumerate(zip(leaf.W, leaf.b)):
+                arrays[f"leaf{li}_W{wi}"] = W
+                arrays[f"leaf{li}_b{wi}"] = b
+        np.savez(os.path.join(path, "forest.npz"), **arrays)
+        meta = {
+            "d_model": f.d_model,
+            "leaf_dims": f.leaf_dims,
+            "leaves": leaf_meta,
+            "tenants": sorted(self.tenants),
+            "users": self.users,
+            "experts": self.experts,
+            "next_eid": self._next_eid,
+        }
+        with open(os.path.join(path, "control_plane.json"), "w") as fh:
+            json.dump(meta, fh, indent=2)
+        self.audit.export(os.path.join(path, "audit.json"))
+
+    @classmethod
+    def load(cls, path, secret="das-dev-key"):
+        """Reconstruct a control plane saved by `save`. The same `secret` is
+        required to validate the audit log (it is never written to disk). Does
+        NOT append to the log — the restored chain is exactly as saved; verify
+        it with `verify_audit(...)` and link it to the weights with
+        `state_matches_audit()`."""
+        with open(os.path.join(path, "control_plane.json")) as fh:
+            meta = json.load(fh)
+        npz = np.load(os.path.join(path, "forest.npz"))
+        n = len(meta["leaves"])
+        forest = DASForest(meta["d_model"], meta["leaf_dims"], num_leaves=max(n, 1))
+        forest.leaves = []
+        for li, lm in enumerate(meta["leaves"]):
+            leaf = FibonacciLeaf(lm["dims"])
+            leaf.W = [npz[f"leaf{li}_W{wi}"] for wi in range(lm["depth"])]
+            leaf.b = [npz[f"leaf{li}_b{wi}"] for wi in range(lm["depth"])]
+            leaf.frozen = bool(lm["frozen"])
+            forest.leaves.append(leaf)
+        forest.router.W = npz["router_W"]
+        forest.router.b = npz["router_b"]
+        forest.router.num_leaves = forest.router.W.shape[1]
+
+        cp = cls.__new__(cls)                       # bypass __init__'s seeding
+        cp.forest = forest
+        cp.life = ForestLifecycle(forest)
+        cp.audit = AuditLog.load(os.path.join(path, "audit.json"), secret=secret)
+        cp.users = meta["users"]
+        cp.tenants = set(meta["tenants"])
+        cp.experts = meta["experts"]
+        cp._next_eid = meta["next_eid"]
+        return cp
+
+    def state_matches_audit(self):
+        """The last audit entry fingerprints the forest state at that moment.
+        Recompute that fingerprint from the (restored) forest and compare —
+        this binds the loaded weights to the signed log, so a swapped-out
+        forest.npz is detectable even though it isn't itself signed."""
+        if not self.audit.entries:
+            return True
+        want = self.audit.entries[-1]["payload_hash"]
+        got = hashlib.sha256(json.dumps(self._hashes(), sort_keys=True).encode()).hexdigest()
+        return got == want

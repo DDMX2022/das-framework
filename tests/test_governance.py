@@ -1,6 +1,8 @@
 """
 Governance control-plane tests (das/governance.py). Pure NumPy — runs in CI.
 """
+import tempfile
+
 import numpy as np
 import pytest
 
@@ -111,3 +113,34 @@ def test_list_experts_tenant_scoped():
     cp.graft("bob", "globex", "globex-0", _train_fn("globex-0"))
     assert {r["tenant"] for r in cp.list_experts("root")} == {"acme", "globex"}  # global
     assert {r["tenant"] for r in cp.list_experts("alice")} == {"acme"}            # scoped
+
+
+def test_persistence_roundtrip():
+    cp = _seed_cp()
+    cp.graft("alice", "acme", "acme-1", _train_fn("acme-1"))
+    cp.graft("bob", "globex", "globex-0", _train_fn("globex-0"))
+    before = [cp.forest.leaves[i].weight_hash() for i in range(len(cp.experts))]
+    d = tempfile.mkdtemp()
+    cp.save(d)
+    from das.governance import ControlPlane
+    g = ControlPlane.load(d)
+    # weights byte-identical, governance state intact, audit + state both verify
+    assert [g.forest.leaves[i].weight_hash() for i in range(len(g.experts))] == before
+    assert g.users == cp.users and g.tenants == cp.tenants and g.experts == cp.experts
+    assert g._next_eid == cp._next_eid
+    assert g.verify_audit("root")["ok"] is True
+    assert g.state_matches_audit() is True
+    # can keep operating after restore, chain stays valid
+    g.graft("alice", "acme", "acme-2", _train_fn("acme-2"))
+    assert g.verify_audit("root")["ok"] is True
+
+
+def test_state_matches_audit_detects_weight_swap():
+    cp = _seed_cp()
+    d = tempfile.mkdtemp()
+    cp.save(d)
+    from das.governance import ControlPlane
+    g = ControlPlane.load(d)
+    assert g.state_matches_audit() is True
+    g.forest.leaves[0].W[0][0, 0] += 1.0          # tamper with the (unsigned) forest weights
+    assert g.state_matches_audit() is False        # mismatch vs the signed log's fingerprint
