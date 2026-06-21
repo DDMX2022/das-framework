@@ -18,7 +18,8 @@ das-framework/
 │   ├── model.py            DASForest      — assembles router + leaves, graft(), proofs
 │   ├── packnet.py          PackNetMLP     — pruning + per-task weight masks (CL baseline)
 │   ├── lifecycle.py        ForestLifecycle — usage monitor, prune, regrow loop
-│   └── text.py             Tokenizer — bag-of-words text front-end
+│   ├── text.py             Tokenizer — bag-of-words text front-end
+│   └── hub.py              Leaf marketplace — publish / list / pull / graft (hash-verified)
 ├── demo.py                 Full lifecycle on synthetic data + forgetting proof (NumPy)
 ├── benchmark.py            DAS vs matched-size MLP on sklearn digits (NumPy)
 ├── leaf_shapes_bench.py    Fibonacci vs pow2 vs linear; compressive vs expansive
@@ -28,6 +29,7 @@ das-framework/
 ├── embedding_demo.py       Learned order-aware embedding vs bag-of-words
 ├── encoder_demo.py         Pretrained (frozen) encoder front-end — transfer
 ├── governance_demo.py      Multi-tenant isolation + deletion/unlearning + audit
+├── hub_demo.py             Leaf marketplace: publish → pull → graft, hash-verified
 ├── mycelial_demo.py        Phase 13: orchestrator decomposes + routes to trees
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
 ├── demo_torch.py           PyTorch lifecycle on MNIST + forgetting proof (autograd path)
