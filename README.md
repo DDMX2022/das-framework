@@ -21,6 +21,7 @@ das-framework/
 │   └── text.py             Tokenizer — bag-of-words text front-end
 ├── demo.py                 Full lifecycle on synthetic data + forgetting proof (NumPy)
 ├── benchmark.py            DAS vs matched-size MLP on sklearn digits (NumPy)
+├── leaf_shapes_bench.py    Fibonacci vs pow2 vs linear; compressive vs expansive
 ├── lifecycle_demo.py       Forest lifecycle: grow → graft → prune → regrow (NumPy)
 ├── canopy_demo.py          Phase 10: top-k canopy merge (graceful degradation)
 ├── text_demo.py            Phase 11: forest on text via a tokenizer front-end
@@ -290,7 +291,7 @@ Per-task LoRA adapters on a frozen backbone are the industry-standard way to "ad
 | Modular grafting | Add a new expert and train only it. **Real.** |
 
 **Claims to ignore:**
-- **Fibonacci dimensions are not magic.** `144→89→55` works no better than `128→96→64`; widths are ordinary hyperparameters.
+- **Fibonacci dimensions are not magic** — now *measured*, not just asserted (`leaf_shapes_bench.py`): Fibonacci vs power-of-two vs linear widths score within 0.006 of each other (noise). Expansive leaves buy +0.003 accuracy for 3× the parameters — capacity matters, the width *pattern* doesn't.
 - **"You never touch the router when adding a domain" is false.** Experts stay isolated, but the router must learn the new route — see `graft()`.
 - **Running 100B-param models on a laptop** does not follow from routing alone.
 - This classifies small vectors/images. It is a scaffold, not an LLM.
