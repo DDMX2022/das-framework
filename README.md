@@ -25,6 +25,7 @@ das-framework/
 ├── lifecycle_demo.py       Forest lifecycle: grow → graft → prune → regrow (NumPy)
 ├── canopy_demo.py          Phase 10: top-k canopy merge (graceful degradation)
 ├── text_demo.py            Phase 11: forest on text via a tokenizer front-end
+├── embedding_demo.py       Learned order-aware embedding vs bag-of-words
 ├── governance_demo.py      Multi-tenant isolation + deletion/unlearning + audit
 ├── mycelial_demo.py        Phase 13: orchestrator decomposes + routes to trees
 ├── das_torch.py            PyTorch backend: trainer, leaf_hash, checkpoint/restore, ConvLeaf
@@ -316,7 +317,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 **Where this leaves the project (honest):** the architecture is a competent re-implementation of hard-routed MoE + parameter isolation, equivalent to per-task LoRA plus a router. Its defensible real-world home is **auditable, governed model fleets** — provable non-interference, deletion/unlearning, multi-tenant isolation — not "better/cheaper AI." Sensible directions from here:
 1. ✅ Governance scenario proven (`governance_demo.py`): multi-tenant onboarding shows non-interference (prior tenants byte-identical), deletion/unlearning (a tenant's leaf is pruned → their task-acc falls 0.995 → 0.52 while others stay byte-identical), and a hash audit trail. A monolithic model can prove neither — this is DAS's real defensible edge.
 2. ✅ Phase 9 on CIFAR (`backbone_cifar_bench.py`): shared conv backbone lifts routing 0.42 → 0.66 (helps, but CIFAR routing stays partly hard — not the ~0.98 MNIST gave).
-✅ **Done (Phase 11):** tokenizer text front-end (`das/text.py`, `text_demo.py`) — the forest routes 4 text domains (math / sentiment / command / greeting) at 100%, each binary task solved, forgetting proof holds across grafting. Bag-of-words for now; swap in a real embedding/LM encoder later.
+✅ **Done (Phase 11):** tokenizer text front-end (`das/text.py`, `text_demo.py`) — the forest routes 4 text domains (math / sentiment / command / greeting) at 100%, each binary task solved, forgetting proof holds across grafting. **Front-end upgraded** (`embedding_demo.py`): a learned order-aware embedding beats bag-of-words on a word-order task (BoW stuck at 0.50 — identical word bags, opposite labels — vs embedding 1.00, generalising to unseen tokens). A pretrained LM encoder would slot in the same way.
 
 ✅ **Also done:** Progressive Neural Nets baseline (`pnn_bench.py`) — both PNN and DAS-style isolation get BWT 0; PNN's lateral connections add marginal forward transfer at growing parameter cost, DAS stays flat. Same tradeoff family as DAS vs LoRA (isolation is cheap; reuse costs parameters).
 
