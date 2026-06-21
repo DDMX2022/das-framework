@@ -25,6 +25,7 @@ das-framework/
 ├── demo_torch.py           PyTorch lifecycle on MNIST + forgetting proof (autograd path)
 ├── checkpoint_demo.py      Per-leaf + whole-forest save/load byte-exact restore proofs
 ├── conv_demo.py            ConvLeaf (CNN expert) trained, frozen, checkpointed
+├── backbone_demo.py        Phase 9: shared frozen backbone + isolated heads (MNIST)
 ├── serve.py                REST inference API (loads a saved forest, POST /predict)
 ├── mnist_stress.py         PyTorch: 10 leaves on real MNIST + 10-way forgetting proof
 ├── app.py                  Flask server — 6 live, browser-streamed experiments
@@ -233,6 +234,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 - ✅ **Done (Phase 6):** PackNet baseline and the Permuted-MNIST regime (`/permuted`).
 - ✅ **Done (Phase 7):** PyTorch backend — autograd trainer, per-leaf & whole-forest checkpoint/restore (byte-exact), `ConvLeaf` CNN expert, and a REST inference API (`serve.py`).
 - ✅ **Done (Lifecycle):** `ForestLifecycle` — usage monitoring, dormancy-based pruning (with router-gate shrink), and regrow. The full grow → graft → prune → regrow loop, with the forgetting proof holding across prune *and* regrow (`lifecycle_demo.py`).
+- ✅ **Done (Phase 9):** `BackboneForest` — a shared frozen backbone feeds a router that routes on *learned features* (not raw pixels), with tiny isolated heads (130 params each, ~1672× smaller than the backbone) sharing those features. Forgetting proof holds when grafting a new head (`backbone_demo.py`). Tradeoff: the backbone is a shared trainable component.
 1. Split-CIFAR-10/100 on `ConvLeaf` forests — does routing survive real images?
 2. Progressive Neural Networks as another structural baseline; an attention-based router.
 3. Scale up: larger leaves on MPS/GPU, a tokenizer+embedding front-end for a text domain.

@@ -54,35 +54,56 @@ class FibonacciLeaf(nn.Module):
 class ConvLeaf(nn.Module):
     """A heterogeneous expert: same flat-vector in/out contract as
     FibonacciLeaf (so DASForest doesn't need to know which kind of leaf it's
-    holding), but internally reshapes to a 28x28 image and runs two
-    conv+ReLU+pool blocks before a small FC head. This is the proof that
-    DAS's "uniform leaf API" isn't just an MLP API in disguise — leaves can
-    be architecturally whatever they need to be, as long as forward() maps
-    a flat (N, in_dim) tensor to a flat (N, out_dim) tensor.
+    holding), but internally reshapes to a square image and runs conv+ReLU+pool
+    blocks before a small FC head. This is the proof that DAS's "uniform leaf
+    API" isn't just an MLP API in disguise — leaves can be architecturally
+    whatever they need to be, as long as forward() maps a flat (N, in_dim)
+    tensor to a flat (N, out_dim) tensor.
     dims is kept as [in_dim, out_dim] only, purely for checkpoint metadata
     and to mirror FibonacciLeaf's interface — it does not describe the conv
-    stack's internal shapes."""
+    stack's internal shapes.
+    channels=1 (default) reproduces the original MNIST-only behavior exactly
+    (a 2-block 16->32 stack) — that path is untouched so old checkpoints keep
+    loading. channels=3 (CIFAR) switches to a deeper 3-block 32->64->128 stack;
+    more channels means more raw signal per pixel, so the bigger stack isn't
+    cosmetic, it's needed to do anything useful with 32x32x3 input."""
     leaf_type = 'conv'
 
-    def __init__(self, dims):  # dims = [in_dim, out_dim], in_dim must be a perfect square (e.g. 784)
+    def __init__(self, dims, channels=1):  # dims = [in_dim, out_dim], in_dim must be channels * side^2
         super().__init__()
         self.dims = list(dims)
+        self.channels = channels
         in_dim, out_dim = dims[0], dims[-1]
-        side = int(round(in_dim ** 0.5))
-        assert side * side == in_dim, f"ConvLeaf expects a square image input, got in_dim={in_dim}"
-        self.side = side
-        self.conv = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),   # side -> side/2
-            nn.Conv2d(16, 32, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),  # side/2 -> side/4
+        side = int(round((in_dim / channels) ** 0.5))
+        assert channels * side * side == in_dim, (
+            f"ConvLeaf expects in_dim == channels * side^2, got in_dim={in_dim}, channels={channels}"
         )
-        flat_dim = 32 * (side // 4) * (side // 4)
+        self.side = side
+        if channels == 1:
+            # Original MNIST-shaped stack, unchanged, so existing checkpoints
+            # (saved before multi-channel support existed) still load and run
+            # byte-identically.
+            self.conv = nn.Sequential(
+                nn.Conv2d(1, 16, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),   # side -> side/2
+                nn.Conv2d(16, 32, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),  # side/2 -> side/4
+            )
+            flat_dim = 32 * (side // 4) * (side // 4)
+        else:
+            # Deeper stack for real (multi-channel) images, e.g. CIFAR-10's
+            # 32x32x3: three conv blocks 32->64->128 with pooling, then an FC head.
+            self.conv = nn.Sequential(
+                nn.Conv2d(channels, 32, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),  # side -> side/2
+                nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),         # side/2 -> side/4
+                nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool2d(2),        # side/4 -> side/8
+            )
+            flat_dim = 128 * (side // 8) * (side // 8)
         self.fc = nn.Sequential(
             nn.Linear(flat_dim, 64), nn.ReLU(),
             nn.Linear(64, out_dim),
         )
 
     def forward(self, x):
-        x = x.view(-1, 1, self.side, self.side)
+        x = x.view(-1, self.channels, self.side, self.side)
         x = self.conv(x)
         x = x.flatten(1)
         return self.fc(x)
@@ -229,10 +250,14 @@ def train_leaf_isolated(forest, leaf_id, X, y, steps=600, lr=1e-3, batch=128, de
 
 def save_leaf(leaf, path):
     """Freeze a leaf to disk. Just dims + state_dict + a type tag — nothing
-    fancy, no optimizer state, because a frozen leaf has no optimizer."""
+    fancy, no optimizer state, because a frozen leaf has no optimizer.
+    For ConvLeaf we also persist 'channels' (1 for grayscale MNIST-style,
+    3 for RGB CIFAR-style) so load_leaf can rebuild the right conv stack —
+    FibonacciLeaf has no such attribute, hence getattr with a default."""
     ckpt = {
         'type': getattr(leaf, 'leaf_type', 'mlp'),
         'dims': list(leaf.dims),
+        'channels': getattr(leaf, 'channels', 1),
         'state_dict': leaf.state_dict(),
     }
     torch.save(ckpt, path)
@@ -240,13 +265,15 @@ def save_leaf(leaf, path):
 def load_leaf(path, device='cpu'):
     """Reconstruct a leaf from a checkpoint saved by save_leaf(). Returns it
     frozen, since a leaf loaded from disk is by definition "already trained"
-    — if you want to keep training it, call .unfreeze() yourself."""
+    — if you want to keep training it, call .unfreeze() yourself.
+    'channels' defaults to 1 so checkpoints saved before multi-channel
+    ConvLeaf support existed (MNIST, grayscale) still load correctly."""
     ckpt = torch.load(path, map_location=device, weights_only=False)
     leaf_type = ckpt.get('type', 'mlp')
     if leaf_type == 'mlp':
         leaf = FibonacciLeaf(ckpt['dims'])
     elif leaf_type == 'conv':
-        leaf = ConvLeaf(ckpt['dims'])
+        leaf = ConvLeaf(ckpt['dims'], channels=ckpt.get('channels', 1))
     else:
         raise ValueError(f"unknown leaf type in checkpoint: {leaf_type!r}")
     leaf.load_state_dict(ckpt['state_dict'])
@@ -294,6 +321,124 @@ def load_forest(dir, device='cpu'):
         leaf = load_leaf(os.path.join(dir, f'leaf_{i}.pt'), device=device)
         forest.leaves.append(leaf)
     return forest
+
+# ── Phase 9: shared frozen backbone + isolated heads ───────────────────
+# The original forest makes every leaf a FULL separate network, so each one
+# re-learns low-level features from scratch and the router routes on raw input.
+# This version factors that out: a SHARED backbone learns features once (then is
+# frozen), the router routes on those features, and each leaf shrinks to a tiny
+# isolated HEAD on top. Heads still train in isolation and freeze, so
+# zero-forgetting holds for them; the tradeoff is that the backbone is a shared
+# trainable component (retraining it would shift every head).
+
+class Backbone(nn.Module):
+    """Shared feature extractor. Train once, freeze, then everything downstream
+    (router + heads) operates on its features instead of the raw input."""
+    def __init__(self, in_dim, feat_dim, hidden=256):
+        super().__init__()
+        self.in_dim, self.feat_dim = in_dim, feat_dim
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden), nn.ReLU(),
+            nn.Linear(hidden, feat_dim), nn.ReLU(),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+    def freeze(self):
+        for p in self.parameters():
+            p.requires_grad_(False)
+
+    def unfreeze(self):
+        for p in self.parameters():
+            p.requires_grad_(True)
+
+class HeadLeaf(nn.Module):
+    """A tiny isolated expert: a small head on the shared backbone features.
+    dims = [feat_dim, out_dim] or [feat_dim, hidden, out_dim]."""
+    leaf_type = 'head'
+
+    def __init__(self, dims):
+        super().__init__()
+        self.dims = list(dims)
+        layers = []
+        for i in range(len(dims) - 1):
+            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            if i < len(dims) - 2:
+                layers.append(nn.ReLU())
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.net(x)
+
+    def freeze(self):
+        for p in self.parameters():
+            p.requires_grad_(False)
+
+    def unfreeze(self):
+        for p in self.parameters():
+            p.requires_grad_(True)
+
+class BackboneForest(nn.Module):
+    """Shared backbone + router-on-features + isolated heads."""
+    def __init__(self, in_dim, feat_dim, head_dims, num_leaves):
+        super().__init__()
+        self.head_dims = list(head_dims)
+        self.backbone = Backbone(in_dim, feat_dim)
+        self.router = StemRouter(feat_dim, num_leaves)
+        self.heads = nn.ModuleList([HeadLeaf(head_dims) for _ in range(num_leaves)])
+
+    def features(self, x):
+        return self.backbone(x)
+
+    def predict(self, x):
+        h = self.features(x)
+        leaf_idx, _, _ = self.router(h)
+        out = torch.zeros(x.shape[0], self.head_dims[-1], device=x.device)
+        for i, head in enumerate(self.heads):
+            mask = leaf_idx == i
+            if mask.any():
+                out[mask] = head(h[mask])
+        return out, leaf_idx
+
+    def freeze_backbone(self):
+        self.backbone.freeze()
+
+    def graft_head(self, dims=None):
+        """Add a new isolated head + widen the router gate by one column."""
+        self.heads.append(HeadLeaf(dims or self.head_dims).to(next(self.parameters()).device))
+        old = self.router.gate
+        new = nn.Linear(old.in_features, old.out_features + 1).to(old.weight.device)
+        with torch.no_grad():
+            new.weight[:-1] = old.weight
+            new.bias[:-1] = old.bias
+            new.weight[-1].normal_(0, 0.01)
+            new.bias[-1].zero_()
+        self.router.gate = new
+        return len(self.heads) - 1
+
+def train_head_isolated(forest, head_id, feats, y, steps=400, lr=1e-3, batch=128, device="cpu"):
+    """Train ONE head on precomputed backbone features, in isolation: backbone
+    frozen, all other heads frozen, optimizer scoped to this head only."""
+    for head in forest.heads:
+        head.freeze()
+    head = forest.heads[head_id]
+    head.unfreeze()
+    feats, y = feats.to(device), y.to(device)
+    opt = torch.optim.Adam(head.parameters(), lr=lr)
+    n = feats.shape[0]
+    head.train()
+    for _ in range(steps):
+        idx = torch.randint(0, n, (min(batch, n),), device=device)
+        opt.zero_grad()
+        loss = F.cross_entropy(head(feats[idx]), y[idx])
+        loss.backward()
+        opt.step()
+    head.freeze()
+    head.eval()
+    with torch.no_grad():
+        acc = (head(feats).argmax(1) == y).float().mean().item()
+    return acc
 
 if __name__ == "__main__":
     # quick smoke test on random data
