@@ -109,6 +109,9 @@ svc = Service()
 @app.route('/')
 def index(): return render_template('console.html', domains=ALL_DOMAINS)
 
+@app.route('/favicon.ico')
+def favicon(): return ('', 204)
+
 @app.route('/api/state')
 def api_state():
     with LOCK: return jsonify(svc.state())
