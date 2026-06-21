@@ -456,6 +456,10 @@ CL_ROUTER_STEPS  = 800
 CL_LEAF_STEPS    = 600
 CL_FT_STEPS      = 600
 CL_MT_STEPS      = 1000
+CL_EWC_LAMBDA    = 5000.0  # EWC penalty strength. NB: single-head Split-MNIST is the
+                           # known-hard regime where EWC only partly helps (van de Ven
+                           # & Tolias 2019) — it beats naive fine-tuning but cannot reach
+                           # DAS's structural BWT≈0. That contrast is the point.
 CL_TASKS = [(0,1),(2,3),(4,5),(6,7),(8,9)]
 
 def _cl_binary_split(X_tr, y_tr, X_te, y_te, d0, d1, rng):
@@ -548,6 +552,21 @@ def run_continual_bench():
     das_infer_flops    = _dims_flops([forest.router.W.shape[0]] +
                                      [forest.router.W.shape[1]]) + _dims_flops(CL_LEAF)
 
+    # ── Cross-domain contamination test ────────────────────────
+    # Run leaf i on EVERY task's test set. The diagonal (own domain) should be
+    # high; off-diagonal should collapse toward chance (~50% balanced binary).
+    # This proves each leaf is a real specialist — and that the router (which
+    # picks the diagonal) is doing essential work, not routing everything to one leaf.
+    yield emit({'e':'cl_phase','phase':'contam',
+                'label':'Cross-domain contamination test — each leaf on every domain'})
+    contam = [[round(acc(forest.leaves[i].forward(task_splits[j][2]), task_splits[j][3]), 4)
+               for j in range(5)] for i in range(5)]
+    diag = [contam[i][i] for i in range(5)]
+    off  = [contam[i][j] for i in range(5) for j in range(5) if i != j]
+    yield emit({'e':'cl_contam','matrix':contam,
+                'diag_mean':round(sum(diag)/len(diag), 4),
+                'off_mean':round(sum(off)/len(off), 4)})
+
     # ── Fine-tuned MLP ─────────────────────────────────────────
     ft_mlp = FibonacciLeaf(CL_LEAF, seed=42)
     ft_matrix = [[None]*5 for _ in range(5)]
@@ -572,6 +591,40 @@ def run_continual_bench():
 
     ft_params_total = n_params(ft_mlp)
     ft_infer_flops  = _dims_flops(CL_LEAF)
+
+    # ── EWC MLP: the real continual-learning baseline ──────────
+    # Same architecture and init as the fine-tuned MLP, but after each task we
+    # consolidate (store θ* + Fisher) and add the EWC penalty on later tasks.
+    # EWC should forget LESS than naive fine-tuning, but — unlike DAS — it cannot
+    # guarantee zero forgetting, and it trades plasticity (new-task accuracy) for it.
+    ewc_mlp = FibonacciLeaf(CL_LEAF, seed=42)
+    ewc_matrix = [[None]*5 for _ in range(5)]
+    ewc_tasks = []          # consolidated {'fisher','star'} per finished task
+    t_ewc_tasks = []
+    for t in range(5):
+        d0, d1 = CL_TASKS[t]
+        Xtr, ytr, Xte, yte = task_splits[t]
+        yield emit({'e':'cl_phase','phase':'ewc','task':t,
+                    'label':f'EWC MLP on task {d0} vs {d1} — penalty protects old weights'})
+        t1 = _time.time()
+        for s in range(CL_FT_STEPS):
+            idx = rng.integers(0,len(Xtr),CL_B)
+            ewc_mlp.backward(ce_grad(ewc_mlp.forward(Xtr[idx]), ytr[idx]), CL_LR,
+                             ewc_lambda=CL_EWC_LAMBDA, ewc_tasks=ewc_tasks)
+            if s % 60 == 0:
+                yield emit({'e':'cl_ewc_step','task':t,'step':s,
+                            'acc':round(acc(ewc_mlp.forward(Xtr[:300]),ytr[:300]),4)})
+        t_ewc_tasks.append(round(_time.time()-t1, 1))
+        # Consolidate this task: anchor weights + Fisher importance
+        ewc_tasks.append({'fisher': ewc_mlp.fisher_diagonal(Xtr, ytr, ce_grad, seed=t),
+                          'star':   ewc_mlp.snapshot()})
+        for ev in range(t+1):
+            Xe, ye = task_splits[ev][2], task_splits[ev][3]
+            ewc_matrix[t][ev] = round(acc(ewc_mlp.forward(Xe),ye),4)
+        yield emit({'e':'cl_ewc_eval','stage':t,'accs':ewc_matrix[t][:t+1]})
+
+    ewc_params_total = n_params(ewc_mlp)
+    t_ewc_total = round(sum(t_ewc_tasks), 1)
 
     # ── Multi-task MLP: upper bound ─────────────────────────────
     yield emit({'e':'cl_phase','phase':'multitask',
@@ -599,19 +652,23 @@ def run_continual_bench():
     # ── Derived metrics ─────────────────────────────────────────
     das_bwt = round(sum(das_matrix[4][i] - das_matrix[i][i] for i in range(4))/4, 4)
     ft_bwt  = round(sum(ft_matrix[4][i]  - ft_matrix[i][i]  for i in range(4))/4, 4)
+    ewc_bwt = round(sum(ewc_matrix[4][i] - ewc_matrix[i][i] for i in range(4))/4, 4)
 
     # Plasticity: accuracy when FIRST learning each task (diagonal)
     das_plasticity = [das_matrix[t][t] for t in range(5)]
     ft_plasticity  = [ft_matrix[t][t]  for t in range(5)]
+    ewc_plasticity = [ewc_matrix[t][t] for t in range(5)]
     mt_plasticity  = mt_accs  # upper bound
 
     # Final accuracy: row 4 of each matrix
     das_final = [das_matrix[4][t] for t in range(5)]
     ft_final  = [ft_matrix[4][t]  for t in range(5)]
+    ewc_final = [ewc_matrix[4][t] for t in range(5)]
 
     # Stability = mean(final/first_learned) for tasks 0..3
     das_stability = round(sum(das_matrix[4][i]/max(das_matrix[i][i],1e-6) for i in range(4))/4, 4)
     ft_stability  = round(sum(ft_matrix[4][i] /max(ft_matrix[i][i], 1e-6) for i in range(4))/4, 4)
+    ewc_stability = round(sum(ewc_matrix[4][i]/max(ewc_matrix[i][i],1e-6) for i in range(4))/4, 4)
 
     # Forward transfer: average over tasks 1-4 of (acc_first_learned / acc_task0_at_same_stage)
     # Simplified: just emit raw numbers, compute in JS
@@ -625,9 +682,12 @@ def run_continual_bench():
     yield emit({'e':'cl_done',
                 'das_matrix':das_matrix,
                 'ft_matrix':ft_matrix,
+                'ewc_matrix':ewc_matrix,
+                'contam':contam,
                 'mt_accs':mt_accs,
                 'das_bwt':das_bwt,
                 'ft_bwt':ft_bwt,
+                'ewc_bwt':ewc_bwt,
                 'tasks':task_labels,
                 # cost metrics
                 'cost':{
@@ -636,6 +696,7 @@ def run_continual_bench():
                     'das_leaf_params'   : das_leaf_params,
                     'router_params'     : router_params,
                     'ft_params'         : ft_params_total,
+                    'ewc_params'        : ewc_params_total,
                     'mt_params'         : mt_params_total,
                     'das_infer_flops'   : das_infer_flops,
                     'ft_infer_flops'    : ft_infer_flops,
@@ -646,17 +707,21 @@ def run_continual_bench():
                     't_das_total'       : t_das_total,
                     't_ft_tasks'        : t_ft_tasks,
                     't_ft_total'        : t_ft_total,
+                    't_ewc_total'       : t_ewc_total,
                     't_mt'              : t_mt,
                 },
                 # extra metrics
                 'metrics':{
                     'das_plasticity'  : das_plasticity,
                     'ft_plasticity'   : ft_plasticity,
+                    'ewc_plasticity'  : ewc_plasticity,
                     'mt_plasticity'   : mt_plasticity,
                     'das_final'       : das_final,
                     'ft_final'        : ft_final,
+                    'ewc_final'       : ewc_final,
                     'das_stability'   : das_stability,
                     'ft_stability'    : ft_stability,
+                    'ewc_stability'   : ewc_stability,
                 }})
 
 

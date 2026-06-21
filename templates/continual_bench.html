@@ -84,18 +84,34 @@ main{display:flex;flex:1;overflow:hidden}
 #phase-banner strong{color:var(--c3)}
 
 /* Live chart row */
-#live-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#live-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .chart-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
 .chart-box h3{font-size:.62rem;color:var(--muted);margin-bottom:8px}
 .chart-box canvas{max-height:120px;width:100%}
 
 /* Accuracy matrix section */
-#matrix-section{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#matrix-section{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .matrix-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px}
-.matrix-box h3{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;
+.matrix-box h3{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;
                 margin-bottom:10px}
 .matrix-box.das h3{color:var(--c1)}
+.matrix-box.ewc h3{color:var(--blue)}
 .matrix-box.ft  h3{color:var(--amber)}
+
+/* Contamination heatmap */
+#contam-section{display:none}
+.contam-wrap{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:14px}
+.contam-flex{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.contam-table{border-collapse:separate;border-spacing:3px;font-size:.62rem}
+.contam-table th{color:var(--muted);padding:2px 5px;font-size:.58rem;font-weight:normal}
+.contam-table td{padding:5px 6px;text-align:center;border-radius:3px;min-width:44px}
+.contam-note{flex:1;min-width:220px;font-size:.66rem;line-height:1.8;color:var(--muted)}
+.contam-note strong{color:var(--text)}
+.contam-stat{display:flex;gap:16px;margin-top:10px}
+.contam-stat .cs{background:#0a160a;border:1px solid var(--border);border-radius:5px;
+                 padding:8px 12px;text-align:center;flex:1}
+.contam-stat .cs .v{font-size:1.2rem;font-weight:bold}
+.contam-stat .cs .l{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
 
 .acc-matrix{width:100%;border-collapse:separate;border-spacing:3px;font-size:.62rem}
 .acc-matrix th{color:var(--muted);padding:2px 4px;text-align:center;
@@ -111,7 +127,9 @@ main{display:flex;flex:1;overflow:hidden}
 .row-label  {color:var(--muted);text-align:right;font-size:.58rem;padding-right:6px}
 
 /* BWT display */
-#bwt-section{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#bwt-section{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.bwt-card.ewc{border-color:#205070}
+.bwt-value.mid{color:var(--amber)}
 .bwt-card{background:var(--panel);border:1px solid var(--border);border-radius:6px;
            padding:14px;text-align:center}
 .bwt-card.das{border-color:var(--c1)}
@@ -216,6 +234,15 @@ main{display:flex;flex:1;overflow:hidden}
 
       <div class="model-card">
         <div class="mc-head">
+          <span class="mc-name">EWC MLP</span>
+          <span class="mc-badge mt" style="color:var(--blue);border-color:#205070;background:#0a1520">Soft Protection</span>
+        </div>
+        <div class="mc-desc">Elastic Weight Consolidation — the standard CL baseline. After each task it adds a penalty that resists changing weights important to old tasks. Helps, but can't guarantee zero forgetting.</div>
+        <div class="mc-status" id="ewc-status">Waiting…</div>
+      </div>
+
+      <div class="model-card">
+        <div class="mc-head">
           <span class="mc-name">Multi-task MLP</span>
           <span class="mc-badge mt">Upper Bound</span>
         </div>
@@ -265,6 +292,10 @@ main{display:flex;flex:1;overflow:hidden}
         <h3 id="ft-chart-title">Fine-tuned MLP (current task)</h3>
         <canvas id="ft-chart"></canvas>
       </div>
+      <div class="chart-box">
+        <h3 id="ewc-chart-title">EWC MLP (current task)</h3>
+        <canvas id="ewc-chart"></canvas>
+      </div>
     </div>
   </div>
 
@@ -290,6 +321,23 @@ main{display:flex;flex:1;overflow:hidden}
         </table>
       </div>
 
+      <div class="matrix-box ewc">
+        <h3>🛡️ EWC MLP — soft penalty slows forgetting</h3>
+        <table class="acc-matrix" id="ewc-matrix-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>T0<br><span style="font-size:.55rem;color:#2c4a6e">0v1</span></th>
+              <th>T1<br><span style="font-size:.55rem;color:#2c4a6e">2v3</span></th>
+              <th>T2<br><span style="font-size:.55rem;color:#2c4a6e">4v5</span></th>
+              <th>T3<br><span style="font-size:.55rem;color:#2c4a6e">6v7</span></th>
+              <th>T4<br><span style="font-size:.55rem;color:#2c4a6e">8v9</span></th>
+            </tr>
+          </thead>
+          <tbody id="ewc-tbody"></tbody>
+        </table>
+      </div>
+
       <div class="matrix-box ft">
         <h3>⚡ Fine-tuned MLP — watch the forgetting!</h3>
         <table class="acc-matrix" id="ft-matrix-table">
@@ -307,6 +355,39 @@ main{display:flex;flex:1;overflow:hidden}
         </table>
       </div>
 
+    </div>
+  </div>
+
+  <!-- Cross-domain contamination -->
+  <div id="contam-section">
+    <div class="section-title">Cross-domain contamination — is each leaf really a specialist?</div>
+    <div class="contam-wrap">
+      <div class="contam-flex">
+        <table class="contam-table" id="contam-table">
+          <thead>
+            <tr><th></th><th colspan="5" style="color:var(--muted);padding-bottom:6px">evaluated on task →</th></tr>
+            <tr>
+              <th></th>
+              <th>0v1</th><th>2v3</th><th>4v5</th><th>6v7</th><th>8v9</th>
+            </tr>
+          </thead>
+          <tbody id="contam-tbody"></tbody>
+        </table>
+        <div class="contam-note">
+          Each row is a <strong>trained leaf</strong>; each column is a <strong>task's test set</strong>.
+          The bright <strong>diagonal</strong> is each leaf on its own domain (~99%). Every
+          <strong>off-diagonal</strong> cell is a leaf forced to judge data it never trained on —
+          accuracy collapses toward <strong>50% (random binary chance)</strong>.
+          <br><br>
+          This proves two things: (1) leaves are genuine <strong>specialists</strong>, not generalists,
+          and (2) the <strong>router is doing essential work</strong> — without it correctly picking the
+          diagonal, the forest would be near chance.
+          <div class="contam-stat">
+            <div class="cs"><div class="v" style="color:var(--c3)" id="contam-diag">—</div><div class="l">own domain (diagonal)</div></div>
+            <div class="cs"><div class="v" style="color:var(--red)" id="contam-off">—</div><div class="l">wrong domain (off-diag)</div></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -333,6 +414,11 @@ main{display:flex;flex:1;overflow:hidden}
         <div class="bwt-label">DAS Forest BWT</div>
         <div class="bwt-value good" id="das-bwt">—</div>
         <div class="bwt-explain">Mean accuracy change on tasks 0–3 after all training. ~0.00 means no forgetting. Hash proof verifies it cryptographically.</div>
+      </div>
+      <div class="bwt-card ewc">
+        <div class="bwt-label">EWC MLP BWT</div>
+        <div class="bwt-value mid" id="ewc-bwt">—</div>
+        <div class="bwt-explain">EWC's penalty reduces forgetting vs. naive fine-tuning, but on single-head Split-MNIST it still can't reach zero — soft protection has limits.</div>
       </div>
       <div class="bwt-card ft">
         <div class="bwt-label">Fine-tuned MLP BWT</div>
@@ -388,24 +474,25 @@ main{display:flex;flex:1;overflow:hidden}
       <div class="cost-card">
         <h4>Plasticity — accuracy when first learning each task</h4>
         <table class="metric-table">
-          <thead><tr><th class="row-h">Task</th><th>DAS Leaf</th><th>Fine-tuned</th><th>Multi-task</th></tr></thead>
+          <thead><tr><th class="row-h">Task</th><th>DAS</th><th>EWC</th><th>Fine-tuned</th><th>Multi-task</th></tr></thead>
           <tbody id="plasticity-tbody"></tbody>
         </table>
       </div>
       <div class="cost-card">
         <h4>Stability — retention of earlier tasks after all training</h4>
         <table class="metric-table">
-          <thead><tr><th class="row-h">Task</th><th>DAS final</th><th>FT final</th><th>Δ FT drop</th></tr></thead>
+          <thead><tr><th class="row-h">Task</th><th>DAS final</th><th>EWC final</th><th>FT final</th></tr></thead>
           <tbody id="stability-tbody"></tbody>
           <tfoot>
             <tr style="border-top:1px solid var(--border)">
               <td class="row-h" style="color:var(--muted)">Stability score</td>
               <td id="m-das-stab" style="color:var(--c3);font-weight:bold">—</td>
+              <td id="m-ewc-stab" style="color:var(--blue)">—</td>
               <td id="m-ft-stab"  style="color:var(--red)">—</td>
-              <td style="color:var(--muted);font-size:.58rem">1.0 = perfect retention</td>
             </tr>
           </tfoot>
         </table>
+        <div style="font-size:.58rem;color:var(--muted);margin-top:6px">Stability score: 1.0 = perfect retention of earlier tasks.</div>
       </div>
     </div>
   </div>
@@ -420,6 +507,7 @@ main{display:flex;flex:1;overflow:hidden}
         <tr>
           <th style="text-align:left">Task</th>
           <th>DAS</th>
+          <th>EWC</th>
           <th>Fine-tuned</th>
           <th>Multi-task</th>
           <th>Winner</th>
@@ -437,6 +525,7 @@ main{display:flex;flex:1;overflow:hidden}
 <script>
 // ── State ──────────────────────────────────────────────────────
 const dasMatrix = Array.from({length:5},()=>Array(5).fill(null));
+const ewcMatrix = Array.from({length:5},()=>Array(5).fill(null));
 const ftMatrix  = Array.from({length:5},()=>Array(5).fill(null));
 const mtAccs    = Array(5).fill(null);
 let running = false;
@@ -458,6 +547,7 @@ function makeChart(id, label, color) {
 
 const dasChart = makeChart('das-chart','DAS Leaf acc','#56ab2f');
 const ftChart  = makeChart('ft-chart', 'FT MLP acc',  '#f6ad55');
+const ewcChart = makeChart('ewc-chart','EWC MLP acc', '#63b3ed');
 const mtChart  = makeChart('mt-chart', 'Multi-task acc','#63b3ed');
 
 function pushChart(chart, step, val) {
@@ -504,8 +594,9 @@ function renderMatrix(tbodyId, matrix) {
   tbody.innerHTML = html;
 }
 
-// initialise both matrices
+// initialise all matrices
 renderMatrix('das-tbody', dasMatrix);
+renderMatrix('ewc-tbody', ewcMatrix);
 renderMatrix('ft-tbody',  ftMatrix);
 
 // ── Task item helpers ─────────────────────────────────────────
@@ -523,7 +614,7 @@ function startBench() {
   document.getElementById('loading-msg').style.display = 'block';
   document.getElementById('summary-section').style.display = 'none';
   document.getElementById('error-msg').style.display = 'none';
-  clearChart(dasChart); clearChart(ftChart); clearChart(mtChart);
+  clearChart(dasChart); clearChart(ftChart); clearChart(ewcChart); clearChart(mtChart);
 
   const es = new EventSource('/continual-stream');
   es.onmessage = function(ev) {
@@ -568,6 +659,15 @@ function startBench() {
         document.getElementById('ft-chart-title').textContent = `Fine-tuned MLP — task ${t}`;
         clearChart(ftChart);
       }
+      else if (d.phase === 'ewc') {
+        const t = d.task;
+        document.getElementById('ewc-status').textContent = `EWC on task ${t}…`;
+        document.getElementById('ewc-chart-title').textContent = `EWC MLP — task ${t}`;
+        clearChart(ewcChart);
+      }
+      else if (d.phase === 'contam') {
+        document.getElementById('das-status').textContent = 'Contamination test…';
+      }
       else if (d.phase === 'multitask') {
         for (let i=0;i<5;i++) setTask(i,'done');
         document.getElementById('mt-status').textContent = 'Training on all digits…';
@@ -606,6 +706,22 @@ function startBench() {
       document.getElementById('ft-status').textContent = `Task ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%`;
     }
 
+    else if (d.e === 'cl_ewc_step') {
+      pushChart(ewcChart, d.step, d.acc);
+      document.getElementById('status').textContent = `EWC T${d.task} step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
+    }
+
+    else if (d.e === 'cl_ewc_eval') {
+      const t = d.stage;
+      d.accs.forEach((v,col)=>{ ewcMatrix[t][col]=v; });
+      renderMatrix('ewc-tbody', ewcMatrix);
+      document.getElementById('ewc-status').textContent = `Task ${t} done  acc ${(d.accs[t]*100).toFixed(1)}%`;
+    }
+
+    else if (d.e === 'cl_contam') {
+      renderContam(d.matrix, d.diag_mean, d.off_mean);
+    }
+
     else if (d.e === 'cl_mt_step') {
       pushChart(mtChart, d.step, d.acc);
       document.getElementById('status').textContent = `Multi-task step ${d.step}  acc ${(d.acc*100).toFixed(1)}%`;
@@ -631,16 +747,26 @@ function startBench() {
     else if (d.e === 'cl_done') {
       // BWT
       const dasBWT = d.das_bwt;
+      const ewcBWT = d.ewc_bwt;
       const ftBWT  = d.ft_bwt;
       document.getElementById('das-bwt').textContent = (dasBWT >= 0 ? '+':'') + dasBWT.toFixed(3);
+      document.getElementById('ewc-bwt').textContent = (ewcBWT >= 0 ? '+':'') + ewcBWT.toFixed(3);
       document.getElementById('ft-bwt').textContent  = (ftBWT  >= 0 ? '+':'') + ftBWT.toFixed(3);
+      document.getElementById('ewc-bwt').className = 'bwt-value ' + (ewcBWT < -0.05 ? 'mid':'good');
       document.getElementById('ft-bwt').className = 'bwt-value ' + (ftBWT < -0.05 ? 'bad':'draw');
 
       // Full matrices
       d.das_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)dasMatrix[t][c]=v; }); });
+      if (d.ewc_matrix) d.ewc_matrix.forEach((row,t)=>{ row.forEach((v,c)=>{ if(v!==null)ewcMatrix[t][c]=v; }); });
       d.ft_matrix.forEach( (row,t)=>{ row.forEach((v,c)=>{ if(v!==null)ftMatrix[t][c]=v; }); });
       renderMatrix('das-tbody', dasMatrix);
+      renderMatrix('ewc-tbody', ewcMatrix);
       renderMatrix('ft-tbody',  ftMatrix);
+      if (d.contam) {
+        const diag = d.contam.reduce((s,r,i)=>s+r[i],0)/5;
+        let off=0,n=0; d.contam.forEach((r,i)=>r.forEach((v,j)=>{ if(i!==j){off+=v;n++;} }));
+        renderContam(d.contam, diag, off/n);
+      }
 
       // Cost & metrics
       if (d.cost)    buildCostSection(d.cost, d.metrics);
@@ -737,12 +863,15 @@ function buildCostSection(cost, metrics) {
   const tasks = ['0v1','2v3','4v5','6v7','8v9'];
   let pHtml = '';
   for (let t=0; t<5; t++) {
-    const dv = metrics.das_plasticity[t], fv = metrics.ft_plasticity[t], mv = metrics.mt_plasticity[t];
+    const dv = metrics.das_plasticity[t], ev = (metrics.ewc_plasticity||[])[t],
+          fv = metrics.ft_plasticity[t], mv = metrics.mt_plasticity[t];
+    const f = v => v!=null?(v*100).toFixed(1)+'%':'—';
     pHtml += `<tr>
       <td class="row-h">T${t}: ${tasks[t]}</td>
-      <td style="color:var(--c3)">${dv!=null?(dv*100).toFixed(1)+'%':'—'}</td>
-      <td style="color:var(--amber)">${fv!=null?(fv*100).toFixed(1)+'%':'—'}</td>
-      <td style="color:var(--blue)">${mv!=null?(mv*100).toFixed(1)+'%':'—'}</td>
+      <td style="color:var(--c3)">${f(dv)}</td>
+      <td style="color:var(--blue)">${f(ev)}</td>
+      <td style="color:var(--amber)">${f(fv)}</td>
+      <td style="color:#9ab">${f(mv)}</td>
     </tr>`;
   }
   document.getElementById('plasticity-tbody').innerHTML = pHtml;
@@ -750,39 +879,59 @@ function buildCostSection(cost, metrics) {
   // ── Stability table ──
   let sHtml = '';
   for (let t=0; t<5; t++) {
-    const dv = metrics.das_final[t], fv = metrics.ft_final[t];
-    const dp = metrics.das_plasticity[t], fp = metrics.ft_plasticity[t];
-    const drop = (fv != null && fp != null) ? fv - fp : null;
-    const dropCls = drop === null ? '' : drop < -0.1 ? 'style="color:var(--red)"' : 'style="color:var(--amber)"';
+    const dv = metrics.das_final[t], ev = (metrics.ewc_final||[])[t], fv = metrics.ft_final[t];
+    const f = v => v!=null?(v*100).toFixed(1)+'%':'—';
     sHtml += `<tr>
       <td class="row-h">T${t}: ${tasks[t]}</td>
-      <td style="color:var(--c3)">${dv!=null?(dv*100).toFixed(1)+'%':'—'}</td>
-      <td style="color:${fv!=null&&fv<0.7?'var(--red)':'var(--amber)'}">${fv!=null?(fv*100).toFixed(1)+'%':'—'}</td>
-      <td ${dropCls}>${drop!=null?(drop>=0?'+':'')+(drop*100).toFixed(1)+'%':'—'}</td>
+      <td style="color:var(--c3)">${f(dv)}</td>
+      <td style="color:${ev!=null&&ev<0.7?'var(--red)':'var(--blue)'}">${f(ev)}</td>
+      <td style="color:${fv!=null&&fv<0.7?'var(--red)':'var(--amber)'}">${f(fv)}</td>
     </tr>`;
   }
   document.getElementById('stability-tbody').innerHTML = sHtml;
   document.getElementById('m-das-stab').textContent = metrics.das_stability.toFixed(3);
+  if (metrics.ewc_stability!=null) document.getElementById('m-ewc-stab').textContent = metrics.ewc_stability.toFixed(3);
   document.getElementById('m-ft-stab').textContent  = metrics.ft_stability.toFixed(3);
+}
+
+// ── Contamination heatmap ─────────────────────────────────────
+function renderContam(matrix, diagMean, offMean) {
+  document.getElementById('contam-section').style.display = 'block';
+  const tasks = ['0v1','2v3','4v5','6v7','8v9'];
+  let html = '';
+  for (let i=0; i<5; i++) {
+    html += `<tr><td class="row-label" style="color:var(--muted);text-align:right;padding-right:6px">Leaf ${i}</td>`;
+    for (let j=0; j<5; j++) {
+      const v = matrix[i][j];
+      const cls = i===j ? 'cell-diag' : (v>=0.7 ? 'cell-ok' : v>=0.6 ? 'cell-bad' : 'cell-bad');
+      html += `<td class="${cls}">${(v*100).toFixed(0)}%</td>`;
+    }
+    html += '</tr>';
+  }
+  document.getElementById('contam-tbody').innerHTML = html;
+  document.getElementById('contam-diag').textContent = (diagMean*100).toFixed(1)+'%';
+  document.getElementById('contam-off').textContent  = (offMean*100).toFixed(1)+'%';
 }
 
 function buildSummary(d) {
   const tasks = d.tasks || ['0v1','2v3','4v5','6v7','8v9'];
   const dasRow  = d.das_matrix[4];
+  const ewcRow  = (d.ewc_matrix||[])[4] || Array(5).fill(null);
   const ftRow   = d.ft_matrix[4];
   const mtAccs  = d.mt_accs;
+  const f = v => v!=null?(v*100).toFixed(1)+'%':'—';
 
   let html = '';
   for (let t=0; t<5; t++) {
-    const dv = dasRow[t], fv = ftRow[t], mv = mtAccs[t];
-    const vals = [dv, fv, mv];
-    const maxV = Math.max(...vals.filter(v=>v!==null));
-    const winner = dv >= fv && dv >= mv ? 'DAS 🌿' : mv >= dv && mv >= fv ? 'Multi-task' : 'Fine-tuned';
+    const dv = dasRow[t], ev = ewcRow[t], fv = ftRow[t], mv = mtAccs[t];
+    const maxV = Math.max(...[dv,ev,fv,mv].filter(v=>v!==null));
+    const winner = dv === maxV ? 'DAS 🌿' : mv === maxV ? 'Multi-task' : ev === maxV ? 'EWC' : 'Fine-tuned';
     html += `<tr>
       <td class="task-col">Task ${t}: ${tasks[t]}</td>
-      <td class="${dv===maxV?'win':'lose'}">${dv!=null?(dv*100).toFixed(1)+'%':'—'}</td>
-      <td class="${fv===maxV?'win':'lose'}">${fv!=null?(fv*100).toFixed(1)+'%':'—'}</td>
-      <td class="${mv===maxV?'win':'draw'}">${mv!=null?(mv*100).toFixed(1)+'%':'—'}</td>
+      <td class="${dv===maxV?'win':'lose'}">${f(dv)}</td>
+      <td class="${ev===maxV?'win':'lose'}">${f(ev)}</td>
+      <td class="${fv===maxV?'win':'lose'}">${f(fv)}</td>
+      <td class="${mv===maxV?'win':'draw'}">${f(mv)}</td>
       <td style="color:var(--c3)">${winner}</td>
     </tr>`;
   }
@@ -791,6 +940,7 @@ function buildSummary(d) {
   html += `<tr style="border-top:2px solid var(--border)">
     <td class="task-col" style="color:var(--muted)">BWT</td>
     <td class="win">${(d.das_bwt>=0?'+':'') + d.das_bwt.toFixed(3)}</td>
+    <td class="draw">${d.ewc_bwt!=null?((d.ewc_bwt>=0?'+':'') + d.ewc_bwt.toFixed(3)):'—'}</td>
     <td class="lose">${(d.ft_bwt>=0?'+':'') + d.ft_bwt.toFixed(3)}</td>
     <td class="draw">N/A</td>
     <td style="color:var(--c3)">DAS 🌿</td>

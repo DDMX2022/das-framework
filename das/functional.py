@@ -48,8 +48,10 @@ class FibonacciLeaf:
             self.cache.append(a)
         return a
 
-    def backward(self, dlogits, lr):
-        """dlogits: gradient of loss w.r.t. output logits, shape (N, out_dim)."""
+    def grads(self, dlogits):
+        """Backprop dlogits to parameter gradients WITHOUT applying them.
+        Returns (gW, gb) lists. Used both for the normal update and for
+        estimating Fisher information (EWC)."""
         gW = [None] * len(self.W)
         gb = [None] * len(self.b)
         d = dlogits
@@ -59,10 +61,46 @@ class FibonacciLeaf:
             gb[i] = d.sum(axis=0)
             if i > 0:
                 d = (d @ self.W[i].T) * relu_grad(self.pre[i - 1])
+        return gW, gb
+
+    def backward(self, dlogits, lr, ewc_lambda=0.0, ewc_tasks=None):
+        """dlogits: gradient of loss w.r.t. output logits, shape (N, out_dim).
+
+        EWC (Elastic Weight Consolidation): when ewc_lambda>0 and ewc_tasks is a
+        list of {'fisher','star'} consolidations, add the quadratic penalty
+        gradient  λ · Σ_k F_k · (θ − θ*_k)  to each parameter. This pulls weights
+        back toward what mattered for earlier tasks — the standard soft way to
+        resist forgetting (contrast with DAS, which forbids it structurally)."""
+        gW, gb = self.grads(dlogits)
+        if ewc_lambda and ewc_tasks:
+            for tk in ewc_tasks:
+                F, star = tk['fisher'], tk['star']
+                for i in range(len(self.W)):
+                    gW[i] = gW[i] + ewc_lambda * F['W'][i] * (self.W[i] - star['W'][i])
+                    gb[i] = gb[i] + ewc_lambda * F['b'][i] * (self.b[i] - star['b'][i])
         if not self.frozen:                       # <-- the isolation guarantee
             for i in range(len(self.W)):
                 self.W[i] -= lr * gW[i]
                 self.b[i] -= lr * gb[i]
+
+    def snapshot(self):
+        """Deep copy of all parameters (θ*) — the EWC anchor for a finished task."""
+        return {'W': [w.copy() for w in self.W], 'b': [b.copy() for b in self.b]}
+
+    def fisher_diagonal(self, X, y, ce_grad_fn, n_batches=24, batch=128, seed=0):
+        """Diagonal Fisher information ≈ mean of squared parameter gradients over
+        minibatches of (X, y). Tells EWC which weights are important for this task."""
+        FW = [np.zeros_like(w) for w in self.W]
+        Fb = [np.zeros_like(b) for b in self.b]
+        rng = np.random.default_rng(seed)
+        n = len(X)
+        for _ in range(n_batches):
+            idx = rng.integers(0, n, min(batch, n))
+            gW, gb = self.grads(ce_grad_fn(self.forward(X[idx]), y[idx]))
+            for i in range(len(self.W)):
+                FW[i] += gW[i] ** 2
+                Fb[i] += gb[i] ** 2
+        return {'W': [f / n_batches for f in FW], 'b': [f / n_batches for f in Fb]}
 
     def weight_hash(self):
         """Fingerprint of every weight. Used to PROVE a frozen leaf never moved."""

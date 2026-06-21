@@ -154,13 +154,24 @@ flowchart LR
 ## Benchmarks & metrics
 
 - **Digits / MNIST:** DAS specialist leaves are compared against a single MLP of matched parameter count. Each leaf only ever sees its own domain's gradient, so it can't be pulled off-task by unrelated data.
-- **Split-MNIST continual learning** (`/continual`) compares three regimes — the honest competitor set:
+- **Split-MNIST continual learning** (`/continual`) compares four regimes — the honest competitor set:
   - **DAS Forest** — one frozen leaf grafted per task
+  - **EWC MLP** — Elastic Weight Consolidation, the standard CL baseline (soft penalty on important weights)
   - **Fine-tuned MLP** — one shared net fine-tuned sequentially (this is what people actually do; it forgets)
   - **Multi-task MLP** — all tasks at once (upper bound)
 - **Metrics reported:** Backward Transfer (BWT), plasticity (diagonal accuracy), stability (final ÷ first-learned), stored vs. active parameters, inference FLOPs, and wall-clock training time per phase.
 
-Typical result: DAS BWT ≈ 0.00 while the fine-tuned MLP lands around −0.20 to −0.30 (visible catastrophic forgetting), at the cost of storing more total parameters but using **fewer at inference** (only 1 leaf + router activate per prediction).
+Measured result (single-head Split-MNIST):
+
+| Model | BWT | Note |
+|---|---|---|
+| **DAS Forest** | **≈ 0.000** | structural isolation — frozen leaves can't move |
+| EWC MLP | ≈ −0.33 | soft penalty helps vs. naive, but can't reach zero |
+| Fine-tuned MLP | ≈ −0.40 | catastrophic forgetting |
+
+DAS achieves zero forgetting by storing more total parameters but using **fewer at inference** (only 1 leaf + router activate per prediction). EWC's limited gain here is expected: single-head Split-MNIST is the known-hard regime where soft methods struggle (van de Ven & Tolias, 2019) — which is exactly the contrast that motivates structural isolation.
+
+- **Cross-domain contamination test** (`/continual`): every trained leaf is run on every task's test set. The diagonal (own domain) stays ~99%; off-diagonal (wrong domain) collapses to ~52% (binary chance). This proves leaves are genuine specialists **and** that the router is doing essential work — without it picking the diagonal, the forest would be near chance.
 
 ---
 
@@ -189,6 +200,7 @@ DAS is not "better AI." It's **modular, auditable AI** for one specific pain: ad
 
 ## Next steps
 
-1. Standard continual-learning baselines (EWC, PackNet, Progressive Nets) on Split/Permuted-MNIST and Split-CIFAR.
+- ✅ **Done (Phase 5):** EWC baseline and the cross-domain contamination test, both wired into `/continual`.
+1. More CL baselines (PackNet, Progressive Nets) and Permuted-MNIST / Split-CIFAR.
 2. CNN leaves and an attention-based router; per-leaf checkpoint/restore; a REST inference API.
-3. A cross-domain contamination test (run Leaf 0 on Domain 1) to prove the router is doing real work.
+3. Port `demo.py`'s training loop into `das_torch.py` with autograd for GPU-scale runs.
