@@ -153,7 +153,11 @@ zero-dependency default.
 5. ~~Harden the serving stack (F5) and adopt trusted timestamps (F4)~~ **— done**
    (gunicorn + optional rate limit; UTC + `time_fn` hook). Plug a real TSA into
    `time_fn` and put rate limits at the proxy for full coverage.
-6. Commission an **independent** security audit before any 1.0 / GA.
+6. Commission an **independent** security audit before any 1.0 / GA. A ready-made
+   scope is now prepared: [THREAT_MODEL.md](THREAT_MODEL.md) (assets, trust
+   boundaries, adversaries, STRIDE-per-asset control mapping, and the scope to hand
+   the auditor) and [TEST_COVERAGE_MAP.md](TEST_COVERAGE_MAP.md) (every control
+   traced to the test that proves it, plus the honest coverage gaps).
 
 ## How to reproduce the protections
 
