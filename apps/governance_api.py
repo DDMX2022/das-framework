@@ -19,6 +19,13 @@ State & secret:
   DAS_ANCHOR        path to an append-only freshness anchor (F1). If set, each save
                     records the chain tip and the API REFUSES TO START on a rolled-
                     back/forged snapshot. Must live OUTSIDE DAS_STATE. Optional.
+  DAS_ENV           'production' turns on startup guards: refuse the default audit
+                    secret (F3) and require DAS_TRUSTED_PROXY_SECRET (F2). Default
+                    'development'.
+  DAS_TRUSTED_PROXY_SECRET  shared secret the authn gateway sends as the
+                    'X-DAS-Proxy-Auth' header. When set, requests lacking it get
+                    401 (except /health), so X-DAS-Actor is only honoured via the
+                    proxy. Optional in dev; required when DAS_ENV=production (F2).
   DAS_PORT          listen port (default 5070).
 
 Identity:
@@ -43,6 +50,7 @@ Run:
     conda run -n das python governance_api.py
     curl localhost:5070/health
 """
+import hmac
 import os
 import sys
 
@@ -80,6 +88,36 @@ if _anchor_path:
         print("  WARNING: DAS_ANCHOR is inside DAS_STATE — it provides no rollback "
               "protection there; put it on a separate, more-trusted store.")
     ANCHOR = FreshnessAnchor(_anchor_path)
+
+# Identity & deployment hardening (SECURITY_REVIEW F2/F3).
+ENV = os.environ.get("DAS_ENV", "development").lower()
+# Trusted-proxy shared secret (F2). When set, every request except the liveness
+# probe must carry a matching `X-DAS-Proxy-Auth` header, which the authn gateway
+# (mTLS/OIDC) adds alongside the verified `X-DAS-Actor`. So the asserted identity
+# is only honoured for requests that actually came through the gateway.
+PROXY_SECRET = os.environ.get("DAS_TRUSTED_PROXY_SECRET")
+
+
+def _startup_errors(env, secret, has_privkey, proxy_secret):
+    """Fatal misconfigurations to refuse in production. Returns a list of messages."""
+    errs = []
+    if env == "production":
+        if not has_privkey and (not secret or secret == "das-dev-key"):
+            errs.append("DAS_AUDIT_SECRET is unset or the dev default 'das-dev-key' — "
+                        "set a strong secret (or DAS_AUDIT_PRIVKEY) before production (F3).")
+        if not proxy_secret:
+            errs.append("DAS_TRUSTED_PROXY_SECRET is not set — X-DAS-Actor would be "
+                        "trusted without authentication. Front the API with an authn "
+                        "proxy and set the shared secret (F2).")
+    return errs
+
+
+_fatal = _startup_errors(ENV, SECRET, PRIVKEY is not None, PROXY_SECRET)
+if _fatal:
+    print("  REFUSING TO START (DAS_ENV=production):")
+    for _m in _fatal:
+        print("   -", _m)
+    sys.exit(2)
 
 
 # ── bootstrap a small two-tenant fleet so the API serves something real ──
@@ -161,6 +199,20 @@ app = Flask(__name__)
 def _actor():
     body = request.get_json(silent=True) or {}
     return request.headers.get("X-DAS-Actor") or body.get("actor") or "root"
+
+
+@app.before_request
+def _require_trusted_proxy():
+    """Enforce the authn-proxy contract (F2). If DAS_TRUSTED_PROXY_SECRET is set,
+    every request except the liveness probe must present the matching
+    X-DAS-Proxy-Auth header (added by the gateway). This makes the X-DAS-Actor
+    identity trustworthy, since only the gateway can produce a valid request."""
+    if PROXY_SECRET is None or request.path == "/health":
+        return None
+    if not hmac.compare_digest(request.headers.get("X-DAS-Proxy-Auth", ""), PROXY_SECRET):
+        return jsonify({"error": "unauthenticated",
+                        "reason": "missing or invalid trusted-proxy credential"}), 401
+    return None
 
 
 @app.errorhandler(AccessDenied)

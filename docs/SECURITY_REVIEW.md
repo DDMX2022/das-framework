@@ -69,19 +69,25 @@ WORM store, a monotonic counter, or a transparency log. The file backend is the
 reference; the API warns if `DAS_ANCHOR` is placed inside `DAS_STATE`. This is
 opt-in; the default (no anchor) still has the gap.
 
-### F2 · Identity is asserted, not authenticated (HIGH, API only)
-`apps/governance_api.py` takes the principal from the `X-DAS-Actor` header. RBAC is
-enforced on that principal, but nothing proves the caller *is* that principal.
-This is stated plainly in the module docstring and is acceptable only behind a
-trusted authn proxy.
-**Mitigation:** terminate mTLS/OIDC at a gateway and inject a verified identity;
-never expose the API directly. Treat the header as trusted *only* from the proxy.
+### F2 · Identity is asserted, not authenticated (was HIGH; enforced via proxy contract)
+`apps/governance_api.py` takes the principal from `X-DAS-Actor`; RBAC is enforced on
+it, but the header alone doesn't prove the caller is that principal.
+**Now enforced:** set `DAS_TRUSTED_PROXY_SECRET` and the API rejects (401) any
+request lacking the matching `X-DAS-Proxy-Auth` header (except the `/health` probe),
+so `X-DAS-Actor` is only honoured for requests that came through the authn gateway —
+which adds both headers. With `DAS_ENV=production` the API *refuses to start* unless
+this is configured. *Tested:* `test_api_hardening.py`.
+**Residual:** this proves traffic transited the gateway; the **gateway** is still
+responsible for the actual user authentication (mTLS/OIDC) and for setting a
+*verified* `X-DAS-Actor`. Don't expose the API directly; keep the proxy secret out
+of client reach (and pair with TLS so it isn't sniffable).
 
-### F3 · Default secret is a footgun (MEDIUM)
-`DAS_AUDIT_SECRET` defaults to `das-dev-key`. If unset in production, anyone who
-knows the (open-source) default can forge a valid-looking chain.
-**Mitigation:** the process should refuse to start with the default secret when a
-"production" flag is set. *Not yet implemented* — currently only documented.
+### F3 · Default secret is a footgun (was MEDIUM; enforced)
+`DAS_AUDIT_SECRET` defaults to `das-dev-key`; with it, anyone who knows the
+open-source default can forge a valid HMAC chain.
+**Now enforced:** with `DAS_ENV=production` the API refuses to start on the
+default/unset secret — unless Ed25519 signing (`DAS_AUDIT_PRIVKEY`) is configured
+instead (which doesn't use the HMAC secret). *Tested:* `test_api_hardening.py`.
 
 ### F4 · Self-reported timestamps (MEDIUM)
 Entry `ts` comes from local `time.strftime` with no trusted time source. The
@@ -134,8 +140,9 @@ zero-dependency default.
 1. ~~Build F1 (freshness anchoring)~~ **— done (opt-in `FreshnessAnchor`).** Make
    it the default for regulated deployments and document anchor-store custody (it
    must be on a store the `DAS_STATE` writer cannot roll back).
-2. **Enforce F3** (refuse default secret in prod) — cheap, high value.
-3. **Document/enforce F2** deployment contract (authn proxy mandatory).
+2. ~~Enforce F3~~ **— done.** `DAS_ENV=production` refuses the default audit secret.
+3. ~~Document/enforce F2~~ **— done.** `DAS_TRUSTED_PROXY_SECRET` enforces the authn-
+   proxy contract; production refuses to start without it. (Gateway still does authn.)
 4. ~~Adopt asymmetric signing (F7)~~ **— done (opt-in Ed25519).** Make it the
    default for regulated deployments and document key custody.
 5. Harden the serving stack (F5) and adopt trusted timestamps (F4).
@@ -149,5 +156,5 @@ python examples/audit_export_demo.py      # export the signed log + verify it of
 python examples/ed25519_audit_demo.py     # public-key-verifiable audit (F7); needs .[crypto]
 python examples/freshness_demo.py         # refuse a rolled-back snapshot (F1)
 python benchmarks/governance_benchmark.py # audit/RBAC/provenance vs baselines, with numbers
-pytest tests/test_governance.py tests/test_governance_api.py tests/test_audit_export.py tests/test_audit_ed25519.py tests/test_freshness.py -q
+pytest tests/test_governance.py tests/test_governance_api.py tests/test_api_hardening.py tests/test_audit_export.py tests/test_audit_ed25519.py tests/test_freshness.py -q
 ```

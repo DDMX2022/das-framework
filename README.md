@@ -126,7 +126,7 @@ For an arms-length verifier (a regulator), sign asymmetrically instead — set
 das-verify das_audit.json --pubkey <public-hex>   # Ed25519: authorship, no shared secret
 ```
 
-> Identity is taken from the `X-DAS-Actor` header and is **asserted, not authenticated** — run the API behind an authn proxy (mTLS/OIDC). See the [security review](docs/SECURITY_REVIEW.md).
+> Identity comes from the `X-DAS-Actor` header — authenticate it at a gateway (mTLS/OIDC) and set `DAS_TRUSTED_PROXY_SECRET` so the API only honours requests carrying the gateway's `X-DAS-Proxy-Auth` credential. With `DAS_ENV=production` the API **refuses to start** without that (F2) or on the default audit secret (F3). See the [security review](docs/SECURITY_REVIEW.md).
 
 ### Try the interactive console
 
