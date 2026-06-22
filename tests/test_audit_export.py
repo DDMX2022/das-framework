@@ -77,3 +77,14 @@ def test_live_log_verify_catches_payload_tamper():
     assert log.verify()[0] is True
     log.entries[0]["payload"]["acme-tax"] = "0000000000000000"
     assert log.verify()[0] is False
+
+
+def test_timestamps_are_utc_and_pluggable():
+    # F4: default timestamps are UTC (…Z); a time_fn can inject a trusted-time token
+    log = AuditLog(SECRET)
+    log.append("init", "x")
+    assert log.entries[0]["ts"].endswith("Z")
+    injected = AuditLog(SECRET, time_fn=lambda: "TRUSTED-TS-TOKEN")
+    injected.append("init", "x")
+    assert injected.entries[0]["ts"] == "TRUSTED-TS-TOKEN"
+    assert injected.verify()[0] is True            # the injected ts is signed in

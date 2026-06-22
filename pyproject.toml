@@ -15,7 +15,7 @@ dependencies = ["numpy"]
 
 [project.optional-dependencies]
 torch = ["torch", "torchvision"]
-web = ["flask"]
+web = ["flask", "gunicorn"]
 # Real frozen pretrained text encoder (MiniLM) for the Phase-1 "real backend"
 # path — the console's real-text mode and examples/hf_governance_demo.py.
 hf = ["torch", "sentence-transformers"]
