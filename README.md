@@ -218,12 +218,21 @@ The mature design uses a **shared frozen backbone** (features extracted once), t
 
 ## Deployment
 
-The control plane is packaged as a torch-free image (small, non-root, state on a volume, audit secret from the environment):
+The control plane is packaged as a torch-free image (small, non-root, served by **gunicorn**, state on a volume):
 
 ```bash
 docker build -t das-governance .
 docker run -p 5070:5070 -e DAS_AUDIT_SECRET=prod-secret -v das_state:/data das-governance
+
+# production-hardened (see the security review):
+docker run -p 5070:5070 -v das_state:/data \
+  -e DAS_ENV=production \
+  -e DAS_AUDIT_SECRET_FILE=/run/secrets/audit -e DAS_TRUSTED_PROXY_SECRET_FILE=/run/secrets/proxy \
+  -e DAS_ANCHOR=/anchor/anchor.log -e DAS_RATE_LIMIT=120 \
+  das-governance
 ```
+
+In `DAS_ENV=production` the API refuses to start without a non-default audit secret (F3) and a trusted-proxy secret (F2); secrets are read from mounted files (F6), the audit log can be Ed25519-signed (F7) and freshness-anchored (F1), and a per-client rate limit (F5) backs the reverse proxy.
 
 Kubernetes (`Deployment` + `Service` + `PVC` + audit `Secret`):
 

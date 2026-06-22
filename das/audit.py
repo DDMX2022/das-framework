@@ -22,10 +22,14 @@ import time
 
 
 class AuditLog:
-    def __init__(self, secret="das-dev-key", private_key=None):
+    def __init__(self, secret="das-dev-key", private_key=None, time_fn=None):
         self.entries = []
         self._priv = None
         self.public_key_hex = None
+        # F4: timestamps are UTC by default and ADVISORY (the chain proves order,
+        # not wall-clock time). Inject `time_fn` -> str to bind a trusted-time
+        # source (e.g. an RFC 3161 / roughtime token) for stronger guarantees.
+        self._time_fn = time_fn
         if private_key is not None:
             self._init_ed25519(private_key)
         else:
@@ -60,6 +64,14 @@ class AuditLog:
     def _body(e):
         return f"{e['seq']}|{e['ts']}|{e['event']}|{e['detail']}|{e['payload_hash']}|{e['prev']}"
 
+    def _now(self):
+        """Entry timestamp. UTC ISO-8601 (…Z) by default; a `time_fn` can supply a
+        trusted-time token instead (F4). Advisory either way — ordering is proven
+        by the chain + the freshness anchor (F1), not the clock."""
+        if self._time_fn is not None:
+            return self._time_fn()
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
     def append(self, event, detail, payload=None):
         """Record an action. `payload` (e.g. {expert: weight_hash}) is hashed in,
         so the log also fingerprints the forest state at each step. The raw
@@ -67,7 +79,7 @@ class AuditLog:
         actual fingerprints (re-checkable against the signed `payload_hash`
         without the secret)."""
         seq = len(self.entries)
-        ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+        ts = self._now()
         payload = payload or {}
         payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
         prev = self.entries[-1]["sig"] if self.entries else "genesis"

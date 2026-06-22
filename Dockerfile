@@ -33,4 +33,8 @@ u='http://localhost:%s/health'%os.environ.get('DAS_PORT','5070'); \
 j=json.load(urllib.request.urlopen(u,timeout=3)); \
 exit(0 if j.get('audit_chain_ok') else 1)"
 
-CMD ["python", "governance_api.py"]
+# Production WSGI server (F5). ONE worker keeps the single-writer audit chain
+# intact (a single replica owns the chain); threads handle concurrency. The
+# startup guards in governance_api still run at import, so a misconfigured prod
+# deploy fails fast here too.
+CMD gunicorn --workers 1 --threads 8 --timeout 30 --bind 0.0.0.0:${DAS_PORT:-5070} governance_api:app

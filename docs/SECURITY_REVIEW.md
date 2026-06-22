@@ -89,25 +89,30 @@ open-source default can forge a valid HMAC chain.
 default/unset secret — unless Ed25519 signing (`DAS_AUDIT_PRIVKEY`) is configured
 instead (which doesn't use the HMAC secret). *Tested:* `test_api_hardening.py`.
 
-### F4 · Self-reported timestamps (MEDIUM)
-Entry `ts` comes from local `time.strftime` with no trusted time source. The
-chain proves *relative order*, not wall-clock time, and a compromised host could
-backdate entries within a freshly forged chain (see F1/F3).
-**Mitigation:** include an external trusted-timestamp / RFC 3161 token, or anchor
-as in F1.
+### F4 · Self-reported timestamps (was MEDIUM; partially addressed)
+Entry `ts` had no trusted time source. **Now:** timestamps are unambiguous **UTC**
+(`…Z`), and `AuditLog(time_fn=…)` is a hook to bind a trusted-time token (RFC 3161 /
+roughtime). Ordering itself is proven by the chain + the **F1 freshness anchor**, so
+wall-clock time is explicitly *advisory*. *Tested:* `test_audit_export.py`.
+**Residual:** full trusted wall-clock time still requires plugging an external TSA
+into `time_fn`; the default is host UTC.
 
-### F5 · No rate limiting / DoS controls (LOW–MEDIUM)
-The Flask app has no throttling; `/predict` does a forest forward per call and
-`delete_tenant` is O(experts). Flask's dev server is also not a hardened
-production server.
-**Mitigation:** run behind a real WSGI server (gunicorn/uvicorn) + reverse proxy
-with rate limits; the container should not expose the dev server directly.
+### F5 · No rate limiting / DoS controls (was LOW–MEDIUM; addressed)
+**Now:** the container runs **gunicorn** (one worker — single audit writer — with
+threads), not the Flask dev server; and an optional in-process limiter
+(`DAS_RATE_LIMIT` requests/min per client, `/health` exempt) is a backstop.
+*Tested:* `test_api_hardening.py`.
+**Residual:** real DoS protection still belongs at a reverse proxy / WAF; the
+in-process limiter is defense-in-depth, and `delete_tenant` is still O(experts).
 
-### F6 · Secret lives in process memory / env (LOW, inherent)
-By design the secret is in memory and the environment. Env vars can leak via
-crash dumps, `/proc`, or child processes.
-**Mitigation:** prefer mounted-file secrets over env where the platform supports
-it; scrub on shutdown is out of scope for Python.
+### F6 · Secret lives in process memory / env (was LOW; mitigated)
+**Now:** any secret can be read from a **mounted file** via `<VAR>_FILE`
+(`DAS_AUDIT_SECRET_FILE`, `DAS_TRUSTED_PROXY_SECRET_FILE`; `DAS_AUDIT_PRIVKEY` is
+already a path), preferred over the environment — so secrets come from a Docker/k8s
+secret mount rather than env (which can leak via `/proc`, crash dumps, child
+procs). *Tested:* `test_api_hardening.py`.
+**Residual:** the secret is still in process memory while running (inherent to a
+Python process); scrubbing on shutdown is out of scope.
 
 ### F7 · Third-party authenticity — Ed25519 signing now available (was MEDIUM; addressed, opt-in)
 By default the signatures are HMAC (symmetric), so confirming *authorship* requires
@@ -145,7 +150,9 @@ zero-dependency default.
    proxy contract; production refuses to start without it. (Gateway still does authn.)
 4. ~~Adopt asymmetric signing (F7)~~ **— done (opt-in Ed25519).** Make it the
    default for regulated deployments and document key custody.
-5. Harden the serving stack (F5) and adopt trusted timestamps (F4).
+5. ~~Harden the serving stack (F5) and adopt trusted timestamps (F4)~~ **— done**
+   (gunicorn + optional rate limit; UTC + `time_fn` hook). Plug a real TSA into
+   `time_fn` and put rate limits at the proxy for full coverage.
 6. Commission an **independent** security audit before any 1.0 / GA.
 
 ## How to reproduce the protections

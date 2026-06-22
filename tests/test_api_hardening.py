@@ -48,3 +48,36 @@ def test_no_enforcement_when_unset(monkeypatch):
     monkeypatch.setattr(api, "PROXY_SECRET", None)
     c = api.app.test_client()
     assert c.get("/experts", headers={"X-DAS-Actor": "root"}).status_code == 200
+
+
+# ── F6: mounted-file secrets preferred over env ─────────────────────────
+def test_resolve_secret_prefers_file(tmp_path, monkeypatch):
+    f = tmp_path / "secret"
+    f.write_text("  from-file\n")
+    monkeypatch.setenv("DAS_X_FILE", str(f))
+    monkeypatch.setenv("DAS_X", "from-env")
+    assert api._resolve_secret("DAS_X") == "from-file"     # file wins, stripped
+    monkeypatch.delenv("DAS_X_FILE")
+    assert api._resolve_secret("DAS_X") == "from-env"
+    monkeypatch.delenv("DAS_X")
+    assert api._resolve_secret("DAS_X", "default") == "default"
+
+
+# ── F5: rate limiting ───────────────────────────────────────────────────
+def test_rate_limiter_fixed_window():
+    rl = api._RateLimiter(2)
+    assert rl.allow("a", now=0) and rl.allow("a", now=1)   # 2 allowed in window 0
+    assert not rl.allow("a", now=2)                         # 3rd blocked
+    assert rl.allow("a", now=61)                            # next minute resets
+    assert rl.allow("b", now=2)                             # per-client
+
+
+def test_rate_limit_enforced(monkeypatch):
+    monkeypatch.setattr(api, "RATE_LIMITER", api._RateLimiter(2))
+    monkeypatch.setattr(api, "PROXY_SECRET", None)
+    c = api.app.test_client()
+    h = {"X-DAS-Actor": "root"}
+    assert c.get("/experts", headers=h).status_code == 200
+    assert c.get("/experts", headers=h).status_code == 200
+    assert c.get("/experts", headers=h).status_code == 429  # 3rd in the window
+    assert c.get("/health").status_code == 200              # probe exempt

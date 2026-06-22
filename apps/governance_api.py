@@ -26,6 +26,12 @@ State & secret:
                     'X-DAS-Proxy-Auth' header. When set, requests lacking it get
                     401 (except /health), so X-DAS-Actor is only honoured via the
                     proxy. Optional in dev; required when DAS_ENV=production (F2).
+  DAS_RATE_LIMIT    max requests/min per client (source IP / actor); 0 disables.
+                    In-process backstop — keep real DoS controls at the proxy (F5).
+  <VAR>_FILE        any secret above (DAS_AUDIT_SECRET, DAS_TRUSTED_PROXY_SECRET)
+                    may instead be read from a mounted file via <VAR>_FILE — prefer
+                    this over plain env in production (F6). DAS_AUDIT_PRIVKEY is
+                    already a file path.
   DAS_PORT          listen port (default 5070).
 
 Identity:
@@ -53,6 +59,8 @@ Run:
 import hmac
 import os
 import sys
+import threading
+import time
 
 import numpy as np
 from flask import Flask, jsonify, request
@@ -63,8 +71,19 @@ from das.functional import softmax
 from das.governance import ControlPlane, AccessDenied
 from das.freshness import FreshnessAnchor, RollbackDetected
 
+def _resolve_secret(name, default=None):
+    """F6: prefer a mounted-file secret (`{name}_FILE`) over the env var, so
+    secrets can come from a Docker/k8s secret mount rather than the environment
+    (which can leak via /proc, crash dumps, or child processes)."""
+    path = os.environ.get(name + "_FILE")
+    if path:
+        with open(path) as f:
+            return f.read().strip()
+    return os.environ.get(name, default)
+
+
 STATE = os.environ.get("DAS_STATE")
-SECRET = os.environ.get("DAS_AUDIT_SECRET", "das-dev-key")
+SECRET = _resolve_secret("DAS_AUDIT_SECRET", "das-dev-key")
 PORT = int(os.environ.get("DAS_PORT", "5070"))
 
 # Optional asymmetric audit signing (SECURITY_REVIEW F7): if DAS_AUDIT_PRIVKEY
@@ -95,7 +114,7 @@ ENV = os.environ.get("DAS_ENV", "development").lower()
 # probe must carry a matching `X-DAS-Proxy-Auth` header, which the authn gateway
 # (mTLS/OIDC) adds alongside the verified `X-DAS-Actor`. So the asserted identity
 # is only honoured for requests that actually came through the gateway.
-PROXY_SECRET = os.environ.get("DAS_TRUSTED_PROXY_SECRET")
+PROXY_SECRET = _resolve_secret("DAS_TRUSTED_PROXY_SECRET")
 
 
 def _startup_errors(env, secret, has_privkey, proxy_secret):
@@ -110,6 +129,36 @@ def _startup_errors(env, secret, has_privkey, proxy_secret):
                         "trusted without authentication. Front the API with an authn "
                         "proxy and set the shared secret (F2).")
     return errs
+
+
+# Lightweight in-process rate limit (F5, defense-in-depth). Real DoS protection
+# belongs at a reverse proxy; this is a backstop. DAS_RATE_LIMIT = requests/min per
+# client (X-DAS-Actor, else source IP); 0/unset disables it.
+RATE_LIMIT = int(os.environ.get("DAS_RATE_LIMIT", "0"))
+
+
+class _RateLimiter:
+    """Fixed-window per-client limiter (thread-safe)."""
+
+    def __init__(self, per_min):
+        self.per_min = per_min
+        self._lock = threading.Lock()
+        self._hits = {}
+
+    def allow(self, client, now=None):
+        if self.per_min <= 0:
+            return True
+        window = int((now if now is not None else time.time()) // 60)
+        with self._lock:
+            w, c = self._hits.get(client, (window, 0))
+            if w != window:
+                w, c = window, 0
+            c += 1
+            self._hits[client] = (w, c)
+            return c <= self.per_min
+
+
+RATE_LIMITER = _RateLimiter(RATE_LIMIT)
 
 
 _fatal = _startup_errors(ENV, SECRET, PRIVKEY is not None, PROXY_SECRET)
@@ -199,6 +248,19 @@ app = Flask(__name__)
 def _actor():
     body = request.get_json(silent=True) or {}
     return request.headers.get("X-DAS-Actor") or body.get("actor") or "root"
+
+
+@app.before_request
+def _rate_limit():
+    """F5: cap requests/min per client (source IP, or actor) as a backstop. The
+    liveness probe is exempt."""
+    if request.path == "/health":
+        return None
+    client = request.remote_addr or request.headers.get("X-DAS-Actor") or "anon"
+    if not RATE_LIMITER.allow(client):
+        return jsonify({"error": "rate limited",
+                        "reason": f"exceeded {RATE_LIMITER.per_min} requests/min"}), 429
+    return None
 
 
 @app.before_request
