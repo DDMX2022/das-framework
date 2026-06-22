@@ -74,7 +74,8 @@ Requires Python 3.9+. The governance control plane is **NumPy + Flask only** (no
 ```bash
 pip install -e ".[web]"     # governance control plane + REST API
 # or: pip install -e .             (NumPy core only)
-#     pip install -e ".[all]"      (everything: torch, flask, scikit-learn, pandas)
+#     pip install -e ".[hf]"       (real frozen text encoder: torch + sentence-transformers)
+#     pip install -e ".[all]"      (everything: torch, flask, sentence-transformers, scikit-learn, pandas)
 ```
 
 ### Run the governance API
@@ -116,7 +117,7 @@ curl localhost:5070/audit/verify                                     # re-walk t
 python apps/console.py        # http://localhost:5070
 ```
 
-Route a query and watch it hit the right expert; graft a new expert (existing ones stay byte-identical); prune one; and watch the SHA-256 audit trail update live. With PyTorch installed, the console backs each expert with a **real LoRA adapter on a shared frozen backbone**; without torch it uses the NumPy core.
+Route a query and watch it hit the right expert; graft a new expert (existing ones stay byte-identical); prune one; and watch the SHA-256 audit trail update live. With the `[hf]` extra installed, the console runs on a **real frozen pretrained sentence encoder (MiniLM) over real text** — each expert is a LoRA adapter on those embeddings; with only `torch` it uses synthetic vectors; with neither, the NumPy core.
 
 ### See the guarantees, with numbers
 
@@ -124,6 +125,7 @@ Route a query and watch it hit the right expert; graft a new expert (existing on
 python benchmarks/governance_benchmark.py  # Monolith vs Isolated experts vs DAS control plane
 python examples/control_plane_demo.py      # RBAC, tenant-delete isolation, tamper detection, persistence
 python examples/demo.py                    # core lifecycle + the byte-identical forgetting proof (NumPy only)
+python examples/hf_governance_demo.py      # the same guarantees on a REAL encoder + REAL text ([hf] extra)
 pytest -q                          # full test suite
 ```
 
@@ -268,7 +270,7 @@ The defensible home is **governance — auditable, isolated, deletable model fle
 | Phase | Goal | Status |
 |---|---|---|
 | **0 · Foundation** | Credible engineering | ✅ Versioned package, green CI, test suite |
-| **1 · Real backend** | Stop being toy-scale | 🟡 LoRA experts in the console; HuggingFace-model backbone remains |
+| **1 · Real backend** | Stop being toy-scale | 🟡 Real frozen pretrained encoder (MiniLM) + real text in the console & demo; LoRA-on-the-transformer + large-model scale remain |
 | **2 · Governance control plane** | The product | ✅ Signed audit, RBAC, multi-tenancy, registry, persistence |
 | **3 · Integrations** | Fit existing stacks | 🟡 LangGraph node + Docker/k8s deploy done; HF Hub interop remains |
 | **4 · Prove & launch** | Evidence + GTM | 🟡 Benchmark + case study + self security review done; real design partner, independent audit, open-core 1.0 remain |
@@ -291,6 +293,7 @@ das/                         NumPy core + governance (the product)
 │   └── langgraph_node.py    DASExpertNode — governed expert as a LangGraph node
 └── hub.py                   Leaf marketplace (publish / pull / graft, hash-verified)
 das_torch.py                 PyTorch backend (autograd, checkpointing, ConvLeaf, LoRA)
+das_text.py                  Real frozen pretrained encoder (MiniLM) + real demo text
 
 apps/                        Runnable entry points
 ├── governance_api.py        REST control plane (NumPy + Flask) — the deployable unit
@@ -299,7 +302,7 @@ apps/                        Runnable entry points
 ├── app.py                   Research visualizer dashboard
 └── templates/               HTML for the Flask apps
 
-examples/                    Demos (governance_demo, langgraph_demo, lifecycle, hub, …)
+examples/                    Demos (hf_governance_demo, governance_demo, langgraph_demo, lifecycle, …)
 benchmarks/                  Benchmarks + research scripts
 ├── governance_benchmark.py  Monolith vs Isolated vs DAS-CP (with numbers)
 ├── lora_bench.py            DAS ≈ per-task LoRA + a router

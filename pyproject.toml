@@ -16,7 +16,10 @@ dependencies = ["numpy"]
 [project.optional-dependencies]
 torch = ["torch", "torchvision"]
 web = ["flask"]
-all = ["torch", "torchvision", "flask", "scikit-learn", "pandas"]
+# Real frozen pretrained text encoder (MiniLM) for the Phase-1 "real backend"
+# path — the console's real-text mode and examples/hf_governance_demo.py.
+hf = ["torch", "sentence-transformers"]
+all = ["torch", "torchvision", "flask", "sentence-transformers", "scikit-learn", "pandas"]
 
 [project.urls]
 Homepage = "https://github.com/DDMX2022/das-framework"
@@ -24,7 +27,7 @@ Homepage = "https://github.com/DDMX2022/das-framework"
 [tool.setuptools]
 # the NumPy core is the importable package; the PyTorch backend is a top-level module
 packages = ["das"]
-py-modules = ["das_torch"]
+py-modules = ["das_torch", "das_text"]
 
 [tool.pytest.ini_options]
 # Tests import the package (das, das_torch) plus two relocated entry-point
