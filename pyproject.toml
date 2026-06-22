@@ -19,7 +19,9 @@ web = ["flask"]
 # Real frozen pretrained text encoder (MiniLM) for the Phase-1 "real backend"
 # path — the console's real-text mode and examples/hf_governance_demo.py.
 hf = ["torch", "sentence-transformers"]
-all = ["torch", "torchvision", "flask", "sentence-transformers", "scikit-learn", "pandas"]
+# Asymmetric (Ed25519) audit signing — public-key-verifiable compliance docs (F7).
+crypto = ["cryptography"]
+all = ["torch", "torchvision", "flask", "sentence-transformers", "cryptography", "scikit-learn", "pandas"]
 
 [project.scripts]
 das-verify = "das.audit_verify:main"

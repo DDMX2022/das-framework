@@ -92,5 +92,6 @@ build any of it without the Phase 0 design partner pulling.
 3. **Signed, exportable audit log** (the governance differentiator made real).
    → **Done.** `GET /audit/export` emits a self-contained document (chain + real
    weight fingerprints); the `das-verify` CLI verifies it offline — keyless
-   (structural) or keyed (HMAC authenticity). Next: Ed25519 so a regulator
-   verifies authenticity with only a public key (SECURITY_REVIEW.md F7).
+   (structural) or keyed (HMAC authenticity). **Plus opt-in Ed25519** signing
+   (`DAS_AUDIT_PRIVKEY`) so a regulator verifies authorship with only a public key
+   — closes SECURITY_REVIEW.md F7. Remaining: freshness anchor (F1).
