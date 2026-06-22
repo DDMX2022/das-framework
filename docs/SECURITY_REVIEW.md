@@ -50,16 +50,24 @@ design's main strength and is what makes a swapped weights file detectable.
 
 ## Findings — real gaps (ranked)
 
-### F1 · Rollback / freshness is NOT proven (HIGH)
+### F1 · Rollback / freshness — anchor now available (was HIGH; addressed, opt-in)
 The audit chain proves *internal* consistency and ordering, **not freshness**. An
 attacker with write access to `DAS_STATE` can restore an *older, self-consistent*
 snapshot (matching `forest.npz` + `control_plane.json` + `audit.json` from a
 previous `save()`). Both `verify()` and `state_matches_audit()` pass, because the
-old triple is internally valid. This could silently undo a deletion or
-role-revocation.
-**Mitigation (not yet built):** anchor the latest `(seq, last_sig)` to an
-append-only external store (a monotonic counter, a notarization service, or a
-transparency log) and refuse to load a chain shorter/older than the anchor.
+old triple is internally valid — silently undoing a deletion or role-revocation.
+**Now shipped (opt-in):** a `FreshnessAnchor` (`das/freshness.py`) records the
+chain's latest `(seq, head)` on every `save()`; `load()` refuses any restored chain
+that doesn't contain the anchored head at the anchored position (shorter/older/
+forked) with `RollbackDetected`. Wire it via `DAS_ANCHOR` on the API (it then
+*refuses to start* on a rolled-back snapshot). Forging a longer valid chain needs
+the signing key, so a `DAS_STATE`-only attacker can't defeat it. *Tested:*
+`test_freshness.py`; demo `examples/freshness_demo.py`.
+**Residual (important):** the anchor only helps if it lives on a store the
+`DAS_STATE` writer **cannot also roll back** — a separate volume, an append-only/
+WORM store, a monotonic counter, or a transparency log. The file backend is the
+reference; the API warns if `DAS_ANCHOR` is placed inside `DAS_STATE`. This is
+opt-in; the default (no anchor) still has the gap.
 
 ### F2 · Identity is asserted, not authenticated (HIGH, API only)
 `apps/governance_api.py` takes the principal from the `X-DAS-Actor` header. RBAC is
@@ -123,8 +131,9 @@ zero-dependency default.
 
 ## Recommendations, in priority order
 
-1. **Build F1 (freshness anchoring)** — it's the one gap that defeats the
-   deletion/revocation guarantees the product is sold on.
+1. ~~Build F1 (freshness anchoring)~~ **— done (opt-in `FreshnessAnchor`).** Make
+   it the default for regulated deployments and document anchor-store custody (it
+   must be on a store the `DAS_STATE` writer cannot roll back).
 2. **Enforce F3** (refuse default secret in prod) — cheap, high value.
 3. **Document/enforce F2** deployment contract (authn proxy mandatory).
 4. ~~Adopt asymmetric signing (F7)~~ **— done (opt-in Ed25519).** Make it the
@@ -138,6 +147,7 @@ zero-dependency default.
 python examples/control_plane_demo.py     # RBAC denials, tenant-delete isolation, tamper detection, persistence
 python examples/audit_export_demo.py      # export the signed log + verify it offline (das-verify)
 python examples/ed25519_audit_demo.py     # public-key-verifiable audit (F7); needs .[crypto]
+python examples/freshness_demo.py         # refuse a rolled-back snapshot (F1)
 python benchmarks/governance_benchmark.py # audit/RBAC/provenance vs baselines, with numbers
-pytest tests/test_governance.py tests/test_governance_api.py tests/test_audit_export.py tests/test_audit_ed25519.py -q
+pytest tests/test_governance.py tests/test_governance_api.py tests/test_audit_export.py tests/test_audit_ed25519.py tests/test_freshness.py -q
 ```

@@ -249,11 +249,15 @@ class ControlPlane:
         })
 
     # ── persistence ────────────────────────────────────────────────
-    def save(self, path):
+    def save(self, path, anchor=None):
         """Persist the whole control plane to a directory: the forest weights
         (NumPy), the governance state (tenants/users/registry, JSON), and the
         signed audit log (JSON). The forest is saved verbatim so every expert's
-        weight_hash is preserved byte-for-byte across a restart."""
+        weight_hash is preserved byte-for-byte across a restart.
+
+        If `anchor` (a FreshnessAnchor) is given, the chain's latest (seq, head)
+        is recorded to it, so a later `load` can refuse a rolled-back snapshot
+        (SECURITY_REVIEW F1). The anchor must live outside `path`."""
         os.makedirs(path, exist_ok=True)
         f = self.forest
         arrays = {"router_W": f.router.W, "router_b": f.router.b}
@@ -276,14 +280,20 @@ class ControlPlane:
         with open(os.path.join(path, "control_plane.json"), "w") as fh:
             json.dump(meta, fh, indent=2)
         self.audit.export(os.path.join(path, "audit.json"))
+        if anchor is not None and self.audit.entries:
+            anchor.record(len(self.audit.entries) - 1, self.audit.head)
 
     @classmethod
-    def load(cls, path, secret="das-dev-key", private_key=None):
+    def load(cls, path, secret="das-dev-key", private_key=None, anchor=None):
         """Reconstruct a control plane saved by `save`. The same `secret` is
         required to validate the audit log (it is never written to disk). Does
         NOT append to the log — the restored chain is exactly as saved; verify
         it with `verify_audit(...)` and link it to the weights with
-        `state_matches_audit()`."""
+        `state_matches_audit()`.
+
+        If `anchor` (a FreshnessAnchor) is given, the restored chain is checked
+        against it and a rolled-back / forked snapshot raises `RollbackDetected`
+        (SECURITY_REVIEW F1)."""
         with open(os.path.join(path, "control_plane.json")) as fh:
             meta = json.load(fh)
         npz = np.load(os.path.join(path, "forest.npz"))
@@ -309,6 +319,8 @@ class ControlPlane:
         cp.tenants = set(meta["tenants"])
         cp.experts = meta["experts"]
         cp._next_eid = meta["next_eid"]
+        if anchor is not None:
+            anchor.enforce(cp.audit.entries)        # raises RollbackDetected on stale/forked state
         return cp
 
     def state_matches_audit(self):
