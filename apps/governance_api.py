@@ -16,6 +16,9 @@ State & secret:
   DAS_AUDIT_PRIVKEY path to an Ed25519 private-key PEM. If set, the audit log is
                     signed asymmetrically so /audit/export is verifiable with only
                     the public key (no shared secret). Overrides HMAC. Optional.
+  DAS_ANCHOR        path to an append-only freshness anchor (F1). If set, each save
+                    records the chain tip and the API REFUSES TO START on a rolled-
+                    back/forged snapshot. Must live OUTSIDE DAS_STATE. Optional.
   DAS_PORT          listen port (default 5070).
 
 Identity:
@@ -50,6 +53,7 @@ sys.path.insert(0, ".")
 from das.model import DASForest
 from das.functional import softmax
 from das.governance import ControlPlane, AccessDenied
+from das.freshness import FreshnessAnchor, RollbackDetected
 
 STATE = os.environ.get("DAS_STATE")
 SECRET = os.environ.get("DAS_AUDIT_SECRET", "das-dev-key")
@@ -64,6 +68,18 @@ _pk_path = os.environ.get("DAS_AUDIT_PRIVKEY")
 if _pk_path:
     with open(_pk_path, "rb") as _f:
         PRIVKEY = _f.read()
+
+# Optional freshness/rollback anchor (SECURITY_REVIEW F1): if DAS_ANCHOR points to
+# an append-only file, each save records the chain tip and each load refuses a
+# rolled-back snapshot. It MUST live outside DAS_STATE (a separate, more-trusted
+# store) — otherwise an attacker who can roll back DAS_STATE can roll it back too.
+ANCHOR = None
+_anchor_path = os.environ.get("DAS_ANCHOR")
+if _anchor_path:
+    if STATE and os.path.abspath(_anchor_path).startswith(os.path.abspath(STATE) + os.sep):
+        print("  WARNING: DAS_ANCHOR is inside DAS_STATE — it provides no rollback "
+              "protection there; put it on a separate, more-trusted store.")
+    ANCHOR = FreshnessAnchor(_anchor_path)
 
 
 # ── bootstrap a small two-tenant fleet so the API serves something real ──
@@ -117,7 +133,11 @@ def _bootstrap():
 def _make_cp():
     if STATE and os.path.isdir(STATE) and os.path.exists(os.path.join(STATE, "control_plane.json")):
         print(f"Loading control plane from {STATE} ...")
-        cp = ControlPlane.load(STATE, secret=SECRET, private_key=PRIVKEY)
+        try:
+            cp = ControlPlane.load(STATE, secret=SECRET, private_key=PRIVKEY, anchor=ANCHOR)
+        except RollbackDetected as e:
+            print(f"  REFUSING TO START: rolled-back/forged state detected — {e}")
+            sys.exit(1)
         ok = cp.state_matches_audit()
         print(f"  loaded: {len(cp.experts)} experts, audit chain ok={cp.audit.verify()[0]}, "
               f"state↔audit bound={ok}")
@@ -128,7 +148,7 @@ def _make_cp():
     print("Bootstrapping a demo two-tenant fleet ...")
     cp = _bootstrap()
     if STATE:
-        os.makedirs(STATE, exist_ok=True); cp.save(STATE)
+        os.makedirs(STATE, exist_ok=True); cp.save(STATE, anchor=ANCHOR)
         print(f"  saved bootstrapped state to {STATE}")
     return cp
 
@@ -226,8 +246,9 @@ def save():
     if not STATE:
         return jsonify({"error": "DAS_STATE is not set; nowhere to persist"}), 400
     cp._check(_actor(), "manage")          # only managers may persist
-    cp.save(STATE)
-    return jsonify({"saved_to": STATE, "experts": len(cp.experts)})
+    cp.save(STATE, anchor=ANCHOR)
+    return jsonify({"saved_to": STATE, "experts": len(cp.experts),
+                    "freshness_anchored": ANCHOR is not None})
 
 
 if __name__ == "__main__":

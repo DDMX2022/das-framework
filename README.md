@@ -145,6 +145,7 @@ python examples/demo.py                    # core lifecycle + the byte-identical
 python examples/hf_governance_demo.py      # the same guarantees on a REAL encoder + REAL text ([hf] extra)
 python examples/audit_export_demo.py       # export the signed log → verify it offline (the das-verify story)
 python examples/ed25519_audit_demo.py      # public-key-verifiable audit — regulator needs no secret ([crypto])
+python examples/freshness_demo.py          # refuse a rolled-back snapshot — a deletion can't be silently undone
 pytest -q                          # full test suite
 ```
 

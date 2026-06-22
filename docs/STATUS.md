@@ -48,6 +48,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Real encoder path (Phase 1) | frozen pretrained MiniLM embeddings of **real text** → router + isolated LoRA experts | routes real sentences; graft/prune byte-identical on real text — `das_text.py`, `examples/hf_governance_demo.py` |
 | Exportable audit artifact | self-contained signed document (chain + real fingerprints) + offline `das-verify` (keyless structural + keyed authenticity) | export→verify + tamper caught PASS — `das/audit_verify.py`, `examples/audit_export_demo.py`, `tests/test_audit_export.py` |
 | Public-key-verifiable audit (F7) | opt-in **Ed25519** signing → export verifiable with only the public key, no shared secret (`DAS_AUDIT_PRIVKEY` / `private_key=`) | regulator-verifies + wrong-key/tamper rejected, end-to-end through the API PASS — `das/audit.py`, `examples/ed25519_audit_demo.py`, `tests/test_audit_ed25519.py` |
+| Freshness / rollback anchor (F1) | append-only anchor of the chain tip (`DAS_ANCHOR`); load **refuses** a rolled-back/forked snapshot so a deletion can't be silently undone | rollback refused + current-state loads + append-only PASS — `das/freshness.py`, `examples/freshness_demo.py`, `tests/test_freshness.py` |
 
 ## Key measured findings
 

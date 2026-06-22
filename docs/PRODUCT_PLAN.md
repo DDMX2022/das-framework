@@ -94,4 +94,5 @@ build any of it without the Phase 0 design partner pulling.
    weight fingerprints); the `das-verify` CLI verifies it offline — keyless
    (structural) or keyed (HMAC authenticity). **Plus opt-in Ed25519** signing
    (`DAS_AUDIT_PRIVKEY`) so a regulator verifies authorship with only a public key
-   — closes SECURITY_REVIEW.md F7. Remaining: freshness anchor (F1).
+   — closes SECURITY_REVIEW.md F7. **Plus** an opt-in freshness anchor
+   (`DAS_ANCHOR`) that refuses rolled-back/forged snapshots — closes F1.
