@@ -65,10 +65,13 @@ class ControlPlane:
     carries a stable monotonic `eid` so audit references survive index shifts.
     """
 
-    def __init__(self, forest, seed_tenant, seed_name, secret="das-dev-key", root="root"):
+    def __init__(self, forest, seed_tenant, seed_name, secret="das-dev-key",
+                 root="root", private_key=None):
         self.forest = forest
         self.life = ForestLifecycle(forest)
-        self.audit = AuditLog(secret)
+        # private_key (Ed25519) → asymmetric, public-key-verifiable audit (F7);
+        # otherwise HMAC with `secret` (default, zero-dependency).
+        self.audit = AuditLog(secret=secret, private_key=private_key)
         self.users = {root: {"role": "admin", "tenant": None}}
         self.tenants = {seed_tenant}
         # one record per existing leaf, in leaf order
@@ -275,7 +278,7 @@ class ControlPlane:
         self.audit.export(os.path.join(path, "audit.json"))
 
     @classmethod
-    def load(cls, path, secret="das-dev-key"):
+    def load(cls, path, secret="das-dev-key", private_key=None):
         """Reconstruct a control plane saved by `save`. The same `secret` is
         required to validate the audit log (it is never written to disk). Does
         NOT append to the log — the restored chain is exactly as saved; verify
@@ -300,7 +303,8 @@ class ControlPlane:
         cp = cls.__new__(cls)                       # bypass __init__'s seeding
         cp.forest = forest
         cp.life = ForestLifecycle(forest)
-        cp.audit = AuditLog.load(os.path.join(path, "audit.json"), secret=secret)
+        cp.audit = AuditLog.load(os.path.join(path, "audit.json"), secret=secret,
+                                 private_key=private_key)
         cp.users = meta["users"]
         cp.tenants = set(meta["tenants"])
         cp.experts = meta["experts"]

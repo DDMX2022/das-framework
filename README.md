@@ -75,7 +75,8 @@ Requires Python 3.9+. The governance control plane is **NumPy + Flask only** (no
 pip install -e ".[web]"     # governance control plane + REST API
 # or: pip install -e .             (NumPy core only)
 #     pip install -e ".[hf]"       (real frozen text encoder: torch + sentence-transformers)
-#     pip install -e ".[all]"      (everything: torch, flask, sentence-transformers, scikit-learn, pandas)
+#     pip install -e ".[crypto]"   (public-key-verifiable Ed25519 audit signing: cryptography)
+#     pip install -e ".[all]"      (everything: torch, flask, sentence-transformers, cryptography, scikit-learn, pandas)
 ```
 
 ### Run the governance API
@@ -118,6 +119,13 @@ das-verify das_audit.json                    # keyless: chain + fingerprints int
 das-verify das_audit.json --secret $SECRET   # + HMAC authenticity
 ```
 
+For an arms-length verifier (a regulator), sign asymmetrically instead — set
+`DAS_AUDIT_PRIVKEY` to an Ed25519 PEM and they verify with only the **public key**, no secret:
+
+```bash
+das-verify das_audit.json --pubkey <public-hex>   # Ed25519: authorship, no shared secret
+```
+
 > Identity is taken from the `X-DAS-Actor` header and is **asserted, not authenticated** — run the API behind an authn proxy (mTLS/OIDC). See the [security review](docs/SECURITY_REVIEW.md).
 
 ### Try the interactive console
@@ -136,6 +144,7 @@ python examples/control_plane_demo.py      # RBAC, tenant-delete isolation, tamp
 python examples/demo.py                    # core lifecycle + the byte-identical forgetting proof (NumPy only)
 python examples/hf_governance_demo.py      # the same guarantees on a REAL encoder + REAL text ([hf] extra)
 python examples/audit_export_demo.py       # export the signed log → verify it offline (the das-verify story)
+python examples/ed25519_audit_demo.py      # public-key-verifiable audit — regulator needs no secret ([crypto])
 pytest -q                          # full test suite
 ```
 

@@ -95,16 +95,21 @@ crash dumps, `/proc`, or child processes.
 **Mitigation:** prefer mounted-file secrets over env where the platform supports
 it; scrub on shutdown is out of scope for Python.
 
-### F7 · Third-party authenticity needs the shared secret (MEDIUM)
-The signatures are HMAC (symmetric): confirming *authorship* — not just internal
-consistency — requires the same `DAS_AUDIT_SECRET` that produced the log. A
-recipient can verify a document is internally consistent and untampered **without**
-the key (chain + fingerprint checks; `das-verify` with no `--secret`), but proving
-it was produced by the system rather than fabricated wholesale means sharing the
-secret with the verifier, which weakens it as a root of trust.
-**Mitigation (not yet built):** sign entries with an asymmetric key (Ed25519) so
-anyone verifies authenticity with only the public key, while the private key stays
-on the writer. Pairs naturally with the F1 freshness anchor.
+### F7 · Third-party authenticity — Ed25519 signing now available (was MEDIUM; addressed, opt-in)
+By default the signatures are HMAC (symmetric), so confirming *authorship* requires
+the same `DAS_AUDIT_SECRET` that produced the log — fine for a contracted auditor
+given the key, weak for an arms-length regulator.
+**Now shipped (opt-in):** sign with an **Ed25519** private key instead —
+`DAS_AUDIT_PRIVKEY` on the API, or `private_key=` on `AuditLog`/`ControlPlane`
+(`pip install -e ".[crypto]"`). Entries are then verifiable by anyone holding only
+the **public key**: `das-verify doc.json --pubkey <hex>`. The private key never
+enters the exported document. *Tested:* `test_audit_ed25519.py`; demo
+`examples/ed25519_audit_demo.py`; verified end-to-end through `GET /audit/export`.
+**Residual:** the export embeds the public key for convenience — **pin the expected
+key out-of-band** to prove authorship (don't trust the embedded key alone). And
+authenticity is orthogonal to **freshness (F1)**: an Ed25519 signature doesn't prove
+the log is the *latest*, so pair it with the F1 anchor. HMAC remains the
+zero-dependency default.
 
 ## Non-findings (checked, currently fine)
 
@@ -122,8 +127,8 @@ on the writer. Pairs naturally with the F1 freshness anchor.
    deletion/revocation guarantees the product is sold on.
 2. **Enforce F3** (refuse default secret in prod) — cheap, high value.
 3. **Document/enforce F2** deployment contract (authn proxy mandatory).
-4. **Adopt asymmetric signing (F7)** so an exported log is verifiable by a
-   regulator with only a public key — directly strengthens the compliance story.
+4. ~~Adopt asymmetric signing (F7)~~ **— done (opt-in Ed25519).** Make it the
+   default for regulated deployments and document key custody.
 5. Harden the serving stack (F5) and adopt trusted timestamps (F4).
 6. Commission an **independent** security audit before any 1.0 / GA.
 
@@ -132,6 +137,7 @@ on the writer. Pairs naturally with the F1 freshness anchor.
 ```bash
 python examples/control_plane_demo.py     # RBAC denials, tenant-delete isolation, tamper detection, persistence
 python examples/audit_export_demo.py      # export the signed log + verify it offline (das-verify)
+python examples/ed25519_audit_demo.py     # public-key-verifiable audit (F7); needs .[crypto]
 python benchmarks/governance_benchmark.py # audit/RBAC/provenance vs baselines, with numbers
-pytest tests/test_governance.py tests/test_governance_api.py tests/test_audit_export.py -q
+pytest tests/test_governance.py tests/test_governance_api.py tests/test_audit_export.py tests/test_audit_ed25519.py -q
 ```

@@ -13,6 +13,9 @@ State & secret:
                     saved there; if unset, a demo fleet runs in memory.
   DAS_AUDIT_SECRET  HMAC secret for the audit log. NEVER written to disk — it
                     must be supplied at boot to validate/extend the chain.
+  DAS_AUDIT_PRIVKEY path to an Ed25519 private-key PEM. If set, the audit log is
+                    signed asymmetrically so /audit/export is verifiable with only
+                    the public key (no shared secret). Overrides HMAC. Optional.
   DAS_PORT          listen port (default 5070).
 
 Identity:
@@ -52,6 +55,16 @@ STATE = os.environ.get("DAS_STATE")
 SECRET = os.environ.get("DAS_AUDIT_SECRET", "das-dev-key")
 PORT = int(os.environ.get("DAS_PORT", "5070"))
 
+# Optional asymmetric audit signing (SECURITY_REVIEW F7): if DAS_AUDIT_PRIVKEY
+# points to an Ed25519 private-key PEM, the audit log is signed so an exported
+# document (GET /audit/export) is verifiable with only the PUBLIC key — no shared
+# secret. Default stays HMAC. The private key is read at boot and never returned.
+PRIVKEY = None
+_pk_path = os.environ.get("DAS_AUDIT_PRIVKEY")
+if _pk_path:
+    with open(_pk_path, "rb") as _f:
+        PRIVKEY = _f.read()
+
 
 # ── bootstrap a small two-tenant fleet so the API serves something real ──
 def _bootstrap():
@@ -90,7 +103,8 @@ def _bootstrap():
     for _ in range(250):
         i = rng.integers(0, N, 32); leaf.backward(ce(leaf.forward(Xs[i]), ys[i]), 0.05)
     leaf.frozen = True
-    cp = ControlPlane(forest, seed_tenant="acme", seed_name="acme-tax", secret=SECRET)
+    cp = ControlPlane(forest, seed_tenant="acme", seed_name="acme-tax",
+                      secret=SECRET, private_key=PRIVKEY)
     cp.register_tenant("root", "globex")
     cp.add_user("root", "alice", "operator", tenant="acme")
     cp.add_user("root", "bob", "operator", tenant="globex")
@@ -103,7 +117,7 @@ def _bootstrap():
 def _make_cp():
     if STATE and os.path.isdir(STATE) and os.path.exists(os.path.join(STATE, "control_plane.json")):
         print(f"Loading control plane from {STATE} ...")
-        cp = ControlPlane.load(STATE, secret=SECRET)
+        cp = ControlPlane.load(STATE, secret=SECRET, private_key=PRIVKEY)
         ok = cp.state_matches_audit()
         print(f"  loaded: {len(cp.experts)} experts, audit chain ok={cp.audit.verify()[0]}, "
               f"state↔audit bound={ok}")
@@ -142,6 +156,7 @@ def health():
         "experts": len(cp.experts), "tenants": sorted(cp.tenants),
         "embedding_dim": DIM, "audit_entries": len(cp.audit.entries),
         "audit_chain_ok": ok, "state_matches_audit": cp.state_matches_audit(),
+        "audit_scheme": cp.audit.scheme,
     })
 
 
