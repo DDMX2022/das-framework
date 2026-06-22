@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAS — Governance Console</title>
+<style>
+:root{
+  --bg:#070c10;--panel:#0d141b;--panel2:#111b24;--border:#1c2c38;--line:#16222c;
+  --text:#d6e2ec;--muted:#6b7e8f;--head:#8fb7d6;
+  --green:#46c98a;--green2:#8ff0c2;--blue:#5fb3f2;--amber:#f3b15a;--red:#f5736f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;
+     font-size:13px;line-height:1.5;padding:18px;max-width:1180px;margin:0 auto}
+code,.mono{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+a{color:var(--blue)}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;
+       border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px}
+h1{font-size:1.05rem;letter-spacing:.02em;color:var(--green2);font-weight:600}
+h1 .sub{display:block;font-size:.66rem;color:var(--muted);letter-spacing:.04em;margin-top:3px;font-weight:400}
+.idbar{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+select,input{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;
+             padding:6px 8px;font-family:inherit;font-size:.78rem;min-width:120px}
+button{background:var(--green);color:#04130c;border:none;border-radius:6px;padding:7px 13px;
+       font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;transition:filter .15s}
+button:hover{filter:brightness(1.12)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.ghost{background:transparent;border:1px solid var(--border);color:var(--head);font-weight:500}
+button.danger{background:transparent;border:1px solid #5a2b2b;color:var(--red);font-weight:500}
+button.danger:hover{background:#1d1011}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--muted)}
+.dot.ok{background:var(--green);box-shadow:0 0 7px var(--green)}
+.dot.bad{background:var(--red);box-shadow:0 0 7px var(--red)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin-bottom:16px}
+.metric{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:11px 13px}
+.metric .k{font-size:.58rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.metric .v{font-size:1.18rem;font-weight:600;margin-top:3px}
+.metric .v.good{color:var(--green2)}.metric .v.warn{color:var(--amber)}.metric .v.bad{color:var(--red)}
+.metric .v.s{font-size:.86rem;font-weight:500}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:840px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px}
+.card h2{font-size:.66rem;text-transform:uppercase;letter-spacing:.11em;color:var(--head);
+         margin-bottom:11px;display:flex;justify-content:space-between;align-items:center}
+.card h2 .act{display:flex;gap:7px}
+.hint{font-size:.66rem;color:var(--muted);margin-top:8px}
+
+table{width:100%;border-collapse:collapse;font-size:.74rem}
+th{text-align:left;color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;
+   padding:5px 8px;border-bottom:1px solid var(--border)}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.tag{display:inline-block;font-size:.6rem;padding:2px 7px;border-radius:20px;border:1px solid var(--border);color:var(--head)}
+.empty{color:var(--muted);font-size:.74rem;padding:14px 4px;text-align:center}
+
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
+.prov{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-size:.76rem}
+.prov .l{color:var(--muted);font-size:.6rem;text-transform:uppercase;letter-spacing:.07em}
+.prov b{color:var(--green2)}
+.bars{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+.bars button{background:var(--panel2);border:1px solid var(--border);color:var(--head);font-weight:500}
+.bars button:hover{border-color:var(--green);color:var(--green2)}
+
+#auditlog{font-size:.68rem;max-height:280px;overflow-y:auto;margin-top:4px}
+.ae{padding:6px 4px;border-bottom:1px solid var(--line);display:flex;gap:9px;align-items:baseline}
+.ae .seq{color:var(--muted);min-width:22px}
+.ae .ev{color:var(--blue);min-width:96px;font-weight:600}
+.ae .dt{color:var(--text);flex:1}
+.ae .ts{color:var(--muted);font-size:.6rem}
+.ae.deny .ev{color:var(--red)}
+
+#log{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:7px;z-index:50;max-width:340px}
+.toast{background:var(--panel2);border:1px solid var(--border);border-left-width:3px;border-radius:7px;
+       padding:9px 12px;font-size:.72rem;animation:slide .25s ease-out;box-shadow:0 6px 22px rgba(0,0,0,.4)}
+.toast.ok{border-left-color:var(--green)}.toast.err{border-left-color:var(--red)}
+.toast.info{border-left-color:var(--blue)}
+.toast .h{font-weight:600;margin-bottom:2px}
+@keyframes slide{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+.kbd{font-size:.62rem;background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--head)}
+</style></head>
+<body>
+
+<header>
+  <h1>DAS · Governance Console
+    <span class="sub">auditable, multi-tenant model fleet — every action access-controlled & cryptographically logged</span>
+  </h1>
+  <div class="idbar">
+    <div class="field">
+      <label>Acting as</label>
+      <select id="actor" title="The principal sent as X-DAS-Actor. RBAC is enforced on it.">
+        <option value="root">root · admin (all tenants)</option>
+        <option value="alice">alice · operator (acme)</option>
+        <option value="bob">bob · operator (globex)</option>
+        <option value="carol">carol · auditor (read-only)</option>
+      </select>
+    </div>
+    <div class="field" id="proxyField" style="display:none">
+      <label>Proxy credential</label>
+      <input id="proxy" placeholder="X-DAS-Proxy-Auth" type="password">
+    </div>
+    <div class="field">
+      <label>Status</label>
+      <div style="padding:6px 0;font-size:.74rem"><span class="dot" id="conn"></span><span id="connTxt">connecting…</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="cards" id="metrics">
+  <div class="metric"><div class="k">Experts (visible)</div><div class="v" id="m_experts">–</div></div>
+  <div class="metric"><div class="k">Tenants</div><div class="v s" id="m_tenants">–</div></div>
+  <div class="metric"><div class="k">Audit entries</div><div class="v" id="m_audit">–</div></div>
+  <div class="metric"><div class="k">Chain integrity</div><div class="v s" id="m_chain">–</div></div>
+  <div class="metric"><div class="k">State ↔ audit</div><div class="v s" id="m_bound">–</div></div>
+  <div class="metric"><div class="k">Signing scheme</div><div class="v s" id="m_scheme">–</div></div>
+</div>
+
+<div class="grid">
+  <!-- LEFT: models + routing -->
+  <div>
+    <div class="card">
+      <h2>Your models <span class="act"><button class="ghost" onclick="loadExperts()">Refresh</button></span></h2>
+      <table><thead><tr><th>eid</th><th>tenant</th><th>name</th><th></th></tr></thead>
+        <tbody id="experts"><tr><td colspan="4" class="empty">loading…</td></tr></tbody>
+      </table>
+      <div class="hint">Scope follows your role: a tenant operator sees only their own experts; admin/auditor see all.</div>
+    </div>
+
+    <div class="card">
+      <h2>Route a query <span class="tag" id="dimTag"></span></h2>
+      <div class="hint" style="margin-top:0;margin-bottom:9px">
+        In production the client embeds text locally and posts the vector — the control plane stays model-light.
+        Below, build a probe vector and route it to see <b>provenance</b> (which expert, confidence).
+      </div>
+      <div class="bars" id="simBars"></div>
+      <div class="row">
+        <button class="ghost" onclick="randomProbe()">Random probe</button>
+        <button onclick="route()">Route →</button>
+      </div>
+      <div id="prov" class="prov" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: audit -->
+  <div>
+    <div class="card">
+      <h2>Compliance audit log
+        <span class="act">
+          <button class="ghost" onclick="verifyChain()">Verify chain</button>
+          <button class="ghost" onclick="exportDoc()">Export signed doc</button>
+        </span>
+      </h2>
+      <div id="auditlog"><div class="empty">loading…</div></div>
+      <div class="hint">Export is a self-contained, independently verifiable document (chain + weight fingerprints, never the secret).
+        Verify offline: <span class="kbd">das-verify das_audit.json</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Persistence</h2>
+      <div class="row">
+        <button class="ghost" onclick="saveSnapshot()">Save snapshot</button>
+        <span class="hint" style="margin:0">Writes the fleet + signed log and records the freshness anchor (rollback-proof). Managers only.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+const DIM = {{ dim }};
+const CENTERS = {{ demo_centers|tojson }};
+const PROXY_REQUIRED = {{ proxy_required|tojson }};
+let probe = null;
+
+document.getElementById('dimTag').textContent = DIM + '-d vector';
+if (PROXY_REQUIRED) document.getElementById('proxyField').style.display = '';
+
+// ── identity & transport ────────────────────────────────────────────────
+function actor(){ return document.getElementById('actor').value; }
+function headers(json){
+  const h = {'X-DAS-Actor': actor()};
+  if (json) h['Content-Type'] = 'application/json';
+  const p = document.getElementById('proxy');
+  if (p && p.value) h['X-DAS-Proxy-Auth'] = p.value;
+  return h;
+}
+async function api(path, opts={}){
+  const res = await fetch(path, {...opts, headers: {...headers(opts.body!=null), ...(opts.headers||{})}});
+  let data = null; try { data = await res.json(); } catch(e){}
+  if (!res.ok){
+    const reason = (data && (data.reason || data.error)) || res.statusText;
+    const err = new Error(reason); err.status = res.status; err.data = data; throw err;
+  }
+  return data;
+}
+function toast(kind, head, msg){
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.innerHTML = `<div class="h">${head}</div>${msg||''}`;
+  document.getElementById('log').appendChild(el);
+  setTimeout(()=>{ el.style.opacity=0; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(),400); }, 4200);
+}
+function handle(e, what){
+  if (e.status === 403) toast('err', `Denied · ${what}`, `Your role isn't permitted: ${e.message}. <i>(This denial is itself audited.)</i>`);
+  else if (e.status === 401) toast('err', 'Unauthenticated', e.message + ' — set the proxy credential.');
+  else if (e.status === 429) toast('err', 'Rate limited', e.message);
+  else toast('err', `Error · ${what}`, e.message);
+}
+
+// ── health / metrics ──────────────────────────────────────────────────────
+async function refreshHealth(){
+  try{
+    const h = await api('/health');
+    document.getElementById('conn').className = 'dot ok';
+    document.getElementById('connTxt').textContent = h.backend;
+    document.getElementById('m_tenants').textContent = h.tenants.join(', ');
+    document.getElementById('m_audit').textContent = h.audit_entries;
+    setFlag('m_chain', h.audit_chain_ok, 'verified', 'BROKEN');
+    setFlag('m_bound', h.state_matches_audit, 'bound', 'MISMATCH');
+    document.getElementById('m_scheme').textContent = h.audit_scheme;
+  }catch(e){
+    document.getElementById('conn').className = 'dot bad';
+    document.getElementById('connTxt').textContent = 'unreachable';
+  }
+}
+function setFlag(id, ok, good, bad){
+  const el = document.getElementById(id);
+  el.textContent = ok ? '✓ ' + good : '✗ ' + bad;
+  el.className = 'v s ' + (ok ? 'good' : 'bad');
+}
+
+// ── models ────────────────────────────────────────────────────────────────
+async function loadExperts(){
+  const tb = document.getElementById('experts');
+  try{
+    const r = await api('/experts');
+    document.getElementById('m_experts').textContent = r.experts.length;
+    if (!r.experts.length){ tb.innerHTML = '<tr><td colspan="4" class="empty">no experts in your scope</td></tr>'; return; }
+    tb.innerHTML = r.experts.map(x => `<tr>
+        <td class="mono">${x.eid}</td>
+        <td><span class="tag">${x.tenant}</span></td>
+        <td class="mono">${x.name}</td>
+        <td style="text-align:right"><button class="danger" onclick="prune(${x.eid},'${x.name}')">Prune</button></td>
+      </tr>`).join('');
+  }catch(e){ handle(e,'list models'); tb.innerHTML = '<tr><td colspan="4" class="empty">—</td></tr>'; }
+}
+async function prune(eid, name){
+  if (!confirm(`Prune expert #${eid} (${name})? Survivors stay byte-identical; the action is logged.`)) return;
+  try{
+    const r = await api('/prune', {method:'POST', body: JSON.stringify({eid})});
+    toast('ok', `Pruned ${name}`, `survivors byte-identical: <b>${r.survivors_byte_identical}</b>`);
+    await Promise.all([loadExperts(), refreshHealth(), loadAudit()]);
+  }catch(e){ handle(e,'prune'); }
+}
+
+// ── routing ───────────────────────────────────────────────────────────────
+function buildSimBars(){
+  const bars = document.getElementById('simBars');
+  bars.innerHTML = Object.keys(CENTERS).map(k =>
+    `<button onclick="targetedProbe('${k}')">simulate ${k}</button>`).join('');
+}
+function targetedProbe(key){
+  const v = new Array(DIM).fill(0).map(()=> (Math.random()-0.5)*1.2);
+  v[CENTERS[key]] = 6.0 + (Math.random()-0.5)*0.6;   // matches the bootstrap cluster
+  probe = v; toast('info', `Probe → ${key}`, `${DIM}-d vector centred on this expert's cluster`);
+}
+function randomProbe(){
+  probe = new Array(DIM).fill(0).map(()=> +(Math.random()*2-1).toFixed(3));
+  toast('info', 'Random probe', `${DIM}-d vector (unbiased — may route anywhere)`);
+}
+async function route(){
+  if (!probe){ randomProbe(); }
+  try{
+    const r = await api('/predict', {method:'POST', body: JSON.stringify({embedding: probe})});
+    const pred = Array.isArray(r.prediction) ? r.prediction.map(x=>+x.toFixed(3)).join(', ') : r.prediction;
+    document.getElementById('prov').style.display = '';
+    document.getElementById('prov').innerHTML = `
+      <div class="l">routed to</div>
+      <div>expert <b>#${r.eid}</b> · <b>${r.name}</b> <span class="tag">${r.tenant}</span></div>
+      <div class="l" style="margin-top:8px">router confidence</div>
+      <div><b>${(r.confidence*100).toFixed(1)}%</b></div>
+      <div class="l" style="margin-top:8px">prediction (logits)</div>
+      <div class="mono">[${pred}]</div>`;
+  }catch(e){ handle(e,'route'); }
+}
+
+// ── audit ─────────────────────────────────────────────────────────────────
+async function loadAudit(){
+  const box = document.getElementById('auditlog');
+  try{
+    const r = await api('/audit?n=20');
+    if (!r.entries.length){ box.innerHTML = '<div class="empty">no entries</div>'; return; }
+    box.innerHTML = r.entries.slice().reverse().map(e => {
+      const deny = /deny|denied/i.test(e.event) ? ' deny' : '';
+      return `<div class="ae${deny}">
+        <span class="seq">${e.seq ?? ''}</span>
+        <span class="ev">${e.event}</span>
+        <span class="dt">${e.detail||''}</span>
+        <span class="ts">${(e.ts||'').replace('T',' ').replace('Z','')}</span>
+      </div>`;
+    }).join('');
+  }catch(e){ handle(e,'read audit'); box.innerHTML = '<div class="empty">— not permitted —</div>'; }
+}
+async function verifyChain(){
+  try{
+    const r = await api('/audit/verify');
+    if (r.ok) toast('ok', 'Audit chain verified', `${r.entries} entries · HMAC/Ed25519 + hash-chain intact`);
+    else toast('err', 'Chain BROKEN', `at index ${r.broken_index}: ${r.reason}`);
+  }catch(e){ handle(e,'verify'); }
+}
+async function exportDoc(){
+  try{
+    const doc = await api('/audit/export');
+    const blob = new Blob([JSON.stringify(doc, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'das_audit.json'; a.click();
+    URL.revokeObjectURL(url);
+    toast('ok', 'Exported das_audit.json', `${doc.count} entries · verify offline with <span class="kbd">das-verify</span>`);
+  }catch(e){ handle(e,'export'); }
+}
+
+// ── persistence ─────────────────────────────────────────────────────────────
+async function saveSnapshot(){
+  try{
+    const r = await api('/save', {method:'POST', body:'{}'});
+    toast('ok', 'Snapshot saved', `${r.experts} experts · freshness anchored: <b>${r.freshness_anchored}</b>`);
+    await loadAudit();
+  }catch(e){ handle(e,'save'); }
+}
+
+// ── boot ────────────────────────────────────────────────────────────────────
+function refreshAll(){ refreshHealth(); loadExperts(); loadAudit(); }
+document.getElementById('actor').addEventListener('change', refreshAll);
+const p = document.getElementById('proxy'); if (p) p.addEventListener('change', refreshAll);
+buildSimBars();
+refreshAll();
+setInterval(refreshHealth, 15000);
+</script>
+</body></html>
