@@ -45,6 +45,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Governance API + deploy | `apps/governance_api.py` (NumPy+Flask) + Dockerfile + k8s manifest | boot→predict→RBAC 403→persist→reload byte-identical + chain bound PASS |
 | Governance benchmark | Monolith vs Isolated experts vs DAS control plane | DAS ties isolation, wins audit/RBAC/provenance (numbers below) |
 | REST API | `apps/serve.py` + interactive page | live predictions |
+| Real encoder path (Phase 1) | frozen pretrained MiniLM embeddings of **real text** → router + isolated LoRA experts | routes real sentences; graft/prune byte-identical on real text — `das_text.py`, `examples/hf_governance_demo.py` |
 
 ## Key measured findings
 
@@ -80,6 +81,11 @@ toy scale, with a governance angle that's its real defensible value.
 - Beating frontier models; 90% cost cuts (unsupported by measurements).
 - The branding (Fibonacci benefits, "vector torque", "coiled strings") — cosmetic
   over a standard softmax-routed MoE.
+- **LoRA on the transformer's own weights** + large-real-model scale. The Phase-1
+  encoder is a *frozen featurizer*: real pretrained MiniLM → embeddings, with the
+  LoRA experts on a small backbone over those embeddings (not PEFT adapters inside
+  the encoder's attention). It removes the "synthetic data" objection, not the
+  "unproven at scale" one.
 
 ## Where it could genuinely go
 1. **Governance product** — own the auditable-isolation + deletion + audit-trail

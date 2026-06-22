@@ -30,6 +30,7 @@ try:
     import torch.nn as nn
     import torch.nn.functional as F
     from das_torch import LoRAForest, train_leaf_isolated_lora, train_router, leaf_hash
+    from das_text import TextEncoder, embed_domains, DEMO_CORPUS
     TORCH = True
 except Exception:
     TORCH = False
@@ -41,7 +42,10 @@ def _no_cache(resp):
     resp.headers["Cache-Control"] = "no-store, must-revalidate"
     return resp
 D, LEAF, N = 21, [21, 13, 8, 2], 300
-ALL_DOMAINS = ["math", "vision", "language", "audio", "finance", "medical", "legal", "weather"]
+# Text-appropriate, governance-flavoured domains (keys of das_text.DEMO_CORPUS).
+# The LoRA backend embeds REAL sentences for these; the NumPy fallback treats each
+# name as a distinct synthetic cluster.
+ALL_DOMAINS = ["legal", "medical", "finance", "code", "support", "hr"]
 CENTER = {name: i * 2 for i, name in enumerate(ALL_DOMAINS)}   # distinct cluster per domain
 LOCK = threading.Lock()
 
@@ -54,7 +58,7 @@ class Service:
 
     def reset(self):
         self.rng = np.random.default_rng(0)
-        self.active = ["math", "vision"]
+        self.active = ["legal", "medical"]
         self.forest = DASForest(D, LEAF, num_leaves=2, seed=7)
         for i, name in enumerate(self.active):
             self._train_leaf(i, name)
@@ -129,7 +133,7 @@ class Service:
         self._log("prune", f"removed expert '{name}' (right-to-be-forgotten) — others unchanged: {intact}")
         return {"ok": True, "non_interference": intact}
 
-FEAT = 32   # shared backbone feature width for the LoRA backend
+FEAT = 64   # shared backbone feature width for the LoRA backend
 
 class LoRAService:
     """Console backend where every expert is a REAL LoRA adapter on one shared,
@@ -137,14 +141,38 @@ class LoRAService:
     operations and audit surface as the NumPy Service, but the 'grow a forest'
     UI is now driving genuine torch LoRA experts: each graft trains an isolated
     adapter, each prune drops one, and the SHA-256 hashes are over the adapter
-    weights that actually moved (or provably didn't)."""
+    weights that actually moved (or provably didn't).
+
+    When the optional `[hf]` extra is installed, the input layer is a REAL frozen
+    pretrained sentence encoder (das_text.TextEncoder) and every expert trains and
+    routes on embeddings of REAL sentences — not synthetic clusters. If the encoder
+    can't load, it transparently falls back to the synthetic vectors."""
 
     def __init__(self):
         self.device = "cpu"
+        self.enc = None          # frozen text encoder, if [hf] is installed
+        self.in_dim = D          # encoder dim when real text, else synthetic D
+        self._emb = {}           # domain -> (emb, y), embedded once and cached
+        try:
+            self.enc = TextEncoder(device=self.device)
+            self.in_dim = self.enc.dim
+            print(f"  → console input: real frozen encoder {self.enc.model_name} ({self.in_dim}-d)")
+        except Exception as e:
+            print(f"  → text encoder unavailable ({type(e).__name__}); using synthetic vectors")
         self.reset()
 
-    # ── synthetic, clustered domain data (matches the NumPy Service) ──
+    def _domain(self, name):
+        """Embed a domain's real sentences once (cached), then reuse."""
+        if name not in self._emb:
+            self._emb[name] = embed_domains(self.enc, [name], DEMO_CORPUS)[name]
+        return self._emb[name]
+
     def _gen(self, name, n):
+        if self.enc is not None:                      # real text → real embeddings
+            emb, y = self._domain(name)
+            idx = torch.randint(0, emb.shape[0], (n,))
+            return emb[idx], y[idx]
+        # synthetic, clustered fallback (no [hf] extra installed)
         center = np.zeros(D); center[CENTER[name]] = 4.0
         seed = int(hashlib.md5(name.encode()).hexdigest(), 16) % (2**31)
         rule = np.random.default_rng(seed).normal(0, 1, D)
@@ -154,9 +182,10 @@ class LoRAService:
                 torch.tensor(y, dtype=torch.long))
 
     def _pretrain_backbone(self):
-        """Pretrain the shared backbone ONCE over all domains (a stand-in for a
-        frozen, broadly-pretrained encoder), then freeze it for good. Every
-        expert is added as a LoRA adapter on top; the backbone never moves
+        """Pretrain the shared backbone ONCE over all domains, then freeze it for
+        good. With the encoder installed it shapes REAL embeddings into router
+        features; the genuinely pretrained part is the frozen encoder beneath it.
+        Every expert is added as a LoRA adapter on top; the backbone never moves
         again — that's what makes the per-expert hashes meaningful."""
         torch.manual_seed(7)
         Xs, ds = [], []
@@ -183,15 +212,17 @@ class LoRAService:
 
     def reset(self):
         self.rng = np.random.default_rng(0)
-        self.active = ["math", "vision"]
+        self._emb = {}
+        self.active = ["legal", "medical"]
         torch.manual_seed(7)
-        self.forest = LoRAForest(D, FEAT, out_dim=2, num_leaves=len(self.active), rank=8).to(self.device)
+        self.forest = LoRAForest(self.in_dim, FEAT, out_dim=2, num_leaves=len(self.active), rank=8).to(self.device)
         self._pretrain_backbone()
         for i, name in enumerate(self.active):
             train_leaf_isolated_lora(self.forest, i, *self._gen(name, N), steps=400, device=self.device)
         self._train_router()
         self.alog = AuditLog()
-        self._log("init", f"forest created with LoRA experts: {', '.join(self.active)}")
+        backend = "real-text LoRA" if self.enc is not None else "synthetic LoRA"
+        self._log("init", f"forest created ({backend}) with experts: {', '.join(self.active)}")
 
     def _hashes(self):
         return {self.active[i]: leaf_hash(self.forest.leaves[i]) for i in range(len(self.active))}
@@ -265,7 +296,13 @@ class LoRAService:
         return {"ok": True, "non_interference": intact}
 
 svc = LoRAService() if TORCH else Service()
-print(f"  → console backend: {'LoRA experts (torch)' if TORCH else 'NumPy DASForest'}")
+if not TORCH:
+    _backend = "NumPy DASForest (synthetic)"
+elif getattr(svc, "enc", None) is not None:
+    _backend = "LoRA experts on a real frozen encoder + real text"
+else:
+    _backend = "LoRA experts (torch, synthetic vectors — install .[hf] for real text)"
+print(f"  → console backend: {_backend}")
 
 @app.route('/')
 def index(): return render_template('console.html', domains=ALL_DOMAINS)

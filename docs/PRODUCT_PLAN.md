@@ -84,5 +84,9 @@ build any of it without the Phase 0 design partner pulling.
 
 ## First concrete milestone (this is where to start)
 1. Back the console with **real LoRA-adapter experts on a HF model** (kills "it's synthetic").
+   → **Started.** `das_text.py` adds a frozen pretrained MiniLM encoder; the console
+   and `examples/hf_governance_demo.py` now route **real text** through isolated LoRA
+   experts (`pip install -e ".[hf]"`). Remaining: PEFT LoRA on the transformer's own
+   attention layers, and a real large-model backbone at a latency SLA.
 2. **Tests + CI + PyPI** release (credibility).
 3. **Signed, exportable audit log** (the governance differentiator made real).

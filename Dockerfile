@@ -10,7 +10,7 @@ WORKDIR /app
 # package + pyproject first lets this layer cache across code-only changes.
 COPY pyproject.toml README.md ./
 COPY das/ ./das/
-COPY das_torch.py ./
+COPY das_torch.py das_text.py ./
 RUN pip install --no-cache-dir .[web]
 
 COPY apps/governance_api.py ./
