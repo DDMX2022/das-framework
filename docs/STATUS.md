@@ -46,6 +46,7 @@ toy scale, with a governance angle that's its real defensible value.
 | Governance benchmark | Monolith vs Isolated experts vs DAS control plane | DAS ties isolation, wins audit/RBAC/provenance (numbers below) |
 | REST API | `apps/serve.py` + interactive page | live predictions |
 | Real encoder path (Phase 1) | frozen pretrained MiniLM embeddings of **real text** → router + isolated LoRA experts | routes real sentences; graft/prune byte-identical on real text — `das_text.py`, `examples/hf_governance_demo.py` |
+| Exportable audit artifact | self-contained signed document (chain + real fingerprints) + offline `das-verify` (keyless structural + keyed authenticity) | export→verify + tamper caught PASS — `das/audit_verify.py`, `examples/audit_export_demo.py`, `tests/test_audit_export.py` |
 
 ## Key measured findings
 

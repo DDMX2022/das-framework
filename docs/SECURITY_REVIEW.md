@@ -7,7 +7,7 @@
 > authors, written to be honest about gaps rather than to reassure. It is **not**
 > an independent third-party audit; a real launch needs one (roadmap Phase 4).
 >
-> **Last reviewed:** 2026-06-21 · against commit at time of writing.
+> **Last reviewed:** 2026-06-22 · against commit at time of writing.
 
 ## Assets & trust boundaries
 
@@ -28,6 +28,12 @@ design's main strength and is what makes a swapped weights file detectable.
 - **Audit integrity.** Each entry is HMAC-SHA256 signed and hash-chained to the
   previous; `verify()` re-walks both. Edit/reorder/insert/delete is caught.
   *Tested:* `test_audit_tamper_detected`, benchmark "tamper caught 100%".
+- **Exportable & independently verifiable.** `to_document()` / `GET /audit/export`
+  emit a self-contained document — the full chain plus the actual weight
+  fingerprints, never the secret. `das-verify` re-checks it offline: chain
+  continuity + fingerprint-vs-signed-hash need **no secret** (catch
+  reorder/insert/delete and any edit to the recorded fingerprints); full
+  authenticity uses the HMAC key. *Tested:* `test_audit_export.py`.
 - **State ↔ audit binding.** The last entry fingerprints the fleet; `load()`
   recomputes it from the restored weights (`state_matches_audit()`). So replacing
   the *unsigned* `forest.npz` with a different forest is detected even though the
@@ -89,6 +95,17 @@ crash dumps, `/proc`, or child processes.
 **Mitigation:** prefer mounted-file secrets over env where the platform supports
 it; scrub on shutdown is out of scope for Python.
 
+### F7 · Third-party authenticity needs the shared secret (MEDIUM)
+The signatures are HMAC (symmetric): confirming *authorship* — not just internal
+consistency — requires the same `DAS_AUDIT_SECRET` that produced the log. A
+recipient can verify a document is internally consistent and untampered **without**
+the key (chain + fingerprint checks; `das-verify` with no `--secret`), but proving
+it was produced by the system rather than fabricated wholesale means sharing the
+secret with the verifier, which weakens it as a root of trust.
+**Mitigation (not yet built):** sign entries with an asymmetric key (Ed25519) so
+anyone verifies authenticity with only the public key, while the private key stays
+on the writer. Pairs naturally with the F1 freshness anchor.
+
 ## Non-findings (checked, currently fine)
 
 - **Tenant scope bypass:** operators are checked against the *expert's* tenant on
@@ -105,13 +122,16 @@ it; scrub on shutdown is out of scope for Python.
    deletion/revocation guarantees the product is sold on.
 2. **Enforce F3** (refuse default secret in prod) — cheap, high value.
 3. **Document/enforce F2** deployment contract (authn proxy mandatory).
-4. Harden the serving stack (F5) and adopt trusted timestamps (F4).
-5. Commission an **independent** security audit before any 1.0 / GA.
+4. **Adopt asymmetric signing (F7)** so an exported log is verifiable by a
+   regulator with only a public key — directly strengthens the compliance story.
+5. Harden the serving stack (F5) and adopt trusted timestamps (F4).
+6. Commission an **independent** security audit before any 1.0 / GA.
 
 ## How to reproduce the protections
 
 ```bash
-python control_plane_demo.py        # RBAC denials, tenant-delete isolation, tamper detection, persistence
-python governance_benchmark.py      # audit/RBAC/provenance vs baselines, with numbers
-pytest tests/test_governance.py tests/test_governance_api.py -q
+python examples/control_plane_demo.py     # RBAC denials, tenant-delete isolation, tamper detection, persistence
+python examples/audit_export_demo.py      # export the signed log + verify it offline (das-verify)
+python benchmarks/governance_benchmark.py # audit/RBAC/provenance vs baselines, with numbers
+pytest tests/test_governance.py tests/test_governance_api.py tests/test_audit_export.py -q
 ```

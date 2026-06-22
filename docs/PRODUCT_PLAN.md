@@ -90,3 +90,7 @@ build any of it without the Phase 0 design partner pulling.
    attention layers, and a real large-model backbone at a latency SLA.
 2. **Tests + CI + PyPI** release (credibility).
 3. **Signed, exportable audit log** (the governance differentiator made real).
+   → **Done.** `GET /audit/export` emits a self-contained document (chain + real
+   weight fingerprints); the `das-verify` CLI verifies it offline — keyless
+   (structural) or keyed (HMAC authenticity). Next: Ed25519 so a regulator
+   verifies authenticity with only a public key (SECURITY_REVIEW.md F7).
