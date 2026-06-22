@@ -63,7 +63,7 @@ import threading
 import time
 
 import numpy as np
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 
 sys.path.insert(0, ".")
 from das.model import DASForest
@@ -170,10 +170,15 @@ if _fatal:
 
 
 # ── bootstrap a small two-tenant fleet so the API serves something real ──
+# Per-expert cluster centers for the demo fleet — also surfaced to the dashboard so
+# its "simulate query" buttons can build a probe vector that routes to that expert.
+DEMO_CENTERS = {"acme-tax": 0, "acme-legal": 4, "globex-vision": 8, "globex-nlp": 12}
+
+
 def _bootstrap():
     rng = np.random.default_rng(0)
     D, LEAF, N = 16, [16, 13, 8, 2], 160
-    centers = {"acme-tax": 0, "acme-legal": 4, "globex-vision": 8, "globex-nlp": 12}
+    centers = DEMO_CENTERS
     data = {}
 
     def make(key):
@@ -269,7 +274,7 @@ def _require_trusted_proxy():
     every request except the liveness probe must present the matching
     X-DAS-Proxy-Auth header (added by the gateway). This makes the X-DAS-Actor
     identity trustworthy, since only the gateway can produce a valid request."""
-    if PROXY_SECRET is None or request.path == "/health":
+    if PROXY_SECRET is None or request.path in ("/health", "/", "/favicon.ico"):
         return None
     if not hmac.compare_digest(request.headers.get("X-DAS-Proxy-Auth", ""), PROXY_SECRET):
         return jsonify({"error": "unauthenticated",
@@ -280,6 +285,25 @@ def _require_trusted_proxy():
 @app.errorhandler(AccessDenied)
 def _denied(e):
     return jsonify({"error": "access denied", "reason": str(e)}), 403
+
+
+@app.route("/")
+def dashboard():
+    """Tenant operational dashboard — a thin client over the JSON API below. The
+    page is the static shell; every privileged call it makes carries X-DAS-Actor
+    (and X-DAS-Proxy-Auth when the gateway contract is enabled)."""
+    return render_template(
+        "dashboard.html",
+        dim=DIM,
+        demo_centers=DEMO_CENTERS,
+        proxy_required=PROXY_SECRET is not None,
+        audit_scheme=cp.audit.scheme,
+    )
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return ("", 204)
 
 
 @app.route("/health")
