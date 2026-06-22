@@ -1,7 +1,7 @@
 # Case study — a multi-tenant regulated-AI provider
 
 > **Status: illustrative.** This is a worked scenario, not a deployed customer —
-> DAS does not yet have one (see the [roadmap](README.md#roadmap-to-production)).
+> DAS does not yet have one (see the [roadmap](../README.md#roadmap-to-production)).
 > But every capability claimed below is backed by a runnable script and a measured
 > number, not a slide. Where DAS *can't* do something, this says so.
 
@@ -26,7 +26,7 @@ customers come and go. The benchmark below is exactly why that hurts.
 
 ## What the measurements say
 
-All numbers from [`governance_benchmark.py`](governance_benchmark.py) (6
+All numbers from [`benchmarks/governance_benchmark.py`](../benchmarks/governance_benchmark.py) (6
 capabilities, 2 tenants, deterministic). "Isolated experts" = the LoRA-per-task
 equivalent; "DAS-CP" = DAS control plane.
 
@@ -53,8 +53,8 @@ build itself.
 
 1. **Cross-tenant isolation.** Each capability is a frozen expert; adding or
    retraining one leaves every other byte-identical (SHA-256 weight hash
-   unchanged). *Proof:* `governance_benchmark.py` → "others byte-identical 100%";
-   `control_plane_demo.py` → tenant-delete leaves the other tenant byte-identical.
+   unchanged). *Proof:* `benchmarks/governance_benchmark.py` → "others byte-identical 100%";
+   `examples/control_plane_demo.py` → tenant-delete leaves the other tenant byte-identical.
 
 2. **Provable right-to-be-forgotten.** `delete_tenant` removes exactly that
    tenant's experts and returns `non_interference: true` only if every survivor
@@ -74,16 +74,16 @@ build itself.
 
 5. **Per-answer provenance.** Each routed answer carries `tenant / expert / eid /
    confidence`, so an incident or invoice can be traced to one model.
-   *Proof:* `langgraph_demo.py` (4/4 domains attributed); `POST /predict` returns
+   *Proof:* `examples/langgraph_demo.py` (4/4 domains attributed); `POST /predict` returns
    the provenance record.
 
 ## How Northwind would deploy it
 
-- Run the control plane as the container in [`Dockerfile`](Dockerfile) /
-  [`deploy/k8s.yaml`](deploy/k8s.yaml); state on a volume, audit secret from a
+- Run the control plane as the container in [`Dockerfile`](../Dockerfile) /
+  [`deploy/k8s.yaml`](../deploy/k8s.yaml); state on a volume, audit secret from a
   k8s `Secret`.
 - Put it **under** their existing LangGraph orchestration via
-  [`DASExpertNode`](das/integrations/langgraph_node.py) — DAS is the governed
+  [`DASExpertNode`](../das/integrations/langgraph_node.py) — DAS is the governed
   routing layer, not a new orchestrator.
 - Export `audit.json` per period as the compliance artifact.
 

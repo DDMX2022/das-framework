@@ -8,13 +8,10 @@ data
 tests
 *.md
 !README.md
-# scripts/demos/benchmarks not needed to serve the governance API
-app.py
-serve.py
-benchmark.py
-*_demo.py
-*_bench.py
-*_stress.py
-mnist_stress.py
-templates
+# apps/examples/benchmarks not needed to serve the governance API —
+# the image copies only apps/governance_api.py, so re-include just that one.
+apps
+!apps/governance_api.py
+examples
+benchmarks
 csrc

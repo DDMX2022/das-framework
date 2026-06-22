@@ -13,7 +13,7 @@ COPY das/ ./das/
 COPY das_torch.py ./
 RUN pip install --no-cache-dir .[web]
 
-COPY governance_api.py ./
+COPY apps/governance_api.py ./
 
 # Persisted state lives on a volume; the audit secret is supplied at runtime and
 # is NEVER baked into the image (the code default is dev-only — override it).
