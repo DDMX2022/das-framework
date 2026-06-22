@@ -107,7 +107,16 @@ curl localhost:5070/audit/verify                                     # re-walk t
 | `POST /predict` | routing with provenance |
 | `POST /prune` · `POST /delete_tenant` | right-to-be-forgotten |
 | `GET /audit` · `GET /audit/verify` | the tamper-evident log |
+| `GET /audit/export` | download a self-contained, independently-verifiable audit document |
 | `POST /save` | persist current state |
+
+The exported document carries the full signed chain **and the actual weight fingerprints**, so a recipient can verify it offline with the bundled CLI — no system access, and (keyless) no secret:
+
+```bash
+curl localhost:5070/audit/export -H 'X-DAS-Actor: carol' -o das_audit.json
+das-verify das_audit.json                    # keyless: chain + fingerprints intact?
+das-verify das_audit.json --secret $SECRET   # + HMAC authenticity
+```
 
 > Identity is taken from the `X-DAS-Actor` header and is **asserted, not authenticated** — run the API behind an authn proxy (mTLS/OIDC). See the [security review](docs/SECURITY_REVIEW.md).
 
@@ -126,6 +135,7 @@ python benchmarks/governance_benchmark.py  # Monolith vs Isolated experts vs DAS
 python examples/control_plane_demo.py      # RBAC, tenant-delete isolation, tamper detection, persistence
 python examples/demo.py                    # core lifecycle + the byte-identical forgetting proof (NumPy only)
 python examples/hf_governance_demo.py      # the same guarantees on a REAL encoder + REAL text ([hf] extra)
+python examples/audit_export_demo.py       # export the signed log → verify it offline (the das-verify story)
 pytest -q                          # full test suite
 ```
 

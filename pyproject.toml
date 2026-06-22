@@ -21,6 +21,9 @@ web = ["flask"]
 hf = ["torch", "sentence-transformers"]
 all = ["torch", "torchvision", "flask", "sentence-transformers", "scikit-learn", "pandas"]
 
+[project.scripts]
+das-verify = "das.audit_verify:main"
+
 [project.urls]
 Homepage = "https://github.com/DDMX2022/das-framework"
 

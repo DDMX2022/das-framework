@@ -30,6 +30,7 @@ Endpoints:
   POST /delete_tenant       {"tenant":str}  right-to-be-forgotten for a whole tenant
   GET  /audit?n=N           last N audit entries (default all)
   GET  /audit/verify        re-walk the signed chain
+  GET  /audit/export        download a self-contained, verifiable audit document
   POST /save                persist current state to DAS_STATE (requires it set)
 
 Run:
@@ -195,6 +196,16 @@ def audit_verify():
     return jsonify(cp.verify_audit(_actor()))
 
 
+@app.route("/audit/export")
+def audit_export():
+    """The signed audit log as a downloadable, independently-verifiable
+    compliance document. Verify offline with:  das-verify das_audit.json"""
+    doc = cp.export_audit(_actor())
+    resp = jsonify(doc)
+    resp.headers["Content-Disposition"] = "attachment; filename=das_audit.json"
+    return resp
+
+
 @app.route("/save", methods=["POST"])
 def save():
     if not STATE:
@@ -207,6 +218,6 @@ def save():
 if __name__ == "__main__":
     print(f"\n  -> DAS governance API: http://localhost:{PORT}")
     print(f"  -> GET /health   GET /experts   POST /predict   POST /prune")
-    print(f"  -> POST /delete_tenant   GET /audit   GET /audit/verify   POST /save")
+    print(f"  -> POST /delete_tenant   GET /audit   GET /audit/verify   GET /audit/export   POST /save")
     print(f"  -> actor via 'X-DAS-Actor' header (default root); embedding dim = {DIM}\n")
     app.run(host="0.0.0.0", port=PORT, threaded=True)

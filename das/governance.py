@@ -233,6 +233,18 @@ class ControlPlane:
         ok, idx, reason = self.audit.verify()
         return {"ok": ok, "broken_index": idx, "reason": reason, "entries": len(self.audit.entries)}
 
+    def export_audit(self, actor):
+        """Return the full signed audit log as a self-contained, exportable
+        compliance document (weight fingerprints + chain + provenance; never the
+        secret). Requires read access. Verify it offline with the `das-verify`
+        CLI / `das.audit.verify_document`."""
+        self._check(actor, "read_audit")
+        return self.audit.to_document(meta={
+            "experts": [{"eid": r["eid"], "tenant": r["tenant"], "name": r["name"]}
+                        for r in self.experts],
+            "tenants": sorted(self.tenants),
+        })
+
     # ── persistence ────────────────────────────────────────────────
     def save(self, path):
         """Persist the whole control plane to a directory: the forest weights
