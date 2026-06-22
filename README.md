@@ -80,7 +80,7 @@ pip install -e ".[web]"     # governance control plane + REST API
 ### Run the governance API
 
 ```bash
-DAS_AUDIT_SECRET=prod-secret DAS_STATE=./state python governance_api.py   # http://localhost:5070
+DAS_AUDIT_SECRET=prod-secret DAS_STATE=./state python apps/governance_api.py   # http://localhost:5070
 ```
 
 On boot it loads a persisted fleet from `DAS_STATE`, or bootstraps a demo two-tenant fleet. The audit secret is supplied at runtime and **never written to disk**.
@@ -108,12 +108,12 @@ curl localhost:5070/audit/verify                                     # re-walk t
 | `GET /audit` · `GET /audit/verify` | the tamper-evident log |
 | `POST /save` | persist current state |
 
-> Identity is taken from the `X-DAS-Actor` header and is **asserted, not authenticated** — run the API behind an authn proxy (mTLS/OIDC). See the [security review](SECURITY_REVIEW.md).
+> Identity is taken from the `X-DAS-Actor` header and is **asserted, not authenticated** — run the API behind an authn proxy (mTLS/OIDC). See the [security review](docs/SECURITY_REVIEW.md).
 
 ### Try the interactive console
 
 ```bash
-python console.py        # http://localhost:5070
+python apps/console.py        # http://localhost:5070
 ```
 
 Route a query and watch it hit the right expert; graft a new expert (existing ones stay byte-identical); prune one; and watch the SHA-256 audit trail update live. With PyTorch installed, the console backs each expert with a **real LoRA adapter on a shared frozen backbone**; without torch it uses the NumPy core.
@@ -121,9 +121,9 @@ Route a query and watch it hit the right expert; graft a new expert (existing on
 ### See the guarantees, with numbers
 
 ```bash
-python governance_benchmark.py     # Monolith vs Isolated experts vs DAS control plane
-python control_plane_demo.py       # RBAC, tenant-delete isolation, tamper detection, persistence
-python demo.py                     # core lifecycle + the byte-identical forgetting proof (NumPy only)
+python benchmarks/governance_benchmark.py  # Monolith vs Isolated experts vs DAS control plane
+python examples/control_plane_demo.py      # RBAC, tenant-delete isolation, tamper detection, persistence
+python examples/demo.py                    # core lifecycle + the byte-identical forgetting proof (NumPy only)
 pytest -q                          # full test suite
 ```
 
@@ -131,7 +131,7 @@ pytest -q                          # full test suite
 
 ## Proof: the governance benchmark
 
-A reproducible, deterministic head-to-head on the axes that matter — not raw accuracy, but **governance**. Three ways to run a fleet across two tenants: a **Monolith** (one shared model fine-tuned per task), **Isolated experts** (the LoRA-per-task equivalent), and the **DAS control plane**. Run it yourself: [`governance_benchmark.py`](governance_benchmark.py).
+A reproducible, deterministic head-to-head on the axes that matter — not raw accuracy, but **governance**. Three ways to run a fleet across two tenants: a **Monolith** (one shared model fine-tuned per task), **Isolated experts** (the LoRA-per-task equivalent), and the **DAS control plane**. Run it yourself: [`benchmarks/governance_benchmark.py`](benchmarks/governance_benchmark.py).
 
 | Governance axis | Monolith | Isolated experts | **DAS control plane** |
 |---|:---:|:---:|:---:|
@@ -226,7 +226,7 @@ graph.invoke({"embedding": vec, "actor": "svc"})
 #   -> {..., "das_tenant": "globex", "das_expert": "globex-vision", "das_confidence": 0.99}
 ```
 
-See [`langgraph_demo.py`](langgraph_demo.py) for an end-to-end two-tenant example.
+See [`examples/langgraph_demo.py`](examples/langgraph_demo.py) for an end-to-end two-tenant example.
 
 ---
 
@@ -234,10 +234,10 @@ See [`langgraph_demo.py`](langgraph_demo.py) for an end-to-end two-tenant exampl
 
 | Document | What's in it |
 |---|---|
-| [CASE_STUDY.md](CASE_STUDY.md) | A worked multi-tenant regulated-AI scenario (illustrative), each requirement mapped to a measured capability. |
-| [SECURITY_REVIEW.md](SECURITY_REVIEW.md) | Threat model, what's protected, and a ranked list of real gaps (authors' self-review). |
-| [STATUS.md](STATUS.md) | Single-page summary of everything built and every measured number. |
-| [PRODUCT_PLAN.md](PRODUCT_PLAN.md) | The phased plan from research prototype to product. |
+| [CASE_STUDY.md](docs/CASE_STUDY.md) | A worked multi-tenant regulated-AI scenario (illustrative), each requirement mapped to a measured capability. |
+| [SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) | Threat model, what's protected, and a ranked list of real gaps (authors' self-review). |
+| [STATUS.md](docs/STATUS.md) | Single-page summary of everything built and every measured number. |
+| [PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) | The phased plan from research prototype to product. |
 
 ---
 
@@ -250,13 +250,13 @@ Credibility is the product, so the limitations are documented as plainly as the 
 - A tamper-evident signed audit log, RBAC, persistence with state↔audit binding, and per-query provenance — all tested.
 
 **What DAS is — and is not:**
-- DAS is, at its core, a competent **hard-routed Mixture-of-Experts ≈ per-task LoRA + a router** ([`lora_bench.py`](lora_bench.py)). On isolation, forgetting, and deletion it **ties** isolated LoRA adapters — it does not beat them. Its edge is the **task-free router plus the governance plane**.
-- The branding from the original concept (Fibonacci layer widths, "vector torque", "coiled strings") is **cosmetic** over a standard softmax-routed MoE — measured, not asserted: Fibonacci vs power-of-two vs linear widths score within 0.006 ([`leaf_shapes_bench.py`](leaf_shapes_bench.py)).
+- DAS is, at its core, a competent **hard-routed Mixture-of-Experts ≈ per-task LoRA + a router** ([`benchmarks/lora_bench.py`](benchmarks/lora_bench.py)). On isolation, forgetting, and deletion it **ties** isolated LoRA adapters — it does not beat them. Its edge is the **task-free router plus the governance plane**.
+- The branding from the original concept (Fibonacci layer widths, "vector torque", "coiled strings") is **cosmetic** over a standard softmax-routed MoE — measured, not asserted: Fibonacci vs power-of-two vs linear widths score within 0.006 ([`benchmarks/leaf_shapes_bench.py`](benchmarks/leaf_shapes_bench.py)).
 
 **Known limits:**
 - **Routing is the bottleneck on hard data.** A linear router collapses to 0.42 on raw CIFAR; a shared conv backbone only lifts it to 0.66 (vs ~0.98 on MNIST). The experts are fine; routing caps end-to-end quality.
 - **Scale is unproven** at large-real-model sizes; the sparse mechanic scales (stored grows, active/latency flat) but real-LLM quality is not demonstrated.
-- **Self-organising routing and auditable isolation are in tension:** co-training the router to discover domains unsupervised destroys the byte-identical guarantee. You get one or the other ([`unsupervised_routing.py`](unsupervised_routing.py)).
+- **Self-organising routing and auditable isolation are in tension:** co-training the router to discover domains unsupervised destroys the byte-identical guarantee. You get one or the other ([`benchmarks/unsupervised_routing.py`](benchmarks/unsupervised_routing.py)).
 - Claims of "beating frontier models" or large cost cuts are **unsupported** by any measurement here.
 
 The defensible home is **governance — auditable, isolated, deletable model fleets — not raw capability.**
@@ -273,7 +273,7 @@ The defensible home is **governance — auditable, isolated, deletable model fle
 | **3 · Integrations** | Fit existing stacks | 🟡 LangGraph node + Docker/k8s deploy done; HF Hub interop remains |
 | **4 · Prove & launch** | Evidence + GTM | 🟡 Benchmark + case study + self security review done; real design partner, independent audit, open-core 1.0 remain |
 
-**North star:** *governed AI capabilities you can add, remove, and audit without touching what's already certified.* Full detail in [PRODUCT_PLAN.md](PRODUCT_PLAN.md).
+**North star:** *governed AI capabilities you can add, remove, and audit without touching what's already certified.* Full detail in [PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md).
 
 ---
 
@@ -290,19 +290,28 @@ das/                         NumPy core + governance (the product)
 ├── integrations/            Adapters that slot DAS under existing stacks
 │   └── langgraph_node.py    DASExpertNode — governed expert as a LangGraph node
 └── hub.py                   Leaf marketplace (publish / pull / graft, hash-verified)
-
-governance_api.py            REST control plane (NumPy + Flask)
-console.py                   Interactive product UI
-Dockerfile · deploy/k8s.yaml Containerize + deploy
-governance_benchmark.py      Monolith vs Isolated vs DAS-CP (with numbers)
-control_plane_demo.py        RBAC · multi-tenancy · audit · persistence
-langgraph_demo.py            DAS as a governed node under an orchestrator
-
 das_torch.py                 PyTorch backend (autograd, checkpointing, ConvLeaf, LoRA)
+
+apps/                        Runnable entry points
+├── governance_api.py        REST control plane (NumPy + Flask) — the deployable unit
+├── console.py               Interactive product UI
+├── serve.py                 Torch-backed inference server
+├── app.py                   Research visualizer dashboard
+└── templates/               HTML for the Flask apps
+
+examples/                    Demos (governance_demo, langgraph_demo, lifecycle, hub, …)
+benchmarks/                  Benchmarks + research scripts
+├── governance_benchmark.py  Monolith vs Isolated vs DAS-CP (with numbers)
+├── lora_bench.py            DAS ≈ per-task LoRA + a router
+├── leaf_shapes_bench.py     Fibonacci vs power-of-two vs linear widths
+└── …                        CIFAR/MNIST stress, scaling, routing studies
+
+deploy/                      Dockerfile (root) + k8s.yaml — containerize & deploy
+docs/                        STATUS · PRODUCT_PLAN · CASE_STUDY · SECURITY_REVIEW
 tests/                       Test suite (NumPy core runs in CI)
 ```
 
-The repository also contains an extensive set of research benchmarks and demos (continual-learning baselines, CIFAR/MNIST stress tests, paging, scaling, the web visualizer). Every one is logged with measured results in [STATUS.md](STATUS.md).
+`examples/` and `benchmarks/` cover an extensive set of demos and research studies (continual-learning baselines, CIFAR/MNIST stress tests, paging, scaling, the web visualizer). Every one is logged with measured results in [STATUS.md](docs/STATUS.md). Run scripts from the repo root after `pip install -e .` so `das` and `das_torch` resolve.
 
 ---
 

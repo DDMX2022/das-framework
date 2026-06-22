@@ -25,3 +25,9 @@ Homepage = "https://github.com/DDMX2022/das-framework"
 # the NumPy core is the importable package; the PyTorch backend is a top-level module
 packages = ["das"]
 py-modules = ["das_torch"]
+
+[tool.pytest.ini_options]
+# Tests import the package (das, das_torch) plus two relocated entry-point
+# scripts directly: governance_api (apps/) and governance_benchmark (benchmarks/).
+pythonpath = [".", "apps", "benchmarks"]
+testpaths = ["tests"]

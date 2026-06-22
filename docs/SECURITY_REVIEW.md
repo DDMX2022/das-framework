@@ -1,9 +1,9 @@
 # Security review — DAS governance control plane
 
 > **Scope:** the governance layer that is DAS's actual product —
-> [`das/governance.py`](das/governance.py), [`das/audit.py`](das/audit.py), the
+> [`das/governance.py`](../das/governance.py), [`das/audit.py`](../das/audit.py), the
 > persistence format, and the REST surface in
-> [`governance_api.py`](governance_api.py). This is a **self-review** by the
+> [`apps/governance_api.py`](../apps/governance_api.py). This is a **self-review** by the
 > authors, written to be honest about gaps rather than to reassure. It is **not**
 > an independent third-party audit; a real launch needs one (roadmap Phase 4).
 >
@@ -56,7 +56,7 @@ append-only external store (a monotonic counter, a notarization service, or a
 transparency log) and refuse to load a chain shorter/older than the anchor.
 
 ### F2 · Identity is asserted, not authenticated (HIGH, API only)
-`governance_api.py` takes the principal from the `X-DAS-Actor` header. RBAC is
+`apps/governance_api.py` takes the principal from the `X-DAS-Actor` header. RBAC is
 enforced on that principal, but nothing proves the caller *is* that principal.
 This is stated plainly in the module docstring and is acceptable only behind a
 trusted authn proxy.

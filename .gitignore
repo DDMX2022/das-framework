@@ -9,7 +9,7 @@ dist/
 build/
 .eggs/
 
-# MNIST data — large binary files, download via mnist_stress.py
+# MNIST data — large binary files, download via benchmarks/mnist_stress.py
 data/
 
 # Checkpoints
