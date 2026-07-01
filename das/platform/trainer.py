@@ -68,14 +68,25 @@ class SyntheticTrainer:
         v /= np.linalg.norm(v) + 1e-9
         return v * 4.0
 
+    def rule(self, name: str) -> np.ndarray:
+        """This expert's fixed linear decision rule (maps a point to a binary
+        label). Deterministic per name."""
+        return np.random.default_rng(_stable_seed("rule:" + name)).normal(0, 1, self.d_model)
+
     def data(self, name: str):
         """Reproducible (X, y) for an expert: points around its center, labelled
         by a fixed random linear rule. Same name -> same data, every process."""
         rng = np.random.default_rng(_stable_seed("data:" + name))
-        c = self.center(name)
-        rule = np.random.default_rng(_stable_seed("rule:" + name)).normal(0, 1, self.d_model)
-        X = c + rng.normal(0, 1.0, (self.n, self.d_model))
-        y = (X @ rule > 0).astype(int)
+        X = self.center(name) + rng.normal(0, 1.0, (self.n, self.d_model))
+        y = (X @ self.rule(name) > 0).astype(int)
+        return X, y
+
+    def sample(self, name: str, n: int, rng=None):
+        """Draw fresh held-out points from an expert's distribution (for eval /
+        benchmarking) — same cluster + rule as ``data`` but independent draws."""
+        rng = rng or np.random.default_rng(_stable_seed("sample:" + name))
+        X = self.center(name) + rng.normal(0, 1.0, (n, self.d_model))
+        y = (X @ self.rule(name) > 0).astype(int)
         return X, y
 
     def _train_leaf(self, leaf, X, y):

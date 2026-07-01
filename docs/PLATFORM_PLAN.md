@@ -201,6 +201,9 @@ deploys it there.
   teacher-backed trainer (`das/training/`, [GROWING_CHILD.md](GROWING_CHILD.md)).
 - **Reference connectors** (`Static`, `Callable`, `Rest`) define the seam; the
   client-specific SQL/vector integration is still the FDE's ~50 lines.
-- **Cost deflection is measured at route time** (confidence < threshold) but the
-  end-to-end `$ / 1k` benchmark (`benchmarks/cost_bench.py`) is the next build.
+- **Cost deflection is now measured**: [`benchmarks/cost_bench.py`](../benchmarks/cost_bench.py)
+  sweeps the escalation threshold and reports deflection %, answer quality, and
+  `$ / 1k` vs a 100%-frontier baseline — including the honest trade-off (aggressive
+  deflection misroutes novel queries as the over-confident router keeps them local).
+  Constants are illustrative; a real-traffic study on a design partner's mix remains.
 - Real large-model backend + latency SLA remain roadmap Phase 1, unchanged.
