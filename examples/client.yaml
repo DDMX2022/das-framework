@@ -1,0 +1,39 @@
+# Example DAS deployment spec — the single artifact an FDE fills in per client.
+#   das deploy examples/client.yaml
+# The audit secret is read at runtime from $DAS_AUDIT_SECRET (never stored here),
+# so this file is safe to commit to the client's repo.
+client: northwind
+d_model: 18
+
+audit:
+  secret_env: DAS_AUDIT_SECRET
+  # secret_file: /run/secrets/audit        # production: mount instead of env
+  # private_key_file: /run/secrets/ed25519 # public-key-verifiable audit (F7)
+
+escalation:
+  frontier_llm: claude-sonnet-5
+  confidence_threshold: 0.7   # below this, escalate to the frontier LLM / a human
+
+tenants:
+  - name: careplus
+    experts:
+      - name: medical-claim
+        keywords: [claim, clinic, mri, denied, appeal, insurance, provider]
+      - name: prior-auth
+        keywords: [authorization, referral, approval, precert, eligibility]
+  - name: fintrust
+    experts:
+      - name: card-dispute
+        keywords: [charge, card, merchant, dispute, fraud, recurring, chargeback]
+      - name: loan-status
+        keywords: [loan, payment, balance, mortgage, installment]
+
+users:
+  - name: care-agent
+    role: operator
+    tenant: careplus
+  - name: bank-agent
+    role: operator
+    tenant: fintrust
+  - name: auditor-jane
+    role: auditor

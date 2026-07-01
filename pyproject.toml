@@ -21,17 +21,20 @@ web = ["flask", "gunicorn"]
 hf = ["torch", "sentence-transformers"]
 # Asymmetric (Ed25519) audit signing — public-key-verifiable compliance docs (F7).
 crypto = ["cryptography"]
-all = ["torch", "torchvision", "flask", "sentence-transformers", "cryptography", "scikit-learn", "pandas"]
+# FDE deployment engine — declarative client.yaml specs (the `das deploy` CLI).
+platform = ["pyyaml"]
+all = ["torch", "torchvision", "flask", "sentence-transformers", "cryptography", "scikit-learn", "pandas", "pyyaml"]
 
 [project.scripts]
 das-verify = "das.audit_verify:main"
+das = "das.platform.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/DDMX2022/das-framework"
 
 [tool.setuptools]
 # the NumPy core is the importable package; the PyTorch backend is a top-level module
-packages = ["das"]
+packages = ["das", "das.integrations", "das.training", "das.platform"]
 py-modules = ["das_torch", "das_text"]
 
 [tool.pytest.ini_options]
