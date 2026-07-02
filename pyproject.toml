@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "das-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "DAS — a hard-routed Mixture-of-Experts with isolated, hot-swappable, auditable experts"
 readme = "README.md"
 requires-python = ">=3.9"
