@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DAS — governed AI expert fleets</title>
-<meta name="description" content="Add, remove, and audit AI capabilities without touching what's already certified. Isolated experts, provable deletion, tamper-evident audit — the governance plane for model fleets.">
+<title>DAS — the FDE infrastructure layer for governed AI fleets</title>
+<meta name="description" content="The infrastructure layer for forward-deployed AI: stand up a governed expert fleet inside each client's boundary from one YAML — provable isolation, tamper-evident audit, client N+1 in under a day.">
 <style>
   :root{
     --bg:#0a0d13; --panel:#10141c; --panel2:#151a24; --line:#232b3a; --line2:#2e3950;
@@ -156,11 +156,12 @@
 </div></nav>
 
 <header class="hero wrap">
-  <div class="badge"><b>v0.2.0</b> open core · MIT · real LoRA experts on a real transformer</div>
-  <h1>Ship new AI capabilities <em>without touching</em> what's already certified</h1>
-  <p>DAS is the governance plane for a fleet of AI specialists: isolated experts behind a
-     confidence-scored router, every change proven byte-identical, every privileged action in a
-     tamper-evident audit chain your compliance team verifies offline.</p>
+  <div class="badge"><b>v0.2.0</b> open core · the deployment engine for forward-deployed AI</div>
+  <h1>The infra layer for <em>forward-deployed</em> AI</h1>
+  <p>You land inside a client's boundary and stand up a governed fleet of AI specialists from
+     one YAML file — isolated experts, every change proven byte-identical, a tamper-evident
+     audit chain their compliance team verifies offline. Then you do it again at client N+1,
+     in under a day, with the same guarantees.</p>
   <div class="cta">
     <a class="btn primary" href="#demo">Watch a fleet grow live</a>
     <a class="btn" href="#how">Deploy from one YAML</a>
@@ -168,7 +169,7 @@
   <div class="ticker">
     <div class="tick"><div class="v">7 <small>ms</small></div><div class="k">routing floor (CPU)</div></div>
     <div class="tick"><div class="v">100<small>%</small></div><div class="k">byte-identity proofs</div></div>
-    <div class="tick"><div class="v">1</div><div class="k">YAML file → live fleet</div></div>
+    <div class="tick"><div class="v">&lt;1 <small>day</small></div><div class="k">client N+1 to live fleet</div></div>
     <div class="tick"><div class="v">225</div><div class="k">tests passing</div></div>
   </div>
 </header>
@@ -224,8 +225,8 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
 <section id="features" class="wrap fade">
   <div class="label">The whole plane</div>
   <h2>Everything around the adapters — so you don't build it yourself</h2>
-  <p class="sub">Isolated adapters are table stakes; teams re-invent the surrounding plane at every
-     company. DAS ships it as one governed system.</p>
+  <p class="sub">Isolated adapters are table stakes; FDE teams re-invent the surrounding plane at every
+     client. DAS ships it as one governed system you carry from engagement to engagement.</p>
   <div class="feat">
     <div class="frow"><div class="fi"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v6m0 0l-7 4m7-4l7 4m-7-4v6"/></svg></div>
       <div><h4>Task-free routing</h4><p>Queries embed once and route to the right specialist with a confidence score — no task labels at inference, provenance on every answer.</p></div></div>
@@ -247,12 +248,27 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
 </section>
 
 <section id="market" class="wrap fade">
-  <div class="label">Where DAS sits</div>
-  <h2>Under your orchestrator. Next to your frontier LLM.</h2>
+  <div class="label">The forward-deployed model</div>
+  <h2>Land. Operate. Prove. Repeat at client N+1.</h2>
+  <p class="sub">DAS is built for teams who deploy <b style="font-weight:600;color:var(--text)">inside the client's boundary</b> —
+     never a shared SaaS. The engine is the repeatable part; your ~50 lines of client-specific
+     integration are the FDE work.</p>
+  <div class="grid3" style="margin-bottom:44px">
+    <div class="card"><h3>1 · Land</h3>
+      <p><code style="font-family:var(--mono);font-size:13px">das deploy client.yaml</code> on their infra — Docker or k8s, behind the reference
+         TLS/OIDC gateway. Tenants, RBAC, experts, escalation policy: live on day one.</p></div>
+    <div class="card"><h3>2 · Operate + grow</h3>
+      <p>One Rancher-style console over every client fleet. Grow specialists live with hash
+         proofs on screen; teachers write lessons; the gate decides what ships.</p></div>
+    <div class="card"><h3>3 · Prove + repeat</h3>
+      <p>The leave-behind: an audit bundle their auditor verifies offline. Licensing entitlements
+         are Ed25519-signed per client. Then the next <code style="font-family:var(--mono);font-size:13px">client.yaml</code>.</p></div>
+  </div>
+  <h2 style="margin-top:8px;font-size:22px">Inside the boundary, under their stack</h2>
   <p class="sub">DAS doesn't replace LangGraph, vLLM, or Claude — it's the governed specialist layer
-     underneath them. Drop it in as a LangGraph node or call the REST API.</p>
+     underneath them, deployed where the client's data already lives.</p>
   <div class="stack">
-    <div class="snode"><div class="t">Your app / orchestrator</div><div class="d">LangGraph · REST · Python</div></div>
+    <div class="snode"><div class="t">Client's app / orchestrator</div><div class="d">LangGraph · REST · Python</div></div>
     <div class="sarrow">→</div>
     <div class="snode hot"><div class="t">DAS forest</div><div class="d">route → isolated expert · audit · RBAC</div></div>
     <div class="sarrow">→</div>
@@ -302,15 +318,16 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
   </table></div>
 
   <div class="grid3" style="margin-top:40px">
-    <div class="card"><h3>Regulated enterprises</h3>
+    <div class="card" style="border-color:var(--strong)"><h3>Integrators + FDE practices</h3>
+      <p>Your deployment engine: one <code style="font-family:var(--mono);font-size:13px">client.yaml</code> per client, the same proven
+         guarantees every time, a console over the whole book of business. Open core — the
+         engine is MIT, the platform is your margin.</p></div>
+    <div class="card"><h3>Internal platform teams</h3>
+      <p>You're the FDE for your own business units: each unit is a tenant, each capability an
+         isolated expert, and the audit chain answers governance before they ask.</p></div>
+    <div class="card"><h3>Regulated end-clients</h3>
       <p>Health, finance, legal — where "did the certified model change?" is a board-level
-         question and the audit bundle is the answer you hand over.</p></div>
-    <div class="card"><h3>Multi-tenant SaaS</h3>
-      <p>Per-customer specialists with structural isolation, tenant-scoped RBAC, and offboarding
-         that proves the other tenants never moved.</p></div>
-    <div class="card"><h3>Integrators + platform teams</h3>
-      <p>The FDE model: one <code style="font-family:var(--mono);font-size:13px">client.yaml</code> per client, same guarantees at client N+1 in
-         under a day. Open core — the engine is MIT.</p></div>
+         question. The audit bundle your integrator leaves behind is the answer.</p></div>
   </div>
 </section>
 
@@ -409,10 +426,10 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
 <footer><div class="wrap">
   <div class="partner" id="partner">
     <div>
-      <h3>Running a multi-tenant or regulated fleet?</h3>
-      <p>The design-partner program is open — bring one real workload; we deploy the fleet with you,
-         benchmark cost deflection on your traffic, and you keep the audit bundle either way.
-         Integrators and internal platform teams first.</p>
+      <h3>Run an FDE practice or a platform team?</h3>
+      <p>The design-partner program is open — bring one real client workload; we stand up the fleet
+         with you inside their boundary, benchmark cost deflection on real traffic, and you keep
+         the audit bundle either way. Integrators first.</p>
     </div>
     <a class="btn primary" href="mailto:dhananjayaduttmishra@gmail.com?subject=DAS%20design%20partner%20inquiry&body=Hi%20Dhananjaya%2C%0A%0AWe%27d%20like%20to%20explore%20the%20DAS%20design-partner%20program.%0A%0ACompany%3A%20%0AYour%20role%3A%20%0AThe%20workload%20(what%20would%20the%20fleet%20govern%3F)%3A%20%0ATenants%20%2F%20compliance%20context%3A%20%0ACurrent%20stack%20(LangGraph%20%2F%20custom%20%2F%20other)%3A%20%0ATimeline%3A%20%0A%0AAnything%20else%20we%20should%20know%3A%20%0A">Become a design partner</a>
   </div>
