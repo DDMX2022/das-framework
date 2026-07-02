@@ -151,6 +151,24 @@ Value-metric options to test with the design partner (pick one, don't stack):
 Expansion path: land on Control Plane for one deployment → expand to Platform once
 they do a *second* client and feel the repeatability pain.
 
+### Licensing mechanics (built)
+
+Subscriptions are **offline Ed25519-signed license files**
+([`das/platform/license.py`](../das/platform/license.py)): the vendor signs
+entitlement claims (customer, expiry, max deployments/tenants/experts); the
+shipped code verifies against a **pinned** vendor public key — no license server,
+no phone-home, so it works in the air-gapped deployments the product targets.
+`das license keygen / issue / verify / show`; `das deploy` enforces automatically
+via `DAS_LICENSE`. Trust model: nothing configured = evaluation mode (noticed);
+a configured-but-invalid/expired/tampered license **fails closed**;
+`DAS_LICENSE_REQUIRED=1` is the commercial build's hard switch. Honestly stated:
+a key check in source-available Python is a compliance mechanism, not DRM — the
+EULA does the legal work (industry-standard posture: GitLab EE, Rancher).
+
+**Open legal prerequisite:** the repo is currently MIT end-to-end. Before selling,
+split open-core for real — core stays MIT; `das/platform` + console move to a
+commercial license — and bake the vendor public key into the commercial build.
+
 ---
 
 ## 7. Where to deploy it

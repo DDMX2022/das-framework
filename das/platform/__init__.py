@@ -34,8 +34,14 @@ from .connectors import (
 from .trainer import SyntheticTrainer
 from .deploy import Deployment, deploy
 from .bundle import write_bundle
+from .license import License, LicenseError, issue_license, load_license, verify_license
 
 __all__ = [
+    "License",
+    "LicenseError",
+    "issue_license",
+    "load_license",
+    "verify_license",
     "ClientSpec",
     "ExpertSpec",
     "TenantSpec",

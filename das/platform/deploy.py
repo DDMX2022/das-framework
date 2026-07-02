@@ -27,6 +27,7 @@ from .spec import ClientSpec
 from .trainer import SyntheticTrainer
 from .connectors import ContextSource, SpecKeywordConnector
 from .bundle import write_bundle
+from .license import License, load_license
 
 
 class Deployment:
@@ -117,13 +118,19 @@ class Deployment:
 
 
 def deploy(source, secret: Optional[str] = None,
-           connector: Optional[ContextSource] = None) -> Deployment:
+           connector: Optional[ContextSource] = None,
+           license: Optional[License] = None) -> Deployment:
     """Stand up a governed fleet from a client spec.
 
     ``source`` is a path to ``client.yaml`` / ``.json``, a ``dict``, or an
     already-parsed ``ClientSpec``. ``secret`` overrides the spec's audit-secret
     resolution (useful in tests); otherwise the secret is read at runtime from the
     file/env the spec names and never stored.
+
+    Licensing: pass a verified ``License`` to enforce its entitlements, or leave
+    it ``None`` to resolve per the trust model (``DAS_LICENSE`` env; evaluation
+    mode when nothing is configured; fail closed on an invalid/expired license
+    or when ``DAS_LICENSE_REQUIRED=1``). See ``das.platform.license``.
     """
     if isinstance(source, ClientSpec):
         spec = source
@@ -134,6 +141,10 @@ def deploy(source, secret: Optional[str] = None,
 
     if not spec.experts:
         raise ValueError(f"spec for client '{spec.client}' declares no experts")
+
+    lic = license if license is not None else load_license()
+    if lic is not None:
+        lic.check_spec(spec)          # raises LicenseError on exceeded entitlements
 
     audit_secret = secret if secret is not None else spec.resolve_secret()
     private_key = _load_private_key(spec)

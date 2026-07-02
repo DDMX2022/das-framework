@@ -88,7 +88,8 @@ tr:last-child td{border-bottom:none}
   <div class="sect">Client deployments</div>
   <div id="deplist"></div>
   <button class="ghost" style="margin:10px 8px 0" onclick="openModal()">+ Deploy client</button>
-  <div class="foot">Every panel is backed by the live control plane — routing, hashes, and the signed audit chain are real, not mocked.</div>
+  <div class="foot" id="licfoot" style="border-top:1px solid var(--line);padding-top:10px"></div>
+  <div class="foot" style="margin-top:0">Every panel is backed by the live control plane — routing, hashes, and the signed audit chain are real, not mocked.</div>
 </nav>
 
 <main id="main">
@@ -330,6 +331,16 @@ async function deployClient(){
   }catch(e){ $('m-err').textContent = e.message; }
 }
 
-refreshList();
+async function loadLicense(){
+  try{
+    const l = await api('/api/license');
+    $('licfoot').innerHTML = l.licensed
+      ? `<span class="badge ok">LICENSED</span> ${esc(l.customer)} · ${esc(l.tier)} tier · ${l.days_remaining}d left`
+        + (l.warning ? `<div style="color:var(--amber);margin-top:4px">${esc(l.warning)}</div>` : '')
+      : `<span class="badge" style="background:#2b1e0d;color:var(--amber)">EVALUATION</span> ${esc(l.notice)}`;
+  }catch(e){ $('licfoot').textContent = 'license status unavailable'; }
+}
+
+refreshList(); loadLicense();
 </script>
 </body></html>

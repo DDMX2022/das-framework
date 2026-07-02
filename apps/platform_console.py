@@ -28,8 +28,9 @@ import threading
 from flask import Flask, jsonify, render_template, request, send_file
 
 from das.governance import AccessDenied
-from das.platform import ClientSpec, SpecError, deploy
+from das.platform import ClientSpec, LicenseError, SpecError, deploy
 from das.platform.bundle import build_bundle
+from das.platform.license import evaluation_notice, load_license
 
 app = Flask(__name__)
 
@@ -74,6 +75,10 @@ DEMO_SPECS = [
 
 SECRET = os.environ.get("DAS_AUDIT_SECRET", "console-dev-secret")
 
+# Resolved once at boot per the trust model: a verified License, or None for
+# evaluation mode. A configured-but-invalid license fails the console closed.
+LICENSE = load_license()
+
 
 def _register(dep):
     DEPLOYMENTS[dep.spec.client] = dep
@@ -107,6 +112,13 @@ def index():
 
 
 # ── fleet-level API ──────────────────────────────────────────────────
+@app.get("/api/license")
+def license_status():
+    if LICENSE is None:
+        return jsonify({"licensed": False, "notice": evaluation_notice()})
+    return jsonify(LICENSE.status())
+
+
 @app.get("/api/deployments")
 def list_deployments():
     with LOCK:
@@ -139,7 +151,12 @@ def deploy_client():
     with LOCK:
         if spec.client in DEPLOYMENTS:
             return jsonify({"error": f"deployment '{spec.client}' already exists"}), 409
-        dep = deploy(spec, secret=SECRET)
+        try:
+            if LICENSE is not None:
+                LICENSE.check_fleet(len(DEPLOYMENTS) + 1)
+            dep = deploy(spec, secret=SECRET, license=LICENSE)
+        except LicenseError as e:
+            return jsonify({"error": str(e), "license": True}), 403
         _register(dep)
         return jsonify(dep.summary()), 201
 
