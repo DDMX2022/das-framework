@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07100c">
+<link rel="manifest" href="/growth/manifest.json">
+<title>DAS - Growing Child</title>
+<style>
+:root{
+  --bg:#090c0b;--panel:#101714;--panel2:#17211b;--border:#32443a;--line:#25342d;
+  --text:#e7eee7;--muted:#93a397;--head:#c7ddc9;--green:#64d071;--amber:#d6a449;
+  --red:#ee6b6e;--blue:#6bbbe4;--ink:#061006;--wood:#7a5632;--stone:#59636a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:
+     linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px) 0 0/32px 32px,
+     linear-gradient(0deg,rgba(255,255,255,.02) 1px,transparent 1px) 0 0/32px 32px,
+     var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+     font-size:13px;line-height:1.45;max-width:1220px;margin:0 auto;padding:18px}
+a{color:var(--blue);text-decoration:none}
+button,select,input{font:inherit}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;
+       border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:14px}
+h1{font-size:1rem;color:var(--green);font-weight:700;min-width:0;flex:1 1 260px}
+h1 span{display:block;color:var(--muted);font-size:.66rem;font-weight:500;margin-top:2px;overflow-wrap:anywhere}
+.top{display:flex;align-items:flex-end;gap:9px;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:4px}
+label{font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+select,input{background:var(--panel2);color:var(--text);border:2px solid var(--border);
+             border-radius:3px;padding:7px 8px;min-width:135px}
+select[multiple]{min-height:92px}
+button{background:var(--green);color:var(--ink);border:0;border-radius:3px;padding:8px 13px;
+       font-weight:800;cursor:pointer;box-shadow:inset 0 -3px 0 rgba(0,0,0,.22)}
+button:hover{filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.ghost{background:#121a16;color:var(--head);border:2px solid var(--border);font-weight:700}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.metric{background:var(--panel);border:2px solid var(--border);border-radius:4px;padding:11px 12px;min-height:72px}
+.metric .k{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.metric .v{font-size:1.08rem;font-weight:750;margin-top:5px}
+.metric .v.good{color:var(--green)}.metric .v.warn{color:var(--amber)}.metric .v.bad{color:var(--red)}
+.grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:14px}
+.grid>div,.cards,.metric{min-width:0}
+@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:2px solid var(--border);border-radius:4px;padding:14px;margin-bottom:14px;min-width:0;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.025),0 10px 0 rgba(0,0,0,.08)}
+.card h2{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--head);margin-bottom:12px;
+         display:flex;align-items:center;justify-content:space-between;gap:10px}
+.formrow{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
+@media(max-width:520px){.formrow{grid-template-columns:1fr}}
+.toolbelt{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tool{background:#1b241e;color:var(--text);border:2px solid #34463a;border-radius:4px;
+      min-height:62px;padding:8px;display:flex;align-items:center;gap:8px;justify-content:flex-start;
+      box-shadow:inset 0 -4px 0 rgba(0,0,0,.28)}
+.tool:hover{border-color:#7fa36a;filter:none;background:#203026}
+.tool-icon{width:30px;height:30px;border-radius:3px;display:grid;place-items:center;background:#253c27;
+           color:var(--green);font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:.62rem;font-weight:900;flex:0 0 auto}
+.tool,.tool span:last-child{min-width:0}
+.tool span:last-child{font-size:.68rem;line-height:1.12;text-align:left;overflow-wrap:anywhere}
+@media(max-width:520px){.toolbelt{grid-template-columns:repeat(2,1fr)}.tool{min-height:56px}}
+.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:760px){.pipeline{grid-template-columns:1fr 1fr}}
+.step{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:92px}
+.step .n{font-size:.57rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.step .b{font-size:.98rem;font-weight:750;margin-top:5px;color:var(--text)}
+.step .s{font-size:.7rem;color:var(--muted);margin-top:5px;overflow-wrap:anywhere}
+.step.ok{border-color:#2f6b4e}.step.bad{border-color:#733034}.step.run{border-color:#7a6534}
+table{width:100%;border-collapse:collapse;font-size:.74rem}
+th{text-align:left;color:var(--muted);font-size:.57rem;text-transform:uppercase;letter-spacing:.08em;
+   border-bottom:1px solid var(--border);padding:6px}
+td{border-bottom:1px solid var(--line);padding:8px 6px;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.tag{display:inline-block;border:1px solid var(--border);border-radius:20px;padding:2px 7px;font-size:.62rem;color:var(--head)}
+.tag.ok{border-color:#2f6b4e;color:var(--green)}.tag.bad{border-color:#733034;color:var(--red)}
+.bar{height:7px;background:#263138;border-radius:99px;overflow:hidden;margin-top:3px;min-width:82px}
+.bar span{display:block;height:100%;background:var(--green)}
+.bar.after span{background:var(--blue)}
+.small{font-size:.68rem;color:var(--muted)}
+.mono{font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.empty{color:var(--muted);text-align:center;padding:18px 4px}
+#log{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:7px;z-index:10;max-width:340px}
+.toast{background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--blue);
+       border-radius:7px;padding:9px 11px;box-shadow:0 8px 24px rgba(0,0,0,.38);font-size:.72rem}
+.toast.ok{border-left-color:var(--green)}.toast.err{border-left-color:var(--red)}
+.toast b{display:block;margin-bottom:2px}
+.treeviz{min-height:260px;overflow:auto;padding:8px 4px 2px}
+.tree-root{display:flex;align-items:flex-start;gap:18px;min-width:680px}
+.trunk{width:86px;min-height:230px;border-right:8px solid #3e6b52;border-radius:0 0 44px 0;
+       color:var(--green);font-weight:800;padding-top:92px;text-align:right;padding-right:13px}
+.branches{display:flex;gap:14px;align-items:flex-start;flex:1}
+.branch{min-width:150px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;
+        position:relative;animation:grow .35s ease-out}
+.branch:before{content:"";position:absolute;left:-18px;top:22px;width:18px;border-top:2px solid #3e6b52}
+.branch-title{font-weight:800;color:var(--head);font-size:.78rem;margin-bottom:8px}
+.leaf{border:1px solid var(--border);border-radius:7px;padding:8px;margin-top:7px;background:#10171b;
+      animation:leafIn .35s ease-out}
+.leaf .name{font-weight:750}.leaf .meta{font-size:.64rem;color:var(--muted);margin-top:2px}
+.leaf.stable{border-color:#355347}.leaf.growing,.leaf.new{border-color:#2f7a54;box-shadow:0 0 0 1px rgba(97,211,148,.12)}
+.leaf.needs_attention{border-color:#773b3f}.leaf .status{float:right;font-size:.58rem;text-transform:uppercase;color:var(--muted)}
+.forest-stage{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);
+              min-height:520px;position:relative;background:#07100c;overflow:hidden;border-bottom:2px solid var(--border);
+              margin-bottom:14px}
+#forest3d{display:block;width:100%;height:520px;background:#07100c}
+.forest-hud{position:absolute;left:18px;top:16px;display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));
+            gap:8px;width:min(760px,calc(100vw - 36px));pointer-events:none}
+.hud-pill{background:rgba(9,17,14,.84);border:2px solid rgba(100,208,113,.25);border-radius:4px;
+          padding:8px 10px;backdrop-filter:blur(8px);box-shadow:inset 0 -3px 0 rgba(0,0,0,.25)}
+.hud-pill .k{font-size:.56rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.hud-pill .v{font-size:.86rem;font-weight:800;margin-top:2px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.forest-caption{position:absolute;left:18px;bottom:158px;right:18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+                pointer-events:none}
+.legend{background:rgba(9,17,14,.84);border:2px solid rgba(255,255,255,.08);border-radius:4px;
+        padding:5px 9px;font-size:.66rem;color:var(--muted);backdrop-filter:blur(8px)}
+.swatch{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px}
+.swatch.g{background:var(--green)}.swatch.b{background:var(--blue)}.swatch.a{background:var(--amber)}
+.swatch.r{background:var(--red)}
+.game-hotbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:grid;
+             grid-template-columns:repeat(4,64px);gap:6px;background:rgba(5,8,7,.84);
+             border:2px solid rgba(199,221,201,.28);border-radius:5px;padding:8px;max-width:calc(100vw - 32px);
+             overflow-x:auto;backdrop-filter:blur(8px);box-shadow:0 14px 30px rgba(0,0,0,.35)}
+.slot{width:64px;height:64px;background:#17211b;color:var(--text);border:2px solid #3a4a40;border-radius:4px;
+      padding:5px;display:grid;grid-template-rows:14px 1fr 14px;place-items:center;box-shadow:inset 0 -5px 0 rgba(0,0,0,.32)}
+.slot:hover{background:#223129;border-color:#9fb378;filter:none}
+.slot.active{border-color:var(--amber)}
+.slot .key{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:.55rem;color:var(--amber);justify-self:start}
+.slot .cube{width:25px;height:25px;background:#2d4930;border:2px solid rgba(255,255,255,.12);
+            box-shadow:inset -5px -5px 0 rgba(0,0,0,.25),inset 4px 4px 0 rgba(255,255,255,.07)}
+.slot .cube.blue{background:#28526a}.slot .cube.wood{background:#6d4d2f}.slot .cube.gold{background:#8a6a2f}
+.slot .cube.red{background:#74373c}.slot small{font-size:.52rem;font-weight:800;text-transform:uppercase;color:var(--head)}
+@media(min-width:900px){
+  .forest-caption{bottom:96px}
+  .game-hotbar{grid-template-columns:repeat(8,64px)}
+}
+@media(max-width:760px){
+  .forest-stage{min-height:560px}
+  #forest3d{height:560px}
+  .forest-hud{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hud-pill{padding:7px 8px}
+  .forest-caption{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));right:18px;bottom:158px}
+  .legend{font-size:.6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .game-hotbar{grid-template-columns:repeat(4,58px);width:auto;padding:7px;overflow:visible}
+  .slot{width:58px;height:60px}
+}
+@media(max-width:520px){
+  body{width:100%;max-width:100vw;padding:16px;overflow-x:hidden}
+  header{display:block}
+  h1{width:100%;max-width:100%}
+  h1 span{max-width:100%;white-space:normal}
+  .top{display:grid;grid-template-columns:1fr;gap:8px;width:100%;margin-top:12px}
+  .top .field{min-width:0}
+  .top select,.top input,.top button{width:100%;min-width:0}
+  .top .tag{text-align:center;align-self:end}
+}
+@keyframes grow{from{transform:scaleY(.85);opacity:.3;transform-origin:left top}to{transform:none;opacity:1}}
+@keyframes leafIn{from{transform:translateY(6px);opacity:.2}to{transform:none;opacity:1}}
+</style>
+</head>
+<body>
+<header>
+  <h1>DAS Growing Child<span>teacher lessons, candidate experts, previous accuracy checks, audited decisions</span></h1>
+  <div class="top">
+    <a class="tag" href="/">Governance</a>
+    <div class="field">
+      <label>Actor</label>
+      <select id="actor">
+        <option value="root">root - admin</option>
+        <option value="alice">alice - acme operator</option>
+        <option value="bob">bob - globex operator</option>
+        <option value="carol">carol - auditor</option>
+      </select>
+    </div>
+    <div class="field" id="proxyField" style="display:none">
+      <label>Proxy credential</label>
+      <input id="proxy" type="password" placeholder="X-DAS-Proxy-Auth">
+    </div>
+    <button class="ghost" onclick="loadStatus()">Refresh</button>
+  </div>
+</header>
+
+<section class="forest-stage" aria-label="3D learning forest">
+  <canvas id="forest3d"></canvas>
+  <div class="game-hotbar" aria-label="Builder hotbar">
+    <button class="slot active" data-tool="claim" onclick="useTool('claim')" title="Claim forest"><span class="key">1</span><span class="cube"></span><small>Claim</small></button>
+    <button class="slot" data-tool="plant" onclick="useTool('plant')" title="Plant expert"><span class="key">2</span><span class="cube wood"></span><small>Plant</small></button>
+    <button class="slot" data-tool="train" onclick="useTool('train')" title="Train expert"><span class="key">3</span><span class="cube blue"></span><small>Train</small></button>
+    <button class="slot" data-tool="master" onclick="useTool('master')" title="Grow master tree"><span class="key">4</span><span class="cube gold"></span><small>Master</small></button>
+    <button class="slot" data-tool="chop" onclick="useTool('chop')" title="Chop tree into block"><span class="key">5</span><span class="cube wood"></span><small>Chop</small></button>
+    <button class="slot" data-tool="build" onclick="useTool('build')" title="Assemble building"><span class="key">6</span><span class="cube"></span><small>Build</small></button>
+    <button class="slot" data-tool="share" onclick="useTool('share')" title="Share expert"><span class="key">7</span><span class="cube blue"></span><small>Share</small></button>
+    <button class="slot" data-tool="import" onclick="useTool('import')" title="Import expert"><span class="key">8</span><span class="cube red"></span><small>Import</small></button>
+  </div>
+  <div class="forest-hud">
+    <div class="hud-pill"><div class="k">Forest</div><div class="v" id="hudBranches">loading</div></div>
+    <div class="hud-pill"><div class="k">Experts</div><div class="v" id="hudExperts">loading</div></div>
+    <div class="hud-pill"><div class="k">Learning</div><div class="v" id="hudLearning">waiting</div></div>
+    <div class="hud-pill"><div class="k">Audit</div><div class="v" id="hudAudit">synced</div></div>
+  </div>
+  <div class="forest-caption">
+    <span class="legend"><span class="swatch g"></span>accepted / stable</span>
+    <span class="legend"><span class="swatch b"></span>growing</span>
+    <span class="legend"><span class="swatch a"></span>new branch</span>
+    <span class="legend"><span class="swatch r"></span>needs review</span>
+  </div>
+</section>
+
+<div class="cards">
+  <div class="metric"><div class="k">Growth Runs</div><div class="v" id="mRuns">0</div></div>
+  <div class="metric"><div class="k">Accepted</div><div class="v good" id="mAccepted">0</div></div>
+  <div class="metric"><div class="k">Rejected</div><div class="v bad" id="mRejected">0</div></div>
+  <div class="metric"><div class="k">Last Delta</div><div class="v" id="mDelta">-</div></div>
+  <div class="metric"><div class="k">Router Accuracy</div><div class="v" id="mRouter">-</div></div>
+  <div class="metric"><div class="k">Baseline Probes</div><div class="v" id="mProbes">-</div></div>
+  <div class="metric"><div class="k">Mobile Store</div><div class="v" id="mMobile">-</div></div>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <h2>Master Tree Toolbelt</h2>
+      <div class="toolbelt">
+        <button class="tool" onclick="useTool('claim')" title="Claim or join a player forest"><span class="tool-icon">ID</span><span>Claim Forest</span></button>
+        <button class="tool" onclick="useTool('plant')" title="Create a new expert branch"><span class="tool-icon">PL</span><span>Plant Expert</span></button>
+        <button class="tool" onclick="useTool('train')" title="Train the selected expert"><span class="tool-icon">TR</span><span>Train Expert</span></button>
+        <button class="tool" onclick="useTool('master')" title="Run a master-tree learning cycle"><span class="tool-icon">MT</span><span>Grow Master</span></button>
+        <button class="tool" onclick="useTool('chop')" title="Harvest a trained expert into a reusable block"><span class="tool-icon">CH</span><span>Chop Tree</span></button>
+        <button class="tool" onclick="useTool('build')" title="Assemble selected blocks into a skill building"><span class="tool-icon">BD</span><span>Build</span></button>
+        <button class="tool" onclick="useTool('share')" title="Share your selected expert"><span class="tool-icon">SH</span><span>Share</span></button>
+        <button class="tool" onclick="useTool('import')" title="Import a shared expert"><span class="tool-icon">IM</span><span>Import</span></button>
+      </div>
+      <div class="small" id="toolState" style="margin-top:9px">Ready.</div>
+    </div>
+
+    <div class="card">
+      <h2>Player Forest</h2>
+      <div class="formrow">
+        <div class="field"><label>Player id</label><input id="playerId" value="player-one"></div>
+        <div class="field"><label>Display name</label><input id="playerName" placeholder="Player One"></div>
+      </div>
+      <button id="playerBtn" class="ghost" onclick="createPlayer()">Create / join forest</button>
+      <table style="margin-top:10px">
+        <thead><tr><th>Player</th><th>Forest</th><th>Score</th></tr></thead>
+        <tbody id="playersBoard"><tr><td class="empty" colspan="3">No players yet</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Multiplayer Arena</h2>
+      <div class="formrow">
+        <div class="field"><label>Your expert</label><select id="shareExpert"></select></div>
+        <div class="field"><label>Arena name</label><input id="shareName" placeholder="react-hooks-champion"></div>
+      </div>
+      <button id="shareBtn" class="ghost" onclick="shareSelectedExpert()">Share expert</button>
+      <div class="formrow" style="margin-top:10px">
+        <div class="field"><label>Shared expert</label><select id="sharedExpert"></select></div>
+        <div class="field"><label>Import name</label><input id="importName" placeholder="imported-react-hooks"></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Import tenant</label><input id="importTenant" placeholder="your forest tenant"></div>
+        <div class="field"><label>Specialty</label><input id="importSpecialty" placeholder="react"></div>
+      </div>
+      <button id="importBtn" class="ghost" onclick="importSharedExpert()">Import shared expert</button>
+      <table style="margin-top:10px">
+        <thead><tr><th>Shared</th><th>Author</th><th>Domain</th></tr></thead>
+        <tbody id="arenaBoard"><tr><td class="empty" colspan="3">No shared experts yet</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Knowledge Blocks</h2>
+      <div class="formrow">
+        <div class="field"><label>Tree to chop</label><select id="blockExpert"></select></div>
+        <div class="field"><label>Block name</label><input id="blockName" placeholder="physics-force-block"></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Material</label><input id="blockMaterial" placeholder="physics"></div>
+        <div class="field"><label>Building type</label><input id="buildingType" placeholder="physics"></div>
+      </div>
+      <button id="harvestBtn" class="ghost" onclick="harvestBlock()">Chop into block</button>
+      <div class="formrow" style="margin-top:10px">
+        <div class="field"><label>Building name</label><input id="buildingName" placeholder="Physics Building"></div>
+        <div class="field"><label>Blocks to use</label><select id="buildingBlocks" multiple size="4"></select></div>
+      </div>
+      <button id="buildBtn" class="ghost" onclick="assembleBuilding()">Assemble building</button>
+      <table style="margin-top:10px">
+        <thead><tr><th>Block</th><th>Material</th><th>Author</th></tr></thead>
+        <tbody id="blocksBoard"><tr><td class="empty" colspan="3">No harvested blocks yet</td></tr></tbody>
+      </table>
+      <table style="margin-top:10px">
+        <thead><tr><th>Building</th><th>Blocks</th><th>Type</th></tr></thead>
+        <tbody id="buildingsBoard"><tr><td class="empty" colspan="3">No buildings yet</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Mobile Memory</h2>
+      <table>
+        <tbody>
+          <tr><td>Folder</td><td class="mono" id="memPath">-</td></tr>
+          <tr><td>Used</td><td class="mono" id="memUsed">-</td></tr>
+          <tr><td>Current warning</td><td class="mono" id="memWarn">-</td></tr>
+          <tr><td>Next warning</td><td class="mono" id="memNext">-</td></tr>
+        </tbody>
+      </table>
+      <button id="syncMobileBtn" class="ghost" style="margin-top:10px" onclick="syncMobileModels()">Sync small models</button>
+    </div>
+
+    <div class="card">
+      <h2>Connect LLM Teacher</h2>
+      <div class="formrow">
+        <div class="field"><label>Teacher id</label><input id="llmId" value="phone-llm"></div>
+        <div class="field"><label>Provider</label><select id="llmProvider"></select></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Display name</label><input id="llmLabel" placeholder="Phone Qwen teacher"></div>
+        <div class="field"><label>Model</label><input id="llmModel" placeholder="qwen2.5:7b-instruct"></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Endpoint / base URL</label><input id="llmEndpoint" placeholder="http://localhost:11434"></div>
+        <div class="field"><label>API key</label><input id="llmKey" type="password" placeholder="optional"></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Max examples</label><input id="llmMax" type="number" value="48" min="4" max="160"></div>
+        <div class="field"><label>Temperature</label><input id="llmTemp" type="number" value="0.2" min="0" max="2" step="0.1"></div>
+      </div>
+      <button id="llmBtn" class="ghost" onclick="registerTeacher()">Add teacher</button>
+      <div class="small" id="providerHint" style="margin-top:8px">Choose a provider to see connection details.</div>
+    </div>
+
+    <div class="card">
+      <h2>Run Growth</h2>
+      <div class="formrow">
+        <div class="field"><label>Expert</label><select id="expert"></select></div>
+        <div class="field"><label>Teacher</label><select id="teacher"></select></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Topic override</label><input id="topic" placeholder="optional"></div>
+        <div class="field"><label>Steps</label><input id="steps" type="number" value="140" min="1" max="1000"></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Train examples</label><input id="nTrain" type="number" value="180" min="16" max="1200"></div>
+        <div class="field"><label>Eval examples</label><input id="nEval" type="number" value="120" min="16" max="1200"></div>
+      </div>
+      <button id="runBtn" onclick="runGrowth()">Run candidate update</button>
+    </div>
+
+    <div class="card">
+      <h2>Automation</h2>
+      <div class="formrow">
+        <div class="field"><label>Max attempts</label><input id="autoAttempts" type="number" value="4" min="0" max="50"></div>
+        <div class="field"><label>Teacher filter</label><select id="autoTeacher"><option value="">all teachers</option></select></div>
+      </div>
+      <button id="autoBtn" class="ghost" onclick="runAutoCycle()">Run automatic cycle</button>
+      <div class="small" style="margin-top:8px">For hands-off automation, call <span class="mono">apps/growth_worker.py</span> from cron.</div>
+    </div>
+
+    <div class="card">
+      <h2>Create Expert</h2>
+      <div class="formrow">
+        <div class="field"><label>Name</label><input id="newName" placeholder="react-hooks"></div>
+        <div class="field"><label>Tenant</label><input id="newTenant" value="learning"></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Specialty branch</label><input id="newSpecialty" placeholder="react"></div>
+        <div class="field"><label>Parent</label><input id="newParent" placeholder="react"></div>
+      </div>
+      <div class="formrow">
+        <div class="field"><label>Teacher</label><select id="createTeacher"></select></div>
+        <div class="field"><label>Seed steps</label><input id="createSteps" type="number" value="180" min="1" max="1200"></div>
+      </div>
+      <button id="createBtn" class="ghost" onclick="createExpert()">Create new branch</button>
+    </div>
+
+    <div class="card">
+      <h2>Policy</h2>
+      <table>
+        <tbody>
+          <tr><td>Minimum target accuracy</td><td class="mono" id="pAcc">{{ "%.2f"|format(policy.min_accuracy) }}</td></tr>
+          <tr><td>Minimum target delta</td><td class="mono" id="pDelta">{{ "%+.2f"|format(policy.min_delta) }}</td></tr>
+          <tr><td>Max previous regression</td><td class="mono" id="pReg">{{ "%.2f"|format(policy.max_previous_regression) }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Growing Tree</h2>
+      <div id="treeviz" class="treeviz"><div class="empty">loading tree...</div></div>
+    </div>
+
+    <div class="pipeline">
+      <div class="step" id="sTeacher"><div class="n">Teacher</div><div class="b">Idle</div><div class="s">-</div></div>
+      <div class="step" id="sCandidate"><div class="n">Candidate</div><div class="b">Waiting</div><div class="s">-</div></div>
+      <div class="step" id="sEval"><div class="n">Evaluation</div><div class="b">Waiting</div><div class="s">-</div></div>
+      <div class="step" id="sAudit"><div class="n">Audit</div><div class="b">Waiting</div><div class="s">-</div></div>
+    </div>
+
+    <div class="card">
+      <h2>History</h2>
+      <table>
+        <thead>
+          <tr><th>Result</th><th>Expert</th><th>Teacher</th><th>Target</th><th>Previous</th><th>Hash</th></tr>
+        </thead>
+        <tbody id="history"><tr><td class="empty" colspan="6">No growth runs yet</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+const PROXY_REQUIRED = {{ proxy_required|tojson }};
+if (PROXY_REQUIRED) document.getElementById('proxyField').style.display = '';
+let lastStatus = null;
+let lastProviders = [];
+let lastShared = [];
+let lastBlocks = [];
+let lastBuildings = [];
+let lastMemoryWarningBytes = Number(localStorage.getItem('dasMemoryWarningBytes') || 0);
+let forestScene = null;
+let pendingForestUpdate = null;
+let threeLoadSettled = false;
+
+function loadThree(){
+  return new Promise(resolve => {
+    if (window.THREE) return resolve(true);
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/three@0.160.0/build/three.min.js';
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+    setTimeout(() => resolve(false), 1800);
+  });
+}
+
+loadThree().then(() => {
+  threeLoadSettled = true;
+  if (!forestScene){
+    forestScene = new LearningForestScene(document.getElementById('forest3d'));
+    if (pendingForestUpdate) forestScene.update(pendingForestUpdate.tree, pendingForestUpdate.history);
+  }
+});
+
+class LearningForestScene{
+  constructor(canvas){
+    this.canvas = canvas;
+    this.tree = null;
+    this.history = [];
+    this.t = 0;
+    this.useThree = !!(window.THREE && THREE.WebGLRenderer);
+    try {
+      if (this.useThree) this.initThree();
+      else this.init2d();
+    } catch (e) {
+      this.useThree = false;
+      this.init2d();
+    }
+    window.addEventListener('resize', () => this.resize());
+    this.resize();
+    this.animate();
+  }
+  initThree(){
+    this.renderer = new THREE.WebGLRenderer({canvas:this.canvas, antialias:true});
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setClearColor(0x08110f, 1);
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.Fog(0x08110f, 18, 38);
+    this.camera = new THREE.PerspectiveCamera(48, 1, .1, 80);
+    this.camera.position.set(0, 8.5, 16);
+    this.camera.lookAt(0, 1.8, 0);
+    this.scene.add(new THREE.HemisphereLight(0xbbe7d3, 0x17241d, 1.4));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+    sun.position.set(-5, 9, 7);
+    this.scene.add(sun);
+    this.group = new THREE.Group();
+    this.scene.add(this.group);
+  }
+  init2d(){
+    this.ctx = this.canvas.getContext('2d');
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    const w = Math.max(320, rect.width);
+    const h = Math.max(300, rect.height);
+    if (this.useThree){
+      this.renderer.setSize(w, h, false);
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+    } else {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      this.canvas.width = Math.floor(w * dpr);
+      this.canvas.height = Math.floor(h * dpr);
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.draw2d();
+    }
+  }
+  update(tree, history){
+    this.tree = tree;
+    this.history = history || [];
+    this.updateHud();
+    if (this.useThree) this.buildThree();
+    else this.draw2d();
+  }
+  updateHud(){
+    const branches = (this.tree && this.tree.children) || [];
+    const experts = branches.reduce((n, b) => n + ((b.children || []).length), 0);
+    const last = this.history[this.history.length - 1];
+    document.getElementById('hudBranches').textContent = branches.length + ' branches';
+    document.getElementById('hudExperts').textContent = experts + ' experts';
+    document.getElementById('hudLearning').textContent = last ? `${last.expert}: ${last.accepted ? 'accepted' : 'review'}` : 'ready';
+    document.getElementById('hudAudit').textContent = last ? last.audit_event : 'synced';
+  }
+  color(status){
+    if (status === 'needs_attention') return 0xee6b6e;
+    if (status === 'new') return 0xe8b45c;
+    if (status === 'growing') return 0x6eb7e8;
+    return 0x61d394;
+  }
+  clearGroup(){
+    while (this.group.children.length){
+      const obj = this.group.children.pop();
+      obj.traverse?.(child => {
+        child.geometry?.dispose?.();
+        if (child.material) child.material.dispose?.();
+      });
+    }
+  }
+  addVoxel(x, y, z, sx, sy, sz, color, opts={}){
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(sx, sy, sz),
+      new THREE.MeshStandardMaterial({
+        color,
+        roughness:.84,
+        metalness:0,
+        emissive:opts.emissive || 0x000000,
+        emissiveIntensity:opts.emissiveIntensity || 0
+      })
+    );
+    mesh.position.set(x, y, z);
+    if (opts.rotation) mesh.rotation.set(opts.rotation[0], opts.rotation[1], opts.rotation[2]);
+    this.group.add(mesh);
+    return mesh;
+  }
+  addBlockLine(a, b, size, color){
+    const dist = a.distanceTo(b);
+    const steps = Math.max(2, Math.ceil(dist / .42));
+    for (let i = 0; i <= steps; i++){
+      const p = i / steps;
+      const x = a.x + (b.x - a.x) * p;
+      const y = a.y + (b.y - a.y) * p;
+      const z = a.z + (b.z - a.z) * p;
+      this.addVoxel(x, y, z, size, size, size, color);
+    }
+  }
+  addTerrain(){
+    for (let xi = -10; xi <= 10; xi++){
+      for (let zi = -6; zi <= 6; zi++){
+        const edge = Math.abs(xi) > 8 || Math.abs(zi) > 4;
+        const lift = ((xi * 17 + zi * 11) % 7 === 0) ? .08 : 0;
+        const grass = edge ? 0x183624 : 0x1f5b35;
+        this.addVoxel(xi * .82, -.14 + lift, zi * .82, .8, .24 + lift, .8, grass);
+        if (edge && (xi + zi) % 2 === 0) this.addVoxel(xi * .82, -.42, zi * .82, .8, .32, .8, 0x4b3421);
+      }
+    }
+  }
+  addExpertTree(x, z, leaf, scale){
+    const statusColor = this.color(leaf.status);
+    this.addVoxel(x, .18 * scale, z, .18 * scale, .36 * scale, .18 * scale, 0x6d4d2f);
+    this.addVoxel(x, .52 * scale, z, .16 * scale, .34 * scale, .16 * scale, 0x7a5632);
+    this.addVoxel(x, .88 * scale, z, .46 * scale, .38 * scale, .46 * scale, statusColor, {emissive:statusColor, emissiveIntensity:.08});
+    this.addVoxel(x, 1.15 * scale, z, .34 * scale, .26 * scale, .34 * scale, statusColor, {emissive:statusColor, emissiveIntensity:.05});
+    this.addVoxel(x - .26 * scale, .92 * scale, z, .24 * scale, .24 * scale, .24 * scale, statusColor);
+    this.addVoxel(x + .26 * scale, .92 * scale, z, .24 * scale, .24 * scale, .24 * scale, statusColor);
+    this.addVoxel(x, .05, z, .68 * scale, .08, .68 * scale, statusColor, {emissive:statusColor, emissiveIntensity:.04});
+    leaf._pos = {x, y:.98 * scale, z};
+  }
+  addBuilding(x, z, levels){
+    const count = Math.max(1, Math.min(3, levels || 1));
+    for (let y = 0; y < count; y++){
+      for (let bx = 0; bx < 3; bx++){
+        for (let bz = 0; bz < 2; bz++){
+          const isWindow = (bx + bz + y) % 3 === 0;
+          this.addVoxel(x + bx * .42, .18 + y * .38, z + bz * .42, .38, .34, .38, isWindow ? 0x6bbbe4 : 0x59636a, {
+            emissive:isWindow ? 0x123a4a : 0x000000,
+            emissiveIntensity:isWindow ? .18 : 0
+          });
+        }
+      }
+    }
+    this.addVoxel(x + .42, .18 + count * .38, z + .2, 1.42, .22, .94, 0x8a6a2f);
+  }
+  buildThree(){
+    this.clearGroup();
+    this.addTerrain();
+    const branches = (this.tree && this.tree.children) || [];
+    const spacing = Math.min(6.2, Math.max(3.4, 17 / Math.max(branches.length, 1)));
+    const startX = -((branches.length - 1) * spacing) / 2;
+    this.addVoxel(startX - 3.1, .28, -2.6, .78, .56, .78, 0x28526a, {emissive:0x0d2b38, emissiveIntensity:.18});
+    this.addVoxel(startX - 3.1, .78, -2.6, .46, .44, .46, 0x6bbbe4, {emissive:0x1b638e, emissiveIntensity:.32});
+    branches.forEach((branch, i) => {
+      const x = startX + i * spacing;
+      const trunkTop = new THREE.Vector3(x, 2.1, 0);
+      for (let y = .22; y <= 1.82; y += .38) this.addVoxel(x, y, 0, .38, .38, .38, 0x725336);
+      this.addVoxel(x, 2.1, 0, 1.1, .58, 1.1, 0x285b3e);
+      this.addVoxel(x, 2.5, 0, .72, .44, .72, 0x2f714c);
+      this.addVoxel(x - .55, 2.08, 0, .42, .42, .42, 0x2b6545);
+      this.addVoxel(x + .55, 2.08, 0, .42, .42, .42, 0x2b6545);
+      (branch.children || []).forEach((leaf, j) => {
+        const angle = (j / Math.max(1, branch.children.length)) * Math.PI * 2 + i * .55;
+        const r = 1.25 + (j % 2) * .42;
+        const lx = x + Math.cos(angle) * r;
+        const lz = Math.sin(angle) * r + .25;
+        this.addBlockLine(trunkTop, new THREE.Vector3(lx, .95, lz), .16, 0x5b6d3f);
+        this.addExpertTree(lx, lz, leaf, leaf.status === 'new' ? 1.08 : .92);
+      });
+    });
+    const blocks = Math.min(6, (lastBlocks || []).length);
+    for (let i = 0; i < blocks; i++){
+      this.addVoxel(5.9 + (i % 3) * .44, .18 + Math.floor(i / 3) * .38, -2.8, .38, .34, .38, 0x2f714c);
+    }
+    this.addBuilding(6.7, -1.9, Math.max(1, Math.min(3, (lastBuildings || []).length || 1)));
+    this.addParticles();
+  }
+  addParticles(){
+    const last = this.history[this.history.length - 1];
+    if (!last || !this.tree) return;
+    let target = null;
+    for (const branch of this.tree.children || []){
+      target = (branch.children || []).find(l => l.eid === last.eid) || target;
+    }
+    if (!target || !target._pos) return;
+    const material = new THREE.MeshBasicMaterial({color:last.accepted ? 0x61d394 : 0xe8b45c});
+    for (let i = 0; i < 18; i++){
+      const p = i / 17;
+      const orb = new THREE.Mesh(new THREE.BoxGeometry(.12, .12, .12), material);
+      orb.position.set(-8 + (target._pos.x + 8) * p, 2.7 + Math.sin(p * Math.PI) * 1.8, -2.6 + (target._pos.z + 2.6) * p);
+      orb.userData.flow = {p, target};
+      this.group.add(orb);
+    }
+  }
+  animate(){
+    this.t += .01;
+    if (this.useThree){
+      this.group.rotation.y = Math.sin(this.t * .45) * .08;
+      this.group.children.forEach(obj => {
+        if (obj.userData.flow){
+          const p = (obj.userData.flow.p + this.t * .25) % 1;
+          const target = obj.userData.flow.target._pos;
+          obj.position.set(-8 + (target.x + 8) * p, 2.7 + Math.sin(p * Math.PI) * 1.8, -2.6 + (target.z + 2.6) * p);
+        }
+      });
+      this.renderer.render(this.scene, this.camera);
+    } else {
+      if (Math.floor(this.t * 20) % 2 === 0) this.draw2d();
+    }
+    requestAnimationFrame(() => this.animate());
+  }
+  draw2d(){
+    if (!this.ctx) return;
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#07100c';
+    ctx.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 30){
+      for (let y = h * .62; y < h * .86; y += 24){
+        ctx.fillStyle = ((x + y) % 48 === 0) ? '#1f5b35' : '#183624';
+        ctx.fillRect(x, y, 28, 22);
+      }
+    }
+    const branches = (this.tree && this.tree.children) || [];
+    branches.forEach((branch, i) => {
+      const x = (i + 1) * w / (branches.length + 1);
+      ctx.fillStyle = '#6f4e2f';
+      for (let y = h * .42; y < h * .7; y += 22) ctx.fillRect(x - 8, y, 16, 20);
+      ctx.fillStyle = '#285b3e';
+      ctx.fillRect(x - 34, h * .34, 68, 46);
+      ctx.fillStyle = '#2f714c';
+      ctx.fillRect(x - 22, h * .28, 44, 32);
+      (branch.children || []).forEach((leaf, j) => {
+        const lx = x + (j - ((branch.children.length - 1) / 2)) * 48;
+        const ly = h * .66 + (j % 2) * 18;
+        ctx.fillStyle = '#6f4e2f';
+        ctx.fillRect(lx - 4, ly + 4, 8, 28);
+        ctx.fillStyle = '#' + this.color(leaf.status).toString(16).padStart(6, '0');
+        const s = leaf.status === 'new' ? 30 : 26;
+        ctx.fillRect(lx - s / 2, ly - s / 2, s, s);
+      });
+    });
+  }
+}
+
+function updateForestScene(tree, history){
+  pendingForestUpdate = {tree, history: history || []};
+  if (!forestScene && threeLoadSettled){
+    forestScene = new LearningForestScene(document.getElementById('forest3d'));
+  }
+  if (forestScene) forestScene.update(tree, history || []);
+}
+
+function actor(){ return document.getElementById('actor').value; }
+function headers(json){
+  const h = {'X-DAS-Actor': actor()};
+  if (json) h['Content-Type'] = 'application/json';
+  const p = document.getElementById('proxy');
+  if (p && p.value) h['X-DAS-Proxy-Auth'] = p.value;
+  return h;
+}
+async function api(path, opts={}){
+  const res = await fetch(path, {...opts, headers:{...headers(opts.body != null), ...(opts.headers || {})}});
+  let data = null; try { data = await res.json(); } catch(e){}
+  if (!res.ok){
+    const err = new Error((data && (data.reason || data.error)) || res.statusText);
+    err.status = res.status; throw err;
+  }
+  return data;
+}
+function toast(kind, head, body){
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.innerHTML = `<b>${head}</b>${body || ''}`;
+  document.getElementById('log').appendChild(el);
+  setTimeout(()=>{ el.style.opacity=0; el.style.transition='opacity .35s'; setTimeout(()=>el.remove(),360); }, 4200);
+}
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[ch]);
+}
+function pct(x){ return x == null ? '-' : Math.round(x * 100) + '%'; }
+function gb(x){ return x == null ? '-' : (Number(x) / (1024 ** 3)).toFixed(2) + ' GB'; }
+function accBar(x, cls=''){
+  const w = Math.max(0, Math.min(100, Math.round((x || 0) * 100)));
+  return `<div>${pct(x)}</div><div class="bar ${cls}"><span style="width:${w}%"></span></div>`;
+}
+function setStep(id, state, title, sub){
+  const el = document.getElementById(id);
+  el.className = 'step ' + (state || '');
+  el.querySelector('.b').textContent = title;
+  el.querySelector('.s').textContent = sub || '-';
+}
+function fillSelect(el, rows, labelFn){
+  const old = el.value;
+  el.innerHTML = rows.map(r => `<option value="${r.id}">${labelFn(r)}</option>`).join('');
+  if (rows.some(r => String(r.id) === old)) el.value = old;
+}
+function ensureActorOption(player){
+  const sel = document.getElementById('actor');
+  if (![...sel.options].some(o => o.value === player.actor)){
+    const opt = document.createElement('option');
+    opt.value = player.actor;
+    opt.textContent = `${player.actor} - player`;
+    sel.appendChild(opt);
+  }
+}
+function syncActors(players){
+  (players || []).forEach(ensureActorOption);
+}
+function renderPlayers(players){
+  const body = document.getElementById('playersBoard');
+  if (!players || !players.length){
+    body.innerHTML = '<tr><td class="empty" colspan="3">No players yet</td></tr>';
+    return;
+  }
+  body.innerHTML = players.slice().sort((a,b) => b.score - a.score).map(p => `<tr>
+    <td>${esc(p.display_name || p.actor)}<div class="small mono">${esc(p.actor)}</div></td>
+    <td>${esc(p.tenant)}<div class="small">${p.experts} experts · ${p.shared} shared</div></td>
+    <td class="mono">${p.score}</td>
+  </tr>`).join('');
+}
+function renderArena(rows){
+  const body = document.getElementById('arenaBoard');
+  if (!rows || !rows.length){
+    body.innerHTML = '<tr><td class="empty" colspan="3">No shared experts yet</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.slice().map(r => `<tr>
+    <td>${esc(r.source_name || r.name)}<div class="small mono">${esc(r.id)}</div></td>
+    <td>${esc(r.author || '-')}</td>
+    <td>${esc(r.domain || '-')}</td>
+  </tr>`).join('');
+}
+function renderBlocks(rows){
+  const body = document.getElementById('blocksBoard');
+  if (!rows || !rows.length){
+    body.innerHTML = '<tr><td class="empty" colspan="3">No harvested blocks yet</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.slice().map(r => `<tr>
+    <td>${esc(r.source_name || r.name)}<div class="small mono">${esc(r.id)}</div></td>
+    <td>${esc(r.material || r.domain || '-')}</td>
+    <td>${esc(r.author || '-')}</td>
+  </tr>`).join('');
+}
+function renderBuildings(rows){
+  const body = document.getElementById('buildingsBoard');
+  if (!rows || !rows.length){
+    body.innerHTML = '<tr><td class="empty" colspan="3">No buildings yet</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.slice().map(r => `<tr>
+    <td>${esc(r.name || r.id)}<div class="small mono">${esc(r.id)}</div></td>
+    <td class="mono">${esc(r.block_count || (r.blocks || []).length || 0)}</td>
+    <td>${esc(r.building_type || '-')}</td>
+  </tr>`).join('');
+}
+function teacherLabel(t){
+  return `${t.name}${t.provider ? ' · ' + t.provider : ''}${t.model ? ' · ' + t.model : ''}`;
+}
+function updateProviderHint(){
+  const p = document.getElementById('llmProvider').value;
+  const row = lastProviders.find(x => x.id === p);
+  document.getElementById('providerHint').textContent = row ? row.hint : 'Choose a provider to see connection details.';
+  const endpoint = document.getElementById('llmEndpoint');
+  endpoint.disabled = row && !row.needs_endpoint;
+  if (endpoint.disabled) endpoint.value = '';
+}
+function localSlug(value, fallback='player'){
+  const s = String(value || fallback).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return s || fallback;
+}
+function setToolState(text){
+  const el = document.getElementById('toolState');
+  if (el) el.textContent = text;
+}
+function activateToolSlot(tool){
+  document.querySelectorAll('.slot').forEach(slot => {
+    slot.classList.toggle('active', slot.dataset.tool === tool);
+  });
+}
+function prepareStarterExpert(){
+  const profile = (lastStatus && lastStatus.actor_profile) || {};
+  const player = profile.actor && profile.actor !== 'root' ? profile.actor : document.getElementById('playerId').value;
+  const base = localSlug(player || 'starter');
+  const name = document.getElementById('newName');
+  const tenant = document.getElementById('newTenant');
+  const specialty = document.getElementById('newSpecialty');
+  const parent = document.getElementById('newParent');
+  if (!name.value.trim()) name.value = `${base}-first-expert`;
+  if (!tenant.value.trim() || (tenant.value === 'learning' && profile.tenant)) tenant.value = profile.tenant || tenant.value || 'learning';
+  if (!specialty.value.trim()) specialty.value = 'general';
+  if (!parent.value.trim()) parent.value = specialty.value;
+}
+async function useTool(tool){
+  const state = {
+    claim: 'Claiming forest...',
+    plant: 'Planting expert...',
+    train: 'Training expert...',
+    master: 'Growing master tree...',
+    chop: 'Chopping tree into block...',
+    build: 'Assembling building...',
+    share: 'Sharing expert...',
+    import: 'Importing expert...'
+  };
+  activateToolSlot(tool);
+  setToolState(state[tool] || 'Working...');
+  try{
+    if (tool === 'claim') await createPlayer();
+    else if (tool === 'plant'){ prepareStarterExpert(); await createExpert(); }
+    else if (tool === 'train') await runGrowth();
+    else if (tool === 'master') await runAutoCycle();
+    else if (tool === 'chop') await harvestBlock();
+    else if (tool === 'build') await assembleBuilding();
+    else if (tool === 'share') await shareSelectedExpert();
+    else if (tool === 'import') await importSharedExpert();
+    setToolState('Ready.');
+  }catch(e){
+    setToolState('Stopped.');
+    toast('err', 'Tool stopped', e.message);
+  }
+}
+function renderMemory(status){
+  if (!status) return;
+  document.getElementById('mMobile').textContent = gb(status.size_bytes);
+  document.getElementById('memPath').textContent = status.path || '-';
+  document.getElementById('memUsed').textContent = `${gb(status.size_bytes)} (${status.size_bytes || 0} bytes)`;
+  document.getElementById('memWarn').textContent = status.warning ? gb(status.warning_level_bytes) : 'below warning';
+  document.getElementById('memNext').textContent = gb(status.next_warning_bytes);
+  const level = Number(status.warning_level_bytes || 0);
+  if (level > 0 && level > lastMemoryWarningBytes){
+    lastMemoryWarningBytes = level;
+    localStorage.setItem('dasMemoryWarningBytes', String(level));
+    toast('err', 'Mobile memory warning', `model folder is above ${gb(level)}`);
+  }
+}
+async function loadStatus(){
+  try{
+    const st = await api('/growth/status');
+    const tree = await api('/growth/tree');
+    const shared = await api('/growth/shared');
+    const blocks = await api('/growth/blocks');
+    lastStatus = st;
+    lastShared = shared.experts || [];
+    lastBlocks = blocks.blocks || [];
+    lastBuildings = blocks.buildings || [];
+    lastProviders = st.providers || [];
+    syncActors(st.players || []);
+    renderPlayers(shared.players || st.players || []);
+    renderArena(lastShared);
+    renderBlocks(lastBlocks);
+    renderBuildings(lastBuildings);
+    fillSelect(document.getElementById('llmProvider'), lastProviders, p => p.name);
+    updateProviderHint();
+    const expertRows = st.experts.map(e => ({id:e.eid, ...e}));
+    fillSelect(document.getElementById('expert'), expertRows,
+      e => `${e.eid} · ${e.tenant}/${e.name}`);
+    fillSelect(document.getElementById('shareExpert'), expertRows,
+      e => `${e.eid} · ${e.tenant}/${e.name}`);
+    fillSelect(document.getElementById('blockExpert'), expertRows,
+      e => `${e.eid} · ${e.tenant}/${e.name}`);
+    fillSelect(document.getElementById('sharedExpert'), lastShared,
+      e => `${e.source_name || e.name} · ${e.author || 'arena'}`);
+    fillSelect(document.getElementById('buildingBlocks'), lastBlocks,
+      e => `${e.source_name || e.name} · ${e.material || e.domain || 'block'}`);
+    fillSelect(document.getElementById('teacher'), st.teachers,
+      t => teacherLabel(t));
+    fillSelect(document.getElementById('createTeacher'), st.teachers,
+      t => teacherLabel(t));
+    const autoTeacher = document.getElementById('autoTeacher');
+    const oldAuto = autoTeacher.value;
+    autoTeacher.innerHTML = '<option value="">all teachers</option>' +
+      st.teachers.map(t => `<option value="${t.id}">${teacherLabel(t)}</option>`).join('');
+    autoTeacher.value = [...autoTeacher.options].some(o => o.value === oldAuto) ? oldAuto : '';
+    renderHistory(st.history || []);
+    document.getElementById('mProbes').textContent = st.baseline_probe_count;
+    document.getElementById('mRouter').textContent = pct(st.router_accuracy);
+    document.getElementById('pAcc').textContent = st.policy.min_accuracy.toFixed(2);
+    document.getElementById('pDelta').textContent = (st.policy.min_delta >= 0 ? '+' : '') + st.policy.min_delta.toFixed(2);
+    document.getElementById('pReg').textContent = st.policy.max_previous_regression.toFixed(2);
+    if (st.actor_profile && st.actor_profile.tenant){
+      if (!document.getElementById('newTenant').value || document.getElementById('newTenant').value === 'learning'){
+        document.getElementById('newTenant').value = st.actor_profile.tenant;
+      }
+      if (!document.getElementById('importTenant').value){
+        document.getElementById('importTenant').value = st.actor_profile.tenant;
+      }
+    }
+    renderMemory(st.mobile_store);
+    renderTree(tree.tree);
+    updateForestScene(tree.tree, st.history || tree.history || []);
+  }catch(e){
+    toast('err', 'Status failed', e.message);
+  }
+}
+function renderTree(tree){
+  const host = document.getElementById('treeviz');
+  if (!tree || !tree.children || !tree.children.length){
+    host.innerHTML = '<div class="empty">No experts yet</div>';
+    return;
+  }
+  host.innerHTML = `<div class="tree-root">
+    <div class="trunk">${esc(tree.name)}</div>
+    <div class="branches">
+      ${tree.children.map(branch => `<div class="branch">
+        <div class="branch-title">${esc(branch.name)}</div>
+        ${(branch.children || []).map(leaf => `<div class="leaf ${esc(leaf.status || 'stable')}">
+          <span class="status">${esc(leaf.status || 'stable')}</span>
+          <div class="name">${esc(leaf.name)}</div>
+          <div class="meta">${esc(leaf.tenant)} · eid ${esc(leaf.eid)}</div>
+          <div class="meta">teacher ${esc(leaf.teacher || leaf.created_by || 'bootstrap')}</div>
+          <div class="meta">${leaf.accuracy == null ? 'no score yet' : 'acc ' + pct(leaf.accuracy)}${leaf.delta == null ? '' : ' · delta ' + signed(leaf.delta)}</div>
+        </div>`).join('')}
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+function renderHistory(rows){
+  const accepted = rows.filter(r => r.accepted).length;
+  const rejected = rows.length - accepted;
+  document.getElementById('mRuns').textContent = rows.length;
+  document.getElementById('mAccepted').textContent = accepted;
+  document.getElementById('mRejected').textContent = rejected;
+  document.getElementById('mDelta').textContent = rows.length ? signed(rows[rows.length - 1].target_delta) : '-';
+  const body = document.getElementById('history');
+  if (!rows.length){
+    body.innerHTML = '<tr><td class="empty" colspan="6">No growth runs yet</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.slice().reverse().map(r => {
+    const tag = r.accepted ? '<span class="tag ok">accepted</span>' : '<span class="tag bad">rejected</span>';
+    const prev = `${pct(1 - Math.max(0, r.max_previous_regression))}<div class="small">reg ${signed(-r.max_previous_regression)}</div>`;
+    return `<tr>
+      <td>${tag}<div class="small">${r.audit_event}</div></td>
+      <td>${r.tenant}/${r.expert}<div class="small mono">eid ${r.eid}</div></td>
+      <td>${r.teacher}<div class="small">${r.topic}</div></td>
+      <td>${accBar(r.target_accuracy_before)}${accBar(r.target_accuracy_after, 'after')}<div class="small">${signed(r.target_delta)}</div></td>
+      <td>${prev}</td>
+      <td><span class="mono">${r.live_hash_after || r.candidate_hash}</span><div class="small">${r.old_experts_unchanged ? 'others unchanged' : 'hash warning'}</div></td>
+    </tr>`;
+  }).join('');
+  const last = rows[rows.length - 1];
+  setStep('sTeacher', '', last.teacher, last.dataset_version);
+  setStep('sCandidate', last.accepted ? 'ok' : 'bad', last.expert, `target ${pct(last.target_accuracy_before)} -> ${pct(last.target_accuracy_after)}`);
+  setStep('sEval', last.accepted ? 'ok' : 'bad', last.accepted ? 'Passed' : 'Rejected', last.reason);
+  setStep('sAudit', last.accepted ? 'ok' : 'bad', last.audit_event, last.live_hash_after || last.candidate_hash);
+}
+function signed(x){
+  if (x == null) return '-';
+  const s = x >= 0 ? '+' : '';
+  return s + (x * 100).toFixed(1) + ' pts';
+}
+async function createPlayer(){
+  const btn = document.getElementById('playerBtn');
+  btn.disabled = true;
+  try{
+    const body = {
+      player: document.getElementById('playerId').value,
+      display_name: document.getElementById('playerName').value
+    };
+    const res = await api('/growth/players', {method:'POST', body:JSON.stringify(body)});
+    ensureActorOption(res.player);
+    document.getElementById('actor').value = res.player.actor;
+    document.getElementById('newTenant').value = res.player.tenant;
+    document.getElementById('importTenant').value = res.player.tenant;
+    renderPlayers(res.players || []);
+    toast('ok', 'Player forest ready', `${res.player.actor} owns ${res.player.tenant}`);
+    await loadStatus();
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Player failed', e.message);
+  }finally{
+    btn.disabled = false;
+  }
+}
+async function shareSelectedExpert(){
+  const btn = document.getElementById('shareBtn');
+  const eid = document.getElementById('shareExpert').value;
+  if (!eid) return toast('err', 'Share failed', 'choose an expert first');
+  btn.disabled = true;
+  try{
+    const body = {
+      eid: Number(eid),
+      shared_name: document.getElementById('shareName').value || undefined
+    };
+    const res = await api('/growth/share', {method:'POST', body:JSON.stringify(body)});
+    lastShared = res.experts || [];
+    renderArena(lastShared);
+    fillSelect(document.getElementById('sharedExpert'), lastShared,
+      e => `${e.source_name || e.name} · ${e.author || 'arena'}`);
+    toast('ok', 'Expert shared', res.shared.id);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Share failed', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+async function importSharedExpert(){
+  const btn = document.getElementById('importBtn');
+  const sharedId = document.getElementById('sharedExpert').value;
+  if (!sharedId) return toast('err', 'Import failed', 'choose a shared expert first');
+  btn.disabled = true;
+  try{
+    const body = {
+      shared_id: sharedId,
+      name: document.getElementById('importName').value || undefined,
+      tenant: document.getElementById('importTenant').value || undefined,
+      specialty: document.getElementById('importSpecialty').value || undefined
+    };
+    const res = await api('/growth/import', {method:'POST', body:JSON.stringify(body)});
+    renderTree(res.tree);
+    renderMemory(res.mobile_store);
+    toast('ok', 'Expert imported', `${res.expert.tenant}/${res.expert.name}`);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Import failed', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+async function harvestBlock(){
+  const btn = document.getElementById('harvestBtn');
+  const eid = document.getElementById('blockExpert').value;
+  if (!eid) return toast('err', 'Chop failed', 'choose a tree first');
+  btn.disabled = true;
+  try{
+    const body = {
+      eid: Number(eid),
+      block_name: document.getElementById('blockName').value || undefined,
+      material: document.getElementById('blockMaterial').value || undefined
+    };
+    const res = await api('/growth/blocks/harvest', {method:'POST', body:JSON.stringify(body)});
+    lastBlocks = res.blocks || [];
+    lastBuildings = res.buildings || lastBuildings;
+    renderBlocks(lastBlocks);
+    renderBuildings(lastBuildings);
+    fillSelect(document.getElementById('buildingBlocks'), lastBlocks,
+      e => `${e.source_name || e.name} · ${e.material || e.domain || 'block'}`);
+    toast('ok', 'Block harvested', res.block.id);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Chop failed', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+function selectedBlockIds(){
+  const sel = document.getElementById('buildingBlocks');
+  return [...sel.selectedOptions].map(o => o.value);
+}
+async function assembleBuilding(){
+  const btn = document.getElementById('buildBtn');
+  let blocks = selectedBlockIds();
+  if (!blocks.length && lastBlocks.length) blocks = [lastBlocks[0].id];
+  if (!blocks.length) return toast('err', 'Build failed', 'harvest at least one block first');
+  const kind = document.getElementById('buildingType').value || document.getElementById('blockMaterial').value || 'general';
+  const name = document.getElementById('buildingName').value || `${kind.charAt(0).toUpperCase() + kind.slice(1)} Building`;
+  btn.disabled = true;
+  try{
+    const body = {
+      name,
+      building_type: kind,
+      blocks
+    };
+    const res = await api('/growth/buildings', {method:'POST', body:JSON.stringify(body)});
+    lastBuildings = res.buildings || [];
+    lastBlocks = res.blocks || lastBlocks;
+    renderBlocks(lastBlocks);
+    renderBuildings(lastBuildings);
+    toast('ok', 'Building assembled', `${res.building.name} uses ${res.building.block_count} block(s)`);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Build failed', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+async function registerTeacher(){
+  const btn = document.getElementById('llmBtn');
+  btn.disabled = true;
+  try{
+    const body = {
+      id: document.getElementById('llmId').value,
+      provider: document.getElementById('llmProvider').value,
+      label: document.getElementById('llmLabel').value || document.getElementById('llmId').value,
+      model: document.getElementById('llmModel').value,
+      endpoint: document.getElementById('llmEndpoint').value,
+      api_key: document.getElementById('llmKey').value,
+      max_examples: Number(document.getElementById('llmMax').value),
+      temperature: Number(document.getElementById('llmTemp').value),
+      replace: true
+    };
+    const res = await api('/growth/teachers', {method:'POST', body:JSON.stringify(body)});
+    document.getElementById('llmKey').value = '';
+    toast('ok', 'Teacher connected', teacherLabel(res.teacher));
+    await loadStatus();
+    document.getElementById('teacher').value = res.teacher.id;
+    document.getElementById('createTeacher').value = res.teacher.id;
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Teacher failed', e.message);
+  }finally{
+    btn.disabled = false;
+  }
+}
+async function syncMobileModels(){
+  const btn = document.getElementById('syncMobileBtn');
+  btn.disabled = true;
+  try{
+    const res = await api('/growth/mobile/save', {method:'POST', body:JSON.stringify({})});
+    renderMemory(res.status);
+    toast('ok', 'Models synced', `${(res.saved || []).length} small models saved`);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Sync failed', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+async function runGrowth(){
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  setStep('sTeacher', 'run', 'Generating', document.getElementById('teacher').value);
+  setStep('sCandidate', 'run', 'Training', 'candidate expert');
+  setStep('sEval', 'run', 'Checking', 'previous accuracy');
+  setStep('sAudit', 'run', 'Pending', 'waiting for decision');
+  try{
+    const body = {
+      eid: Number(document.getElementById('expert').value),
+      teacher: document.getElementById('teacher').value,
+      topic: document.getElementById('topic').value || undefined,
+      steps: Number(document.getElementById('steps').value),
+      n_train: Number(document.getElementById('nTrain').value),
+      n_eval: Number(document.getElementById('nEval').value)
+    };
+    const res = await api('/growth/run', {method:'POST', body:JSON.stringify(body)});
+    renderHistory(res.history || []);
+    renderMemory(res.mobile_store);
+    const r = res.result;
+    toast(r.accepted ? 'ok' : 'err', r.accepted ? 'Accepted' : 'Rejected', r.reason);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Growth failed', e.message);
+    setStep('sEval', 'bad', 'Stopped', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+async function createExpert(){
+  const btn = document.getElementById('createBtn');
+  btn.disabled = true;
+  setStep('sTeacher', 'run', 'Seeding', document.getElementById('createTeacher').value);
+  setStep('sCandidate', 'run', 'Creating', 'new expert branch');
+  setStep('sEval', 'run', 'Routing', 'training new router slot');
+  setStep('sAudit', 'run', 'Pending', 'creation audit');
+  try{
+    const body = {
+      name: document.getElementById('newName').value,
+      tenant: document.getElementById('newTenant').value,
+      specialty: document.getElementById('newSpecialty').value || undefined,
+      parent: document.getElementById('newParent').value || undefined,
+      teacher: document.getElementById('createTeacher').value,
+      steps: Number(document.getElementById('createSteps').value),
+      n_train: Number(document.getElementById('nTrain').value),
+      n_eval: Number(document.getElementById('nEval').value)
+    };
+    const res = await api('/growth/create_expert', {method:'POST', body:JSON.stringify(body)});
+    renderTree(res.tree);
+    renderMemory(res.mobile_store);
+    toast('ok', 'Expert created', `${res.expert.tenant}/${res.expert.name} seed accuracy ${pct(res.seed_accuracy)}`);
+    document.getElementById('newName').value = '';
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Create failed', e.message);
+    setStep('sEval', 'bad', 'Stopped', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+async function runAutoCycle(){
+  const btn = document.getElementById('autoBtn');
+  btn.disabled = true;
+  setStep('sTeacher', 'run', 'Auto cycle', 'rotating teachers');
+  setStep('sCandidate', 'run', 'Training', 'visible experts');
+  setStep('sEval', 'run', 'Checking', 'policy gates');
+  setStep('sAudit', 'run', 'Pending', 'cycle summary');
+  try{
+    const chosenTeacher = document.getElementById('autoTeacher').value;
+    const body = {
+      max_attempts: Number(document.getElementById('autoAttempts').value),
+      steps: Number(document.getElementById('steps').value),
+      n_train: Number(document.getElementById('nTrain').value),
+      n_eval: Number(document.getElementById('nEval').value)
+    };
+    if (chosenTeacher) body.teachers = [chosenTeacher];
+    const res = await api('/growth/auto/run', {method:'POST', body:JSON.stringify(body)});
+    renderHistory(res.history || []);
+    renderMemory(res.mobile_store);
+    const c = res.cycle;
+    toast('ok', 'Automation complete', `${c.attempted} attempted, ${c.accepted} accepted, ${c.rejected} rejected`);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Automation failed', e.message);
+    setStep('sEval', 'bad', 'Stopped', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+document.getElementById('actor').addEventListener('change', loadStatus);
+document.getElementById('llmProvider').addEventListener('change', updateProviderHint);
+if ('serviceWorker' in navigator && window.location.protocol !== 'file:'){
+  navigator.serviceWorker.register('/growth/sw.js').catch(() => {});
+}
+loadStatus();
+</script>
+</body>
+</html>

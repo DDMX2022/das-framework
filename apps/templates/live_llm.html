@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DAS Live LLM Chat</title>
+<style>
+:root{
+  --bg:#070908;
+  --ink:#f4faf6;
+  --text:#dfe9e3;
+  --muted:#91a39a;
+  --soft:#64766c;
+  --line:#26362f;
+  --panel:#0f1512;
+  --green:#35dc84;
+  --mint:#9df3c0;
+  --cyan:#62d5e6;
+  --amber:#f4be54;
+  --red:#ff756f;
+  --shadow:0 18px 42px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+html{background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{margin:0;min-height:100vh;background:
+  radial-gradient(circle at 8% 8%,rgba(53,220,132,.16),transparent 28%),
+  radial-gradient(circle at 92% 10%,rgba(98,213,230,.14),transparent 26%),
+  linear-gradient(180deg,#070908 0%,#0a100d 52%,#050706 100%);
+  font-size:14px;line-height:1.45}
+button,input,select,textarea{font:inherit}
+button{min-height:46px;border:0;border-radius:8px;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+canvas#bg{position:fixed;inset:0;width:100%;height:100%;z-index:-1;opacity:.48}
+.app{width:min(100%,680px);margin:0 auto;padding:14px 12px 28px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0 14px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mark{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:#101a14;border:1px solid #2b8e55;color:var(--mint);font-weight:850}
+.brand h1{margin:0;font-size:1rem;font-weight:850}
+.brand p{margin:1px 0 0;color:var(--muted);font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(15,21,18,.82);color:var(--muted);font-size:.74rem;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 14px var(--green)}
+.hero{padding:12px 2px 12px}
+.hero h2{margin:0;font-size:1.55rem;line-height:1.06;font-weight:880}
+.hero p{margin:8px 0 0;color:var(--muted);font-size:.9rem;max-width:42rem}
+.panel{background:rgba(15,21,18,.9);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);backdrop-filter:blur(14px)}
+.chat{padding:13px;margin-bottom:12px}
+.chat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+.chat-head h3{margin:0;font-size:1rem}
+.chat-head p{margin:4px 0 0;color:var(--muted);font-size:.78rem}
+.mode{border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--muted);font-size:.7rem;white-space:nowrap}
+.mode.live{color:var(--green);border-color:#2f6e4a}
+.messages{display:grid;gap:8px;min-height:190px;max-height:290px;overflow:auto;border:1px solid #26362f;background:#0b100e;border-radius:8px;padding:10px}
+.msg{max-width:88%;border:1px solid var(--line);border-radius:8px;padding:9px}
+.msg.user{justify-self:end;background:#102018;border-color:#2f6e4a}
+.msg.bot{justify-self:start;background:#101713}
+.msg .k{font-size:.68rem;color:var(--soft);margin-bottom:3px}
+.msg .t{font-size:.84rem;color:var(--text)}
+.suggestions{display:grid;grid-template-columns:1fr;gap:7px;margin-top:9px}
+.suggestions button{background:#111814;border:1px solid var(--line);color:var(--muted);text-align:left;padding:9px;min-height:40px}
+.composer{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+.input-row{display:grid;grid-template-columns:1fr 104px;gap:8px}
+input,select,textarea{min-height:46px;border:1px solid var(--line);border-radius:8px;background:#0b100e;color:var(--ink);padding:0 11px;outline:none}
+textarea{min-height:88px;padding:10px 11px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--cyan)}
+.primary{background:var(--green);color:#041109;font-weight:850}
+.control-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.creator{padding:12px;margin-bottom:12px}
+.creator h3,.learn h3{margin:0 0 6px;font-size:.96rem}
+.creator .sub,.learn .sub{margin:0 0 10px;color:var(--muted);font-size:.78rem}
+.creator-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.field{display:grid;gap:5px}
+.field label{font-size:.68rem;color:var(--muted)}
+.create-actions{display:grid;grid-template-columns:1fr;gap:8px}
+.notice{min-height:42px;border:1px solid var(--line);border-radius:8px;background:#0b100e;color:var(--muted);padding:9px;font-size:.74rem}
+.specialists{display:grid;gap:8px;margin-top:10px}
+.specialist{border:1px solid var(--line);border-radius:8px;background:#0b100e;padding:9px}
+.specialist strong{display:block;font-size:.82rem}
+.specialist span{display:block;margin-top:2px;color:var(--muted);font-size:.7rem}
+.tagrow{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.tag{border:1px solid #2b5359;color:var(--cyan);border-radius:999px;padding:3px 7px;font-size:.62rem;background:#071112}
+.flowcost{padding:12px;margin-bottom:12px}
+.flowcost h3{margin:0 0 8px;font-size:.96rem}
+.flowcost .sub{margin:0 0 10px;color:var(--muted);font-size:.78rem}
+.flow-grid{display:grid;grid-template-columns:1fr;gap:10px}
+.flow-card{border:1px solid var(--line);border-radius:8px;background:#0b100e;padding:10px;overflow:hidden}
+.flow-card.standard{border-color:#5a443a}
+.flow-card.das{border-color:#2f6e4a}
+.flow-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.flow-title strong{font-size:.86rem}
+.flow-title span{color:var(--muted);font-size:.68rem}
+.mini-flow{display:grid;grid-template-columns:1fr 18px 1fr 18px 1fr;gap:6px;align-items:center}
+.mini-node{min-height:70px;border:1px solid var(--line);border-radius:8px;background:#101713;padding:8px;position:relative}
+.mini-node.active{border-color:var(--green);background:#0d1711}
+.mini-node.warn{border-color:#6b4434;background:#1a100f}
+.mini-node.blocked{border-color:var(--red);background:#190f0e}
+.mini-node .k{color:var(--muted);font-size:.62rem}
+.mini-node .v{margin-top:3px;font-weight:820;font-size:.78rem}
+.mini-node .s{margin-top:2px;color:var(--soft);font-size:.64rem}
+.mini-arrow{height:2px;background:linear-gradient(90deg,var(--green),var(--cyan));opacity:.62}
+.cost-bars{display:grid;gap:8px;margin-top:10px}
+.cost-row{display:grid;grid-template-columns:96px 1fr 58px;gap:8px;align-items:center}
+.cost-row .label{color:var(--muted);font-size:.68rem}
+.cost-row .value{color:var(--text);font-size:.72rem;text-align:right}
+.cost-track{height:10px;border:1px solid var(--line);border-radius:999px;background:#080d0b;overflow:hidden}
+.cost-track span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amber),var(--red));transition:width .35s ease}
+.flow-card.das .cost-track span{background:linear-gradient(90deg,var(--green),var(--cyan))}
+.why-cost{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+.why-pill{border:1px solid #2b5359;background:#071112;border-radius:8px;padding:9px}
+.why-pill strong{display:block;font-size:.78rem;color:var(--cyan)}
+.why-pill span{display:block;margin-top:2px;color:var(--muted);font-size:.7rem}
+.costpanel{padding:12px;margin-bottom:12px;border-color:#2b5359}
+.costpanel h3{margin:0 0 6px;font-size:.96rem}
+.costpanel .sub{margin:0 0 10px;color:var(--muted);font-size:.78rem}
+.cost-hero{border:1px solid #2b5359;background:#071112;border-radius:8px;padding:10px;margin-bottom:9px}
+.cost-hero span{display:block;color:var(--muted);font-size:.68rem}
+.cost-hero strong{display:block;margin-top:2px;color:var(--green);font-size:1.65rem;line-height:1}
+.cost-meter{height:10px;border:1px solid var(--line);background:#080d0b;border-radius:999px;overflow:hidden;margin-top:9px}
+.cost-meter span{height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .35s ease}
+.cost-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cost-note{border:1px solid var(--line);border-radius:8px;background:#0b100e;padding:9px;color:var(--muted);font-size:.72rem;margin-top:9px}
+.cost-note strong{color:var(--text)}
+.compare{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:12px}
+.answer{padding:12px}
+.answer h3{margin:0 0 8px;font-size:.96rem;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.answer h3 span{font-size:.68rem;color:var(--muted);font-weight:600}
+.answer.standard{border-color:#5a443a}
+.answer.das{border-color:#2f6e4a}
+.answer-text{min-height:96px;border:1px solid #26362f;background:#0b100e;border-radius:8px;padding:10px;color:var(--text);font-size:.84rem}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.metric{border:1px solid var(--line);border-radius:8px;background:#0b100e;padding:9px;min-height:70px}
+.metric .k{color:var(--muted);font-size:.68rem}
+.metric .v{margin-top:4px;font-size:1.05rem;font-weight:850;color:var(--ink)}
+.metric.good .v{color:var(--green)}
+.metric.warn .v{color:var(--amber)}
+.metric.bad .v{color:var(--red)}
+.bar{height:9px;border:1px solid var(--line);background:#080d0b;border-radius:999px;overflow:hidden;margin-top:9px}
+.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .35s ease}
+.summary{padding:12px;margin-bottom:12px}
+.summary h3{margin:0 0 9px;font-size:.96rem}
+.learn{padding:12px;margin-bottom:12px}
+.learn-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.proof{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.proof .metric{min-height:76px}
+.hashline{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:.7rem;color:var(--muted)}
+.wins{display:grid;gap:8px}
+.win{border:1px solid var(--line);background:#0b100e;border-radius:8px;padding:9px}
+.win strong{display:block;font-size:.82rem}
+.win span{display:block;margin-top:2px;color:var(--muted);font-size:.74rem}
+.tech{border-top:1px solid var(--line);padding:10px 0 4px;color:var(--soft);font-size:.67rem;font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.tech span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.nav{display:flex;gap:8px;margin-bottom:12px}
+.nav a{flex:1;text-align:center;text-decoration:none;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:10px;background:#111714;font-weight:720}
+@media(min-width:860px){
+  .app{width:min(100%,1100px)}
+  .flow-grid{grid-template-columns:1fr 1fr}
+  .compare{grid-template-columns:1fr 1fr}
+  .suggestions{grid-template-columns:repeat(3,1fr)}
+  .composer{grid-template-columns:1fr 260px}
+  .control-row{grid-template-columns:1fr 1fr}
+  .creator-grid{grid-template-columns:1fr 1fr}
+  .create-actions{grid-template-columns:1fr 150px}
+  .learn-grid{grid-template-columns:220px 1fr 160px}
+  .wins{grid-template-columns:repeat(3,1fr)}
+  .why-cost{grid-template-columns:repeat(3,1fr)}
+  .cost-grid{grid-template-columns:repeat(4,1fr)}
+}
+@media(max-width:440px){
+  .mini-flow{grid-template-columns:1fr;gap:7px}
+  .mini-arrow{height:10px;width:2px;margin:0 auto}
+  .cost-row{grid-template-columns:86px 1fr 48px}
+}
+</style>
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+<main class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">D</div>
+      <div>
+        <h1>DAS Live LLM Chat</h1>
+        <p>Same question, shared LLM vs DAS-routed LLM</p>
+      </div>
+    </div>
+    <div class="pill"><span class="dot"></span><span id="status">loading</span></div>
+  </header>
+
+  <section class="hero">
+    <h2>Chat once. See what DAS changes.</h2>
+    <p>The top is a basic chat window. After every message, the demo compares a normal shared LLM prompt with a DAS-routed specialist LLM prompt.</p>
+  </section>
+
+  <nav class="nav">
+    <a href="/das-flow">Flow map</a>
+    <a href="/supercharger">Customer demo</a>
+  </nav>
+
+  <section class="panel chat">
+    <div class="chat-head">
+      <div>
+        <h3>Ask the support AI</h3>
+        <p>Try claims, card disputes, or warranty returns. DAS chooses the specialist before the LLM runs.</p>
+      </div>
+      <span class="mode" id="llmMode">checking</span>
+    </div>
+    <div class="messages" id="messages">
+      <div class="msg bot"><div class="k">Demo</div><div class="t">Send a message to compare a standard LLM call against a DAS-routed LLM call.</div></div>
+    </div>
+    <div class="suggestions" id="suggestions"></div>
+    <div class="composer">
+      <div class="input-row">
+        <input id="messageInput" placeholder="Example: my MRI claim was denied..." autocomplete="off">
+        <button class="primary" id="sendBtn">Send</button>
+      </div>
+      <div class="control-row">
+        <select id="tenantSelect">
+          <option value="">Auto tenant</option>
+          <option value="careplus">careplus</option>
+          <option value="fintrust">fintrust</option>
+          <option value="retailops">retailops</option>
+        </select>
+        <button id="wrongBtn">Wrong token test</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel creator">
+    <h3>Create your own specialist</h3>
+    <p class="sub">Describe a real job, and DAS grafts a private specialist leaf for it. Try “Anime character continuity,” “Airbnb refund helper,” or “College visa checklist.”</p>
+    <div class="creator-grid">
+      <div class="field">
+        <label for="specialistTitle">Specialist name</label>
+        <input id="specialistTitle" placeholder="Anime character continuity">
+      </div>
+      <div class="field">
+        <label for="specialistTenant">Private space</label>
+        <input id="specialistTenant" placeholder="my-studio">
+      </div>
+      <div class="field">
+        <label for="specialistDescription">What should it handle?</label>
+        <textarea id="specialistDescription" placeholder="Keep character face, hair, outfit, color palette, and scene rules stable across anime shots."></textarea>
+      </div>
+      <div class="field">
+        <label for="specialistSample">First example message</label>
+        <textarea id="specialistSample" placeholder="My heroine has silver hair, a red scarf, blue eyes, and should look the same in every scene."></textarea>
+      </div>
+    </div>
+    <div class="create-actions" style="margin-top:8px">
+      <div class="notice" id="specialistStatus">No custom specialist yet. Create one, then send its example in chat.</div>
+      <button class="primary" id="createSpecialistBtn">Create</button>
+    </div>
+    <div class="specialists" id="specialistList"></div>
+  </section>
+
+  <section class="panel flowcost">
+    <h3>What DAS is doing in the flow</h3>
+    <p class="sub">Cost drops because DAS routes before the LLM call, sends only one specialist policy, and opens only one specialist instead of the whole support brain.</p>
+    <div class="flow-grid">
+      <div class="flow-card standard">
+        <div class="flow-title"><strong>Standard LLM path</strong><span>shared context</span></div>
+        <div class="mini-flow">
+          <div class="mini-node warn">
+            <div class="k">1. User asks</div>
+            <div class="v">Support message</div>
+            <div class="s">same input</div>
+          </div>
+          <div class="mini-arrow"></div>
+          <div class="mini-node warn">
+            <div class="k">2. Shared prompt</div>
+            <div class="v" id="stdFlowPolicies">All policies</div>
+            <div class="s">medical + bank + retail</div>
+          </div>
+          <div class="mini-arrow"></div>
+          <div class="mini-node warn">
+            <div class="k">3. LLM runs</div>
+            <div class="v" id="stdFlowHot">All specialists hot</div>
+            <div class="s">more context, softer boundary</div>
+          </div>
+        </div>
+        <div class="cost-bars">
+          <div class="cost-row">
+            <div class="label">Context</div>
+            <div class="cost-track"><span id="stdContextBar"></span></div>
+            <div class="value" id="stdContextVal">--</div>
+          </div>
+          <div class="cost-row">
+            <div class="label">Hot experts</div>
+            <div class="cost-track"><span id="stdHotBar"></span></div>
+            <div class="value" id="stdHotVal">--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-card das">
+        <div class="flow-title"><strong>DAS-routed LLM path</strong><span>isolated specialist</span></div>
+        <div class="mini-flow">
+          <div class="mini-node active">
+            <div class="k">1. User asks</div>
+            <div class="v">Support message</div>
+            <div class="s">same input</div>
+          </div>
+          <div class="mini-arrow"></div>
+          <div class="mini-node active" id="dasRouteNode">
+            <div class="k">2. DAS routes</div>
+            <div class="v" id="dasFlowRoute">Choose specialist</div>
+            <div class="s" id="dasFlowTenant">tenant checked first</div>
+          </div>
+          <div class="mini-arrow"></div>
+          <div class="mini-node active" id="dasLLMNode">
+            <div class="k">3. Call only that specialist</div>
+            <div class="v" id="dasFlowHot">One specialist gets the message</div>
+            <div class="s">fewer tokens; other specialists stay closed</div>
+          </div>
+        </div>
+        <div class="cost-bars">
+          <div class="cost-row">
+            <div class="label">Context</div>
+            <div class="cost-track"><span id="dasContextBar"></span></div>
+            <div class="value" id="dasContextVal">--</div>
+          </div>
+          <div class="cost-row">
+            <div class="label">Hot experts</div>
+            <div class="cost-track"><span id="dasHotBar"></span></div>
+            <div class="value" id="dasHotVal">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="why-cost">
+      <div class="why-pill"><strong>Fewer tokens</strong><span id="whyTokens">Standard sends every policy. DAS sends one selected policy.</span></div>
+      <div class="why-pill"><strong>Fewer hot specialists</strong><span id="whyHot">Standard keeps the whole set in play. DAS opens one.</span></div>
+      <div class="why-pill"><strong>Less leakage surface</strong><span id="whyPrivacy">Wrong-token requests stop before the specialist LLM runs.</span></div>
+    </div>
+  </section>
+
+  <section class="panel costpanel">
+    <h3>Cost saved analysis</h3>
+    <p class="sub">DAS saves money by sending less context to the LLM and opening fewer specialists. These are provider-neutral cost units, so the percent stays useful even when API prices change.</p>
+    <div class="cost-hero">
+      <span>Estimated total cost units saved on this chat</span>
+      <strong id="costSavedPct">--</strong>
+      <div class="cost-meter"><span id="costSavedBar"></span></div>
+    </div>
+    <div class="cost-grid">
+      <div class="metric warn"><div class="k">Standard units</div><div class="v" id="costStandardUnits">--</div></div>
+      <div class="metric good"><div class="k">DAS units</div><div class="v" id="costDasUnits">--</div></div>
+      <div class="metric good"><div class="k">Units saved</div><div class="v" id="costUnitsSaved">--</div></div>
+      <div class="metric good"><div class="k">Experts avoided</div><div class="v" id="costExpertsAvoided">--</div></div>
+    </div>
+    <div class="cost-note" id="costProjection">
+      <strong>Projection:</strong> run a chat first to estimate savings across 1,000 similar requests.
+    </div>
+  </section>
+
+  <section class="compare">
+    <div class="panel answer standard">
+      <h3>Standard LLM <span>one shared prompt</span></h3>
+      <div class="answer-text" id="standardAnswer">Waiting for chat...</div>
+      <div class="metrics">
+        <div class="metric warn"><div class="k">Policies sent</div><div class="v" id="stdPolicies">--</div></div>
+        <div class="metric warn"><div class="k">Specialists hot</div><div class="v" id="stdHot">--</div></div>
+        <div class="metric"><div class="k">Input tokens</div><div class="v" id="stdTokens">--</div></div>
+        <div class="metric"><div class="k">Latency</div><div class="v" id="stdLatency">--</div></div>
+      </div>
+    </div>
+    <div class="panel answer das">
+      <h3>DAS + LLM <span>one isolated specialist</span></h3>
+      <div class="answer-text" id="dasAnswer">Waiting for chat...</div>
+      <div class="metrics">
+        <div class="metric good"><div class="k">Policies sent</div><div class="v" id="dasPolicies">--</div></div>
+        <div class="metric good"><div class="k">Specialists hot</div><div class="v" id="dasHot">--</div></div>
+        <div class="metric"><div class="k">Input tokens</div><div class="v" id="dasTokens">--</div></div>
+        <div class="metric"><div class="k">Latency</div><div class="v" id="dasLatency">--</div></div>
+      </div>
+      <div class="bar"><span id="reductionBar"></span></div>
+    </div>
+  </section>
+
+  <section class="panel learn">
+    <h3>Teach the specialist from this chat</h3>
+    <p class="sub">After a message, teach only the selected specialist. DAS updates that leaf and records proof that the other specialists stayed untouched.</p>
+    <div class="learn-grid">
+      <select id="teachExpert"></select>
+      <textarea id="teachGuidance" placeholder="Remember this rule for next time..."></textarea>
+      <button class="primary" id="teachBtn">Teach</button>
+    </div>
+    <div class="proof">
+      <div class="metric good"><div class="k">Leaf score</div><div class="v" id="learnScore">--</div></div>
+      <div class="metric good"><div class="k">Other leaves</div><div class="v" id="learnSurvivors">--</div></div>
+      <div class="metric"><div class="k">Target hash before</div><span class="hashline" id="learnHashBefore">--</span></div>
+      <div class="metric"><div class="k">Target hash after</div><span class="hashline" id="learnHashAfter">--</span></div>
+    </div>
+  </section>
+
+  <section class="panel summary">
+    <h3>Live difference</h3>
+    <div class="wins">
+      <div class="win"><strong id="routeWin">No route yet</strong><span id="routeText">DAS will show which specialist served the message.</span></div>
+      <div class="win"><strong id="privacyWin">Privacy boundary pending</strong><span id="privacyText">Wrong-token requests should stop before the specialist LLM.</span></div>
+      <div class="win"><strong id="contextWin">Context savings pending</strong><span id="contextText">DAS sends one specialist policy instead of every policy.</span></div>
+    </div>
+  </section>
+
+  <section class="tech" id="tech"></section>
+</main>
+
+<script>
+let state = null;
+let lastMessage = "";
+let lastResult = null;
+
+const el = id => document.getElementById(id);
+const fmt = n => Number(n || 0).toLocaleString("en-US");
+
+async function api(path, body){
+  const opts = body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {};
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+  return data;
+}
+
+function addMessage(kind, text){
+  const row = document.createElement("div");
+  row.className = `msg ${kind}`;
+  row.innerHTML = `<div class="k">${kind === "user" ? "You" : "DAS demo"}</div><div class="t">${escapeHtml(text)}</div>`;
+  el("messages").appendChild(row);
+  el("messages").scrollTop = el("messages").scrollHeight;
+}
+
+function escapeHtml(text){
+  return String(text).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
+}
+
+function renderTenantOptions(){
+  const current = el("tenantSelect").value;
+  const tenants = state.tenants || [];
+  el("tenantSelect").innerHTML = [
+    `<option value="">Auto tenant</option>`,
+    ...tenants.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`)
+  ].join("");
+  if (tenants.includes(current)) el("tenantSelect").value = current;
+}
+
+function renderTeachOptions(){
+  const current = el("teachExpert").value || (lastResult && lastResult.routed && lastResult.routed.expert) || "";
+  el("teachExpert").innerHTML = (state.experts || []).map(x =>
+    `<option value="${escapeHtml(x.name)}">${escapeHtml(x.title)} v${x.version || 1}</option>`
+  ).join("");
+  if ((state.experts || []).some(x => x.name === current)) el("teachExpert").value = current;
+}
+
+function renderSpecialists(){
+  const rows = state.experts || [];
+  el("specialistList").innerHTML = rows.map(x => {
+    const tags = [
+      x.userCreated ? "created here" : "seeded",
+      `v${x.version || 1}`,
+      `${x.learnedCount || 0} lessons`
+    ];
+    return `<div class="specialist">
+      <strong>${escapeHtml(x.title)}</strong>
+      <span>${escapeHtml(x.tenant)} / ${escapeHtml(x.name)} / hash ${escapeHtml(x.hash)}</span>
+      <div class="tagrow">${tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderState(){
+  const live = state.llm && state.llm.live;
+  el("status").textContent = live ? "live LLM" : "offline fallback";
+  el("llmMode").textContent = `${state.llm.provider} / ${state.llm.model}`;
+  el("llmMode").classList.toggle("live", !!live);
+  renderTenantOptions();
+  renderTeachOptions();
+  renderSpecialists();
+  el("suggestions").innerHTML = Object.entries(state.suggestions).map(([key, text]) =>
+    `<button data-text="${escapeHtml(text)}">${escapeHtml(text)}</button>`
+  ).join("");
+  document.querySelectorAll("#suggestions button").forEach(btn => btn.addEventListener("click", () => {
+    el("messageInput").value = btn.dataset.text;
+    send();
+  }));
+  el("tech").innerHTML = [
+    "Live mode: set OPENAI_API_KEY and optionally OPENAI_MODEL before starting Flask.",
+    "Alternative: set DAS_LLM_URL for an OpenAI-compatible chat-completions endpoint.",
+    "Create/Teach trains the DAS specialist leaf and router, not the external LLM provider.",
+    `Audit entries: ${state.auditEntries}`
+  ].map(x => `<span>${x}</span>`).join("");
+}
+
+function renderResult(data){
+  lastResult = data;
+  if (data.llm) {
+    el("status").textContent = data.llm.live ? "live LLM" : "fallback";
+    el("llmMode").textContent = data.llm.error
+      ? `${data.llm.provider}: quota/provider issue`
+      : `${data.llm.provider} / ${data.llm.model}`;
+    el("llmMode").classList.toggle("live", !!data.llm.live);
+  }
+  el("standardAnswer").textContent = data.standard.answer;
+  el("dasAnswer").textContent = data.das.answer;
+  el("stdPolicies").textContent = data.standard.policiesSent;
+  el("stdHot").textContent = data.standard.specialistsOpened;
+  el("stdTokens").textContent = fmt(data.standard.inputTokens);
+  el("stdLatency").textContent = `${data.standard.latencyMs} ms`;
+  el("dasPolicies").textContent = data.das.policiesSent;
+  el("dasHot").textContent = data.das.specialistsOpened;
+  el("dasTokens").textContent = fmt(data.das.inputTokens);
+  el("dasLatency").textContent = `${data.das.latencyMs} ms`;
+  el("reductionBar").style.width = `${Math.max(0, Math.min(100, data.das.contextReductionPct))}%`;
+  renderFlowCost(data);
+  renderCostAnalysis(data);
+
+  if (data.blocked) {
+    el("routeWin").textContent = "DAS blocked the message";
+    el("routeText").textContent = `Token ${data.tenantToken} did not match ${data.routed.tenant}. No specialist LLM ran.`;
+    el("privacyWin").textContent = "Hard privacy stop";
+    el("privacyText").textContent = "The standard LLM still received the shared prompt; DAS sent zero specialist context.";
+  } else {
+    el("routeWin").textContent = `${data.routed.title} served it`;
+    el("routeText").textContent = `${Math.round(data.routed.confidence * 100)}% route confidence for tenant ${data.routed.tenant}.`;
+    el("privacyWin").textContent = "One tenant boundary";
+    el("privacyText").textContent = "Only the selected specialist policy was sent to the LLM.";
+  }
+  el("contextWin").textContent = `${data.das.contextReductionPct}% less input context`;
+  el("contextText").textContent = `Standard sent ${data.standard.inputTokens} input tokens; DAS sent ${data.das.inputTokens}.`;
+  state.auditEntries = data.auditEntries;
+  renderTeachOptions();
+  if (!data.blocked && data.routed && data.routed.expert) {
+    el("teachExpert").value = data.routed.expert;
+  }
+}
+
+function pct(value, max){
+  if (!max) return 0;
+  return Math.max(0, Math.min(100, (value / max) * 100));
+}
+
+function renderFlowCost(data){
+  const maxTokens = Math.max(data.standard.inputTokens, data.das.inputTokens, 1);
+  const maxHot = Math.max(data.standard.specialistsOpened, data.das.specialistsOpened, 1);
+  el("stdContextBar").style.width = `${pct(data.standard.inputTokens, maxTokens)}%`;
+  el("dasContextBar").style.width = `${pct(data.das.inputTokens, maxTokens)}%`;
+  el("stdHotBar").style.width = `${pct(data.standard.specialistsOpened, maxHot)}%`;
+  el("dasHotBar").style.width = `${pct(data.das.specialistsOpened, maxHot)}%`;
+  el("stdContextVal").textContent = fmt(data.standard.inputTokens);
+  el("dasContextVal").textContent = fmt(data.das.inputTokens);
+  el("stdHotVal").textContent = data.standard.specialistsOpened;
+  el("dasHotVal").textContent = data.das.specialistsOpened;
+  el("stdFlowPolicies").textContent = `${data.standard.policiesSent} policies`;
+  el("stdFlowHot").textContent = `${data.standard.specialistsOpened} specialists hot`;
+  el("dasFlowRoute").textContent = data.blocked ? "Blocked" : data.routed.title;
+  el("dasFlowTenant").textContent = data.blocked
+    ? `token ${data.tenantToken} rejected`
+    : `tenant ${data.routed.tenant}`;
+  el("dasFlowHot").textContent = data.blocked
+    ? "No specialist gets the message"
+    : `${data.das.specialistsOpened} specialist gets the message`;
+  el("dasRouteNode").classList.toggle("blocked", data.blocked);
+  el("dasRouteNode").classList.toggle("active", !data.blocked);
+  el("dasLLMNode").classList.toggle("blocked", data.blocked);
+  el("dasLLMNode").classList.toggle("active", !data.blocked);
+  el("whyTokens").textContent = data.blocked
+    ? `Standard sent ${data.standard.inputTokens} input tokens. DAS sent 0 specialist tokens because it blocked first.`
+    : `Standard sent ${data.standard.inputTokens} input tokens. DAS sent ${data.das.inputTokens}, a ${data.das.contextReductionPct}% reduction.`;
+  el("whyHot").textContent = data.blocked
+    ? `Standard path still prepares ${data.standard.specialistsOpened} specialists. DAS opened ${data.das.specialistsOpened}.`
+    : `Standard path keeps ${data.standard.specialistsOpened} specialists in play. DAS opened ${data.das.specialistsOpened}.`;
+  el("whyPrivacy").textContent = data.blocked
+    ? "The wrong-token request stopped before the specialist LLM saw the prompt."
+    : `Only ${data.routed.title} saw the specialist context; other tenants stayed closed.`;
+}
+
+function renderCostAnalysis(data){
+  const cost = data.cost;
+  if (!cost) return;
+  const savedPct = Math.max(0, Math.min(100, cost.totalSavedPct || 0));
+  el("costSavedPct").textContent = `${savedPct}%`;
+  el("costSavedBar").style.width = `${savedPct}%`;
+  el("costStandardUnits").textContent = fmt(cost.standardUnits);
+  el("costDasUnits").textContent = fmt(cost.dasUnits);
+  el("costUnitsSaved").textContent = fmt(cost.unitsSaved);
+  el("costExpertsAvoided").textContent = cost.specialistsAvoided;
+  el("costProjection").innerHTML =
+    `<strong>Projection:</strong> across 1,000 similar chats, DAS avoids ${fmt(cost.per1000Chats.unitsSaved)} cost units and ${fmt(cost.per1000Chats.inputTokensSaved)} input tokens. ${escapeHtml(cost.note)}`;
+}
+
+function renderTeachResult(row){
+  el("learnScore").textContent = `${Math.round(row.leafScoreBefore * 100)}% -> ${Math.round(row.leafScoreAfter * 100)}%`;
+  el("learnSurvivors").textContent = row.survivorsIntact ? "unchanged" : "changed";
+  el("learnHashBefore").textContent = row.hashBefore;
+  el("learnHashAfter").textContent = row.hashAfter;
+  el("specialistStatus").textContent = `${row.title} is now v${row.version}. Only its own leaf hash changed.`;
+}
+
+async function createSpecialist(){
+  const fallbackTitle = "Anime character continuity";
+  const fallbackDescription = "Keep character face, hair, outfit, color palette, and scene rules stable across anime shots.";
+  const fallbackSample = "My heroine has silver hair, a red scarf, blue eyes, and should look the same in every scene.";
+  const title = el("specialistTitle").value.trim() || fallbackTitle;
+  const description = el("specialistDescription").value.trim() || fallbackDescription;
+  const sample = el("specialistSample").value.trim() || fallbackSample;
+  const tenant = el("specialistTenant").value.trim() || "my-studio";
+  el("specialistTitle").value = title;
+  el("specialistDescription").value = description;
+  el("specialistSample").value = sample;
+  el("specialistTenant").value = tenant;
+  el("createSpecialistBtn").disabled = true;
+  el("specialistStatus").textContent = "Grafting a new DAS leaf and training its route...";
+  try{
+    const data = await api("/api/live-llm/create-specialist", {title, description, sample, tenant});
+    state = data.state;
+    renderState();
+    el("messageInput").value = sample;
+    el("tenantSelect").value = data.created.tenant;
+    el("teachExpert").value = data.created.name;
+    el("specialistStatus").textContent = `${data.created.title} created as ${data.created.tenant}/${data.created.name}.`;
+    addMessage("bot", `Created ${data.created.title}. Send its example to see DAS route to the new specialist.`);
+  }catch(err){
+    el("specialistStatus").textContent = err.message;
+    addMessage("bot", `Create specialist error: ${err.message}`);
+  }finally{
+    el("createSpecialistBtn").disabled = false;
+  }
+}
+
+async function teachSpecialist(){
+  const expert = el("teachExpert").value || (lastResult && lastResult.routed && lastResult.routed.expert);
+  const message = lastMessage || el("messageInput").value.trim() || state.suggestions.claim;
+  const guidance = el("teachGuidance").value.trim() || `Remember this example: ${message}`;
+  if (!expert) {
+    addMessage("bot", "Send a chat or create a specialist first, then teach it.");
+    return;
+  }
+  el("teachBtn").disabled = true;
+  try{
+    const data = await api("/api/live-llm/teach", {expert, message, guidance});
+    state = data.state;
+    renderState();
+    renderTeachResult(data.taught);
+    el("teachExpert").value = data.taught.name;
+    addMessage("bot", `${data.taught.title} learned one example. Other specialist leaf hashes stayed ${data.taught.survivorsIntact ? "unchanged" : "changed"}.`);
+  }catch(err){
+    addMessage("bot", `Teach error: ${err.message}`);
+  }finally{
+    el("teachBtn").disabled = false;
+  }
+}
+
+async function send(overrides){
+  const message = (overrides && overrides.message) || el("messageInput").value.trim() || state.suggestions.claim;
+  lastMessage = message;
+  el("sendBtn").disabled = true;
+  addMessage("user", message);
+  addMessage("bot", "Running both paths: standard shared LLM and DAS-routed LLM...");
+  try{
+    const tenant = (overrides && overrides.tenant !== undefined) ? overrides.tenant : el("tenantSelect").value;
+    const data = await api("/api/live-llm/chat", {message, tenant});
+    renderResult(data);
+    if (data.llm && data.llm.error) {
+      addMessage("bot", "Google quota/provider error hit, so this response is using the local fallback. DAS metrics are still updated.");
+    } else {
+      addMessage("bot", data.blocked ? "DAS blocked the specialist call because the tenant token did not match." : `DAS routed to ${data.routed.title}.`);
+    }
+  }catch(err){
+    addMessage("bot", `Error: ${err.message}`);
+  }finally{
+    el("sendBtn").disabled = false;
+  }
+}
+
+function wrongToken(){
+  const msg = lastMessage || el("messageInput").value.trim() || state.suggestions.claim;
+  const lower = msg.toLowerCase();
+  let wrong = "fintrust";
+  if (lower.includes("charge") || lower.includes("card") || lower.includes("bank")) wrong = "careplus";
+  send({message: msg, tenant: wrong});
+}
+
+function bg(){
+  const canvas = el("bg");
+  const ctx = canvas.getContext("2d");
+  let w = 0, h = 0, t = 0;
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth; h = window.innerHeight;
+    canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w + "px"; canvas.style.height = h + "px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function draw(){
+    t += .011;
+    ctx.clearRect(0,0,w,h);
+    for(let y=44;y<h;y+=44){
+      ctx.strokeStyle = "rgba(157,243,192,.045)";
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y + Math.sin(t + y*.018)*7); ctx.stroke();
+    }
+    for(let i=0;i<22;i++){
+      const x = (i*67 + t*82) % (w+70) - 35;
+      const y = 70 + ((i*91) % Math.max(120,h-140));
+      ctx.fillStyle = i % 4 === 0 ? "rgba(98,213,230,.48)" : "rgba(53,220,132,.38)";
+      ctx.fillRect(x,y,3,3);
+    }
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener("resize", resize);
+  resize(); draw();
+}
+
+el("sendBtn").addEventListener("click", () => send());
+el("wrongBtn").addEventListener("click", wrongToken);
+el("createSpecialistBtn").addEventListener("click", createSpecialist);
+el("teachBtn").addEventListener("click", teachSpecialist);
+el("messageInput").addEventListener("keydown", ev => {
+  if (ev.key === "Enter") send();
+});
+
+bg();
+api("/api/live-llm/state").then(data => {
+  state = data;
+  renderState();
+}).catch(err => {
+  el("status").textContent = "error";
+  addMessage("bot", err.message);
+});
+</script>
+</body>
+</html>

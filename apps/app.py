@@ -4,7 +4,7 @@ app.py — DAS visualiser server
   /train   SSE stream for demo training
   /benchmark SSE stream for real-data benchmark
 """
-import json, sys
+import json, os, sys
 import numpy as np
 from flask import Flask, render_template, Response
 
@@ -13,8 +13,14 @@ from das.model import DASForest
 from das.functional import FibonacciLeaf, softmax
 from das.packnet import PackNetMLP
 from das.lifecycle import ForestLifecycle
+from apps.flow_demo import register_flow_routes
+from apps.live_llm_demo import register_live_llm_routes
+from apps.supercharger_demo import register_supercharger_routes
 
 app = Flask(__name__)
+register_flow_routes(app)
+register_live_llm_routes(app)
+register_supercharger_routes(app)
 
 def ce_grad(logits, y):
     p = softmax(logits); oh = np.zeros_like(p)
@@ -1209,6 +1215,12 @@ def permuted_stream():
                     headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
 
 if __name__=='__main__':
-    print("\n  → Forest + Benchmark: http://localhost:5050")
-    print("  → MNIST Stress Test:  http://localhost:5050/stress\n")
-    app.run(debug=False, port=5050, threaded=True)
+    host = os.environ.get('DAS_APP_HOST', '127.0.0.1')
+    port = int(os.environ.get('DAS_APP_PORT', '5050'))
+    display_host = 'localhost' if host in ('127.0.0.1', 'localhost') else host
+    print(f"\n  → Forest + Benchmark: http://{display_host}:{port}")
+    print(f"  → MNIST Stress Test:  http://{display_host}:{port}/stress\n")
+    print(f"  → DAS Supercharger:   http://{display_host}:{port}/supercharger\n")
+    print(f"  → DAS Flow Map:       http://{display_host}:{port}/das-flow\n")
+    print(f"  → DAS Live LLM Chat:  http://{display_host}:{port}/live-llm\n")
+    app.run(debug=False, host=host, port=port, threaded=True)

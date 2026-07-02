@@ -25,7 +25,7 @@ def _load_index(hub_dir):
 def _save_index(hub_dir, idx):
     json.dump(idx, open(_index_path(hub_dir), "w"), indent=2)
 
-def publish(leaf, name, hub_dir, domain="", author=""):
+def publish(leaf, name, hub_dir, domain="", author="", metadata=None):
     """Save a (frozen) leaf to the hub with its fingerprint in the catalog."""
     os.makedirs(hub_dir, exist_ok=True)
     blob = {f"W{i}": w for i, w in enumerate(leaf.W)}
@@ -34,6 +34,8 @@ def publish(leaf, name, hub_dir, domain="", author=""):
     idx = _load_index(hub_dir)
     idx[name] = {"name": name, "dims": list(leaf.dims), "domain": domain,
                  "author": author, "hash": leaf.weight_hash(), "file": f"{name}.npz"}
+    if metadata:
+        idx[name].update(metadata)
     _save_index(hub_dir, idx)
     return idx[name]
 
