@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAS Vendor — Superadmin</title>
+<style>
+:root{
+  --bg:#0c0910;--panel:#141019;--panel2:#191322;--border:#2c2338;--line:#221a2c;
+  --text:#e2d9ec;--muted:#8b7e9f;--head:#c3a8e8;
+  --green:#46c98a;--green2:#8ff0c2;--blue:#5fb3f2;--amber:#f3b15a;--red:#f5736f;--purple:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;
+     font-size:13px;line-height:1.5;padding:18px;max-width:1180px;margin:0 auto}
+code,.mono{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+button{background:var(--purple);color:#120a1e;border:none;border-radius:6px;padding:7px 13px;
+       font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;transition:filter .15s}
+button:hover{filter:brightness(1.12)}
+button.ghost{background:transparent;border:1px solid var(--border);color:var(--head);font-weight:500}
+button.danger{background:transparent;border:1px solid #5a2b2b;color:var(--red);font-weight:500}
+button.danger:hover{background:#1d1011}
+input,select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;
+             padding:6px 8px;font-family:inherit;font-size:.78rem}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;
+       border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px}
+h1{font-size:1.05rem;color:var(--head);font-weight:600}
+h1 .sub{display:block;font-size:.66rem;color:var(--muted);margin-top:3px;font-weight:400}
+.pubkey{font-size:.66rem;color:var(--muted);max-width:520px;text-align:right}
+.pubkey .mono{color:var(--head);word-break:break-all;cursor:pointer}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:12px 14px}
+.card .k{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.card .v{font-size:1.3rem;font-weight:700;margin-top:2px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:14px}
+.panel h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--head);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:.76rem}
+th{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:left;
+   padding:5px 8px;border-bottom:1px solid var(--border)}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.65rem;font-weight:600}
+.badge.active{background:#0d2b1e;color:var(--green2)}
+.badge.expiring{background:#2b1e0d;color:var(--amber)}
+.badge.expired{background:#241019;color:var(--red)}
+.badge.revoked{background:#2b0d10;color:var(--red)}
+.badge.superseded{background:#1b1626;color:var(--muted)}
+.badge.tier{background:#1a1430;color:var(--purple)}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.hint{font-size:.66rem;color:var(--muted);margin-top:8px}
+.err{color:var(--red);font-size:.72rem;margin-top:6px;min-height:1em}
+.ok{color:var(--green2)}
+.actions{display:flex;gap:6px;justify-content:flex-end}
+.actions button{padding:4px 9px;font-size:.66rem}
+</style></head><body>
+
+<header>
+  <h1>DAS Vendor · Superadmin<span class="sub">issue, renew, and revoke customer licenses — vendor-side only, never shipped</span></h1>
+  <div class="pubkey">Vendor public key — customers pin this (<code>DAS_LICENSE_PUBKEY</code>); click to copy<br>
+    <span class="mono" id="pubkey" onclick="copyKey()" title="copy">…</span></div>
+</header>
+
+<div class="cards" id="cards"></div>
+
+<div class="panel">
+  <h2>Issue a license</h2>
+  <div class="row">
+    <div class="field"><label>Customer</label><input id="i-customer" placeholder="Northwind Health" style="min-width:190px"></div>
+    <div class="field"><label>Tier</label><select id="i-tier"><option>platform</option><option>control-plane</option><option>core</option></select></div>
+    <div class="field"><label>Days</label><input id="i-days" type="number" value="365" style="width:80px"></div>
+    <div class="field"><label>Max deployments</label><input id="i-maxd" type="number" placeholder="∞" style="width:110px"></div>
+    <div class="field"><label>Max tenants / dep.</label><input id="i-maxt" type="number" placeholder="∞" style="width:110px"></div>
+    <div class="field"><label>Max experts / dep.</label><input id="i-maxe" type="number" placeholder="∞" style="width:110px"></div>
+    <button onclick="issue()">Sign &amp; issue</button>
+  </div>
+  <div class="err" id="i-err"></div>
+  <div class="hint">Signing happens locally with the vendor key; the customer receives only the signed license file (Download) and verifies it offline against the pinned public key. A subscription = a short-dated license; renewal issues a fresh file.</div>
+</div>
+
+<div class="panel">
+  <h2>License registry</h2>
+  <table><thead><tr>
+    <th>Customer</th><th>Tier</th><th>Entitlements</th><th>Issued</th><th>Expires</th><th>Days</th><th>Status</th><th></th>
+  </tr></thead><tbody id="registry"></tbody></table>
+  <div class="hint">Revocation honesty: licenses verify offline, so revoke = registry bookkeeping + no renewal — it cannot remotely kill a file a customer already holds. Short subscription windows are the real control.</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let TOKEN = localStorage.getItem('das_vendor_token') || '';
+
+async function api(path, opts = {}){
+  opts.headers = {...(opts.headers||{}), 'X-DAS-Vendor-Token': TOKEN};
+  let r = await fetch(path, opts);
+  if(r.status === 401){
+    TOKEN = prompt('Vendor token (X-DAS-Vendor-Token):') || '';
+    localStorage.setItem('das_vendor_token', TOKEN);
+    opts.headers['X-DAS-Vendor-Token'] = TOKEN;
+    r = await fetch(path, opts);
+  }
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+async function refresh(){
+  const s = await api('/api/vendor/status');
+  $('pubkey').textContent = s.public_key_hex;
+  const c = s.counts;
+  $('cards').innerHTML = `
+    <div class="card"><div class="k">Total issued</div><div class="v">${c.total||0}</div></div>
+    <div class="card"><div class="k">Active</div><div class="v" style="color:var(--green2)">${c.active||0}</div></div>
+    <div class="card"><div class="k">Expiring ≤30d</div><div class="v" style="color:var(--amber)">${c.expiring||0}</div></div>
+    <div class="card"><div class="k">Expired</div><div class="v" style="color:var(--red)">${c.expired||0}</div></div>
+    <div class="card"><div class="k">Revoked</div><div class="v" style="color:var(--red)">${c.revoked||0}</div></div>
+    <div class="card"><div class="k">Superseded</div><div class="v" style="color:var(--muted)">${c.superseded||0}</div></div>`;
+  const j = await api('/api/vendor/licenses');
+  $('registry').innerHTML = j.licenses.map(l => {
+    const e = l.entitlements || {};
+    const ent = ['max_deployments','max_tenants','max_experts']
+      .map(k => e[k] == null ? '∞' : e[k]).join(' / ');
+    const terminal = l.status === 'revoked' || l.status === 'superseded';
+    return `<tr>
+      <td>${esc(l.customer)}<div class="mono" style="font-size:.6rem;color:var(--muted)">${esc(l.license_id)}${l.renewed_from ? ' · renews '+esc(l.renewed_from) : ''}</div></td>
+      <td><span class="badge tier">${esc(l.tier)}</span></td>
+      <td class="mono" title="deployments / tenants / experts">${ent}</td>
+      <td style="color:var(--muted)">${esc(l.issued_at.slice(0,10))}</td>
+      <td style="color:var(--muted)">${esc(l.expires_at.slice(0,10))}</td>
+      <td class="mono">${terminal ? '—' : l.days_remaining}</td>
+      <td><span class="badge ${l.status}">${l.status.toUpperCase()}</span>${l.revoked_reason ? `<div style="font-size:.6rem;color:var(--muted)">${esc(l.revoked_reason)}</div>` : ''}</td>
+      <td class="actions">
+        <button class="ghost" onclick="download('${l.license_id}')">Download</button>
+        ${terminal ? '' : `<button class="ghost" onclick="renew('${l.license_id}')">Renew</button>
+        <button class="danger" onclick="revoke('${l.license_id}')">Revoke</button>`}
+      </td></tr>`;
+  }).join('') || '<tr><td colspan="8" style="color:var(--muted)">No licenses issued yet.</td></tr>';
+}
+
+async function issue(){
+  $('i-err').textContent = ''; $('i-err').classList.remove('ok');
+  try{
+    const num = id => $(id).value === '' ? null : parseInt($(id).value, 10);
+    const r = await api('/api/vendor/licenses', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({customer: $('i-customer').value.trim(), tier: $('i-tier').value,
+        days: parseInt($('i-days').value||'365',10),
+        max_deployments: num('i-maxd'), max_tenants: num('i-maxt'), max_experts: num('i-maxe')})});
+    $('i-err').classList.add('ok');
+    $('i-err').textContent = `issued ${r.license.license_id} to ${r.license.customer} — expires ${r.license.expires_at}`;
+    $('i-customer').value = '';
+    refresh();
+  }catch(e){ $('i-err').textContent = e.message; }
+}
+
+async function renew(id){
+  const days = prompt('Renew for how many days?', '365');
+  if(!days) return;
+  try{
+    const r = await api(`/api/vendor/licenses/${id}/renew`, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({days: parseInt(days,10)})});
+    alert(`Renewed as ${r.license.license_id} — send the customer the new file (Download).`);
+    refresh();
+  }catch(e){ alert(e.message); }
+}
+
+async function revoke(id){
+  const reason = prompt(`Revoke ${id}? This is registry bookkeeping + no renewal — it cannot remotely disable an already-delivered file.\n\nReason:`);
+  if(reason === null) return;
+  try{
+    await api(`/api/vendor/licenses/${id}/revoke`, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({reason})});
+    refresh();
+  }catch(e){ alert(e.message); }
+}
+
+async function download(id){
+  const r = await fetch(`/api/vendor/licenses/${id}/download`, {headers:{'X-DAS-Vendor-Token': TOKEN}});
+  if(!r.ok){ alert('download failed'); return; }
+  const blob = await r.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (r.headers.get('Content-Disposition')||'').match(/filename="?([^";]+)/)?.[1] || `das_license_${id}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+function copyKey(){ navigator.clipboard.writeText($('pubkey').textContent); }
+
+refresh();
+</script>
+</body></html>

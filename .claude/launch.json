@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "platform-console",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["apps/platform_console.py"],
+      "port": 5090
+    },
+    {
+      "name": "vendor-console",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["apps/vendor_console.py"],
+      "port": 5095
+    },
+    {
+      "name": "lora-growth",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["apps/lora_growth_app.py"],
+      "port": 5099
+    }
+  ]
+}

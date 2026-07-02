@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DAS Customer Care Demo</title>
+<style>
+:root{
+  --bg:#060908;
+  --paper:#f3f6ef;
+  --ink:#f4faf6;
+  --text:#dfe9e3;
+  --muted:#93a59a;
+  --soft:#66756c;
+  --line:#26342d;
+  --panel:#0f1512;
+  --panel2:#151d19;
+  --green:#35dc84;
+  --mint:#9df3c0;
+  --cyan:#62d5e6;
+  --blue:#7ca8ff;
+  --amber:#f4be54;
+  --red:#ff756f;
+  --violet:#c3a6ff;
+  --shadow:0 18px 40px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+html{background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{margin:0;min-height:100vh;color:var(--ink);font-size:14px;line-height:1.45;background:
+  radial-gradient(circle at 12% 8%,rgba(53,220,132,.18),transparent 26%),
+  radial-gradient(circle at 90% 18%,rgba(98,213,230,.14),transparent 24%),
+  linear-gradient(180deg,#060908 0%,#0a100d 52%,#050706 100%)}
+button{font:inherit;min-height:46px;border:0;border-radius:8px;cursor:pointer}
+button:disabled{opacity:.46;cursor:not-allowed}
+canvas#mesh{position:fixed;inset:0;width:100%;height:100%;z-index:-1;opacity:.55}
+.app{width:min(100%,560px);margin:0 auto;padding:14px 12px 96px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0 14px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:#101a14;border:1px solid #2b8e55;color:var(--mint);font-weight:850;box-shadow:0 0 24px rgba(53,220,132,.2)}
+.brand h1{margin:0;font-size:1rem;font-weight:820;letter-spacing:0}
+.brand p{margin:1px 0 0;color:var(--muted);font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(15,21,18,.82);color:var(--muted);font-size:.74rem;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 14px var(--green)}
+.hero{padding:16px 2px 10px}
+.hero h2{margin:0;font-size:1.55rem;line-height:1.05;font-weight:880;letter-spacing:0}
+.hero p{margin:8px 0 0;color:var(--muted);font-size:.9rem;max-width:38rem}
+.explain{background:rgba(15,21,18,.86);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:13px;margin:0 0 12px;backdrop-filter:blur(14px)}
+.explain h3{margin:0 0 7px;font-size:.98rem}
+.explain p{margin:0;color:var(--text);font-size:.88rem}
+.explain-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+.explain-point{display:grid;grid-template-columns:34px 1fr;gap:9px;align-items:start;border:1px solid #26342d;background:#0b100e;border-radius:8px;padding:9px}
+.explain-point b{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:#121b17;border:1px solid #2e4437;color:var(--mint)}
+.explain-point strong{display:block;font-size:.8rem}
+.explain-point span{display:block;margin-top:2px;color:var(--muted);font-size:.74rem}
+.howwhy{background:rgba(15,21,18,.86);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:13px;margin:0 0 12px;backdrop-filter:blur(14px)}
+.howwhy h3{margin:0;font-size:.98rem}
+.howwhy .intro{margin:6px 0 0;color:var(--muted);font-size:.84rem}
+.howwhy-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:11px}
+.how-card{border:1px solid #26342d;background:#0b100e;border-radius:8px;padding:11px}
+.how-card .top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.how-card .num{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:#121b17;border:1px solid #2e4437;color:var(--mint);font-weight:850}
+.how-card h4{margin:0;font-size:.86rem}
+.how-card p{margin:6px 0 0;color:var(--muted);font-size:.76rem}
+.how-card p strong{color:var(--text)}
+.bottom-line{margin-top:10px;border:1px solid #2b5359;background:#0b1516;border-radius:8px;padding:10px;color:var(--text);font-size:.82rem}
+.bottom-line strong{color:var(--cyan)}
+.story{background:rgba(15,21,18,.9);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:13px;margin-bottom:12px;backdrop-filter:blur(14px)}
+.story-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:11px}
+.story-kicker{margin:0;color:var(--muted);font-size:.72rem}
+.story-title{margin:2px 0 0;font-size:1.25rem;line-height:1.12;font-weight:840}
+.trust-meter{min-width:96px;border:1px solid #304139;border-radius:8px;padding:8px 9px;text-align:right;background:#101713}
+.trust-meter b{display:block;color:var(--green);font-size:1.02rem}
+.trust-meter span{display:block;color:var(--muted);font-size:.66rem}
+.scenario-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:11px}
+.scenario{background:#111814;border:1px solid var(--line);color:var(--muted);text-align:left;padding:10px;transition:border-color .16s,background .16s,color .16s}
+.scenario.active{border-color:var(--green);background:#132118;color:var(--ink);box-shadow:inset 0 0 0 1px rgba(53,220,132,.14)}
+.scenario strong{display:block;font-size:.84rem;line-height:1.15}
+.scenario span{display:block;margin-top:3px;color:var(--soft);font-size:.7rem}
+.request{display:grid;gap:8px;padding:11px;border:1px solid #26342d;background:#080d0b;border-radius:8px}
+.request .label{color:var(--muted);font-size:.68rem}
+.request .copy{color:var(--text);font-size:.88rem}
+.primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.primary{background:var(--green);color:#041109;font-weight:850}
+.secondary{background:#121b18;color:var(--cyan);border:1px solid #2b5359;font-weight:760}
+.danger{background:#1b1211;color:var(--red);border:1px solid #623532;font-weight:760}
+.ghost{background:#111714;color:var(--muted);border:1px solid var(--line);font-weight:720}
+.outcome{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin:12px 0}
+.outcome-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.outcome h3{margin:0;font-size:.96rem}
+.pill{border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--muted);font-size:.72rem;white-space:nowrap}
+.result{min-height:88px;border-radius:8px;border:1px solid #2c3b34;background:#0d1411;padding:12px;display:grid;gap:8px}
+.result.good{border-color:#2f6e4a;background:#0d1711}
+.result.bad{border-color:#713a35;background:#190f0e}
+.result.wait{border-color:#2c3b34}
+.result-main{font-size:1.06rem;font-weight:840}
+.result-sub{color:var(--muted);font-size:.82rem}
+.journey{display:grid;grid-template-columns:1fr 18px 1fr 18px 1fr;gap:6px;align-items:center;margin-top:10px}
+.step{min-height:74px;border:1px solid var(--line);background:#0b100e;border-radius:8px;padding:9px;overflow:hidden}
+.step.active{border-color:var(--green)}
+.step.blocked{border-color:var(--red)}
+.step .k{color:var(--muted);font-size:.64rem}
+.step .v{margin-top:4px;font-size:.8rem;font-weight:800;word-break:break-word}
+.step .s{margin-top:3px;color:var(--soft);font-size:.66rem}
+.connector{height:2px;background:linear-gradient(90deg,var(--green),var(--cyan));opacity:.62}
+.benefits{display:grid;grid-template-columns:1fr;gap:9px;margin:12px 0}
+.benefit{display:grid;grid-template-columns:42px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;background:rgba(15,21,18,.78);padding:11px}
+.benefit.active{border-color:var(--green);background:#0d1912}
+.benefit.warn{border-color:#5c4b25;background:#17140d}
+.benefit.bad{border-color:#6a3732;background:#18100f}
+.icon{width:42px;height:42px;border-radius:8px;display:grid;place-items:center;border:1px solid #2f4338;background:#101814;color:var(--mint);font-weight:850}
+.benefit h3{margin:0;font-size:.88rem}
+.benefit p{margin:2px 0 0;color:var(--muted);font-size:.76rem}
+.benefit b{font-size:1.05rem;color:var(--ink);white-space:nowrap}
+.safe-section{padding:4px 0 12px}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}
+.section-head h3{margin:0;font-size:.98rem}
+.section-head span{color:var(--muted);font-size:.74rem}
+.safes{display:grid;gap:8px}
+.safe{display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);background:#0d1310;border-radius:8px;padding:10px}
+.safe.open{border-color:var(--green)}
+.safe.delete-target{border-color:var(--amber)}
+.safe .box{width:40px;height:40px;border-radius:8px;display:grid;place-items:center;background:#121b17;border:1px solid #2e4437;color:var(--cyan);font-weight:840}
+.safe .name{font-weight:800;font-size:.86rem}
+.safe .tenant{color:var(--muted);font-size:.72rem}
+.safe .state{font-size:.72rem;color:var(--soft);text-align:right}
+.safe.open .state{color:var(--green)}
+.safe.same .state{color:var(--green)}
+.log-section{padding:2px 0 12px}
+#log{display:grid;gap:7px;max-height:168px;overflow:auto}
+.event{display:grid;grid-template-columns:52px 1fr;gap:8px;border:1px solid var(--line);border-radius:8px;background:#0d1310;padding:8px}
+.event .time{color:var(--soft);font-size:.66rem}
+.event .msg{color:var(--text);font-size:.77rem}
+.event.good{border-color:#2f6e4a}.event.warn{border-color:#5c4b25}.event.bad{border-color:#713a35}
+.tech{border-top:1px solid var(--line);padding:10px 0 4px;color:var(--soft);font-size:.67rem;font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.tech span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.bottom-actions{position:fixed;left:0;right:0;bottom:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(6,9,8,.82);border-top:1px solid var(--line);backdrop-filter:blur(16px);z-index:5}
+.bottom-inner{width:min(100%,560px);margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr 48px;gap:8px}
+.icon-btn{display:grid;place-items:center;background:#111714;color:var(--muted);border:1px solid var(--line);font-weight:850}
+@media(max-width:380px){
+  .scenario-list,.primary-actions{grid-template-columns:1fr}
+  .benefit{grid-template-columns:38px 1fr}
+  .benefit b{grid-column:2;text-align:left}
+  .journey{grid-template-columns:1fr;gap:7px}
+  .connector{height:10px;width:2px;margin:0 auto}
+}
+@media(min-width:780px){
+  .app{width:min(100%,980px);padding-bottom:26px}
+  .desk{display:grid;grid-template-columns:1.08fr .92fr;gap:16px;align-items:start}
+  .explain-grid{grid-template-columns:repeat(3,1fr)}
+  .howwhy-grid{grid-template-columns:repeat(3,1fr)}
+  .benefits{grid-template-columns:repeat(3,1fr)}
+  .benefit{grid-template-columns:42px 1fr}
+  .benefit b{grid-column:2;text-align:left}
+  .bottom-actions{position:static;background:transparent;border:0;padding:0;margin:4px 0 14px}
+  .bottom-inner{width:auto}
+}
+</style>
+</head>
+<body>
+<canvas id="mesh" aria-hidden="true"></canvas>
+<main class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">D</div>
+      <div>
+        <h1>DAS Care Desk</h1>
+        <p>One support AI, separate safe boxes</p>
+      </div>
+    </div>
+    <div class="live"><span class="dot"></span><span id="statusText">starting</span></div>
+  </header>
+
+  <section class="hero">
+    <h2>Show the benefit in 30 seconds.</h2>
+    <p>Run a real customer support moment, then test privacy and deletion. No model jargon needed.</p>
+  </section>
+
+  <section class="explain">
+    <h3>What DAS is doing here</h3>
+    <p>DAS sits under the support AI like a safety layer. It opens only the right customer safe box, blocks requests that carry the wrong company identity, and deletes one person’s saved memory without disturbing everyone else.</p>
+    <div class="explain-grid">
+      <div class="explain-point">
+        <b>1</b>
+        <div><strong>Pick the right specialist</strong><span>A return, clinic claim, or bank dispute goes to its own separate box.</span></div>
+      </div>
+      <div class="explain-point">
+        <b>2</b>
+        <div><strong>Keep data apart</strong><span>If the identity does not match, DAS stops the answer before private data leaks.</span></div>
+      </div>
+      <div class="explain-point">
+        <b>3</b>
+        <div><strong>Forget cleanly</strong><span>One customer memory can be removed while the other boxes stay unchanged.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="howwhy">
+    <h3>How DAS helps the bootcamp return agent</h3>
+    <p class="intro">The bootcamp code still decides the support workflow. DAS changes how the AI specialists are hosted, separated, and deleted.</p>
+    <div class="howwhy-grid">
+      <div class="how-card">
+        <div class="top"><div class="num">1</div><h4>Lower running cost</h4></div>
+        <p><strong>How:</strong> DAS opens one specialist safe box for the current request instead of keeping every specialist hot at once.</p>
+        <p><strong>Why it matters:</strong> when 10,000 customers arrive, the system needs far fewer live expert slots, so the same agent can run on cheaper hardware.</p>
+      </div>
+      <div class="how-card">
+        <div class="top"><div class="num">2</div><h4>Safer client privacy</h4></div>
+        <p><strong>How:</strong> DAS checks the company identity before the specialist answers. A clinic request with a bank token is stopped.</p>
+        <p><strong>Why it matters:</strong> healthcare, finance, and retail can share one orchestration layer without sharing each other’s private model knowledge.</p>
+      </div>
+      <div class="how-card">
+        <div class="top"><div class="num">3</div><h4>Clean deletion</h4></div>
+        <p><strong>How:</strong> a user memory lives in its own removable box. Delete that box, then re-check that every other box stayed unchanged.</p>
+        <p><strong>Why it matters:</strong> a deletion request does not require rebuilding the entire AI system from scratch.</p>
+      </div>
+    </div>
+    <div class="bottom-line"><strong>Bottom line:</strong> use LangGraph or your bootcamp code to build the agent’s logic. Use DAS underneath it to make the agent cheaper to host, safer across clients, and easier to delete from when compliance demands it.</div>
+  </section>
+
+  <div class="desk">
+    <section class="story">
+      <div class="story-top">
+        <div>
+          <p class="story-kicker">Customer on the line</p>
+          <h2 class="story-title" id="caseTitle">Maya needs a refund</h2>
+        </div>
+        <div class="trust-meter">
+          <b id="auditCount">0</b>
+          <span>proof notes</span>
+        </div>
+      </div>
+
+      <div class="scenario-list" id="scenarioGrid"></div>
+
+      <div class="request">
+        <div class="label">Message</div>
+        <div class="copy" id="caseText">Loading customer case...</div>
+      </div>
+
+      <div class="primary-actions">
+        <button class="primary" id="routeBtn">Help customer</button>
+        <button class="secondary" id="wrongBtn">Try privacy mistake</button>
+      </div>
+    </section>
+
+    <section class="outcome" aria-live="polite">
+      <div class="outcome-head">
+        <h3>What happened</h3>
+        <span class="pill" id="routeState">waiting</span>
+      </div>
+      <div class="result wait" id="resultBox">
+        <div class="result-main" id="resultMain">Pick a case and tap Help customer.</div>
+        <div class="result-sub" id="resultSub">DAS will open only the safe box needed for this customer.</div>
+      </div>
+      <div class="journey">
+        <div class="step" id="agentNode">
+          <div class="k">Request</div>
+          <div class="v">Customer asks</div>
+          <div class="s" id="actorOut">support app</div>
+        </div>
+        <div class="connector"></div>
+        <div class="step" id="routerNode">
+          <div class="k">DAS gatekeeper</div>
+          <div class="v" id="routerOut">chooses a box</div>
+          <div class="s" id="confidenceOut">ready</div>
+        </div>
+        <div class="connector"></div>
+        <div class="step" id="leafNode">
+          <div class="k">Safe box</div>
+          <div class="v" id="leafOut">closed</div>
+          <div class="s" id="responseOut">no answer yet</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="benefits">
+    <div class="benefit" id="costBenefit">
+      <div class="icon">$</div>
+      <div>
+        <h3>Cheaper to run</h3>
+        <p id="costText">Loads one specialist at a time.</p>
+      </div>
+      <b id="slotSaved">--</b>
+    </div>
+    <div class="benefit" id="privacyBenefit">
+      <div class="icon">P</div>
+      <div>
+        <h3>Keeps clients apart</h3>
+        <p id="privacyText">A wrong company token gets stopped.</p>
+      </div>
+      <b id="privacyState">Ready</b>
+    </div>
+    <div class="benefit" id="deleteBenefit">
+      <div class="icon">D</div>
+      <div>
+        <h3>Deletes cleanly</h3>
+        <p id="deleteText">Remove one customer memory safely.</p>
+      </div>
+      <b id="deleteState">Ready</b>
+    </div>
+  </section>
+
+  <section class="safe-section">
+    <div class="section-head">
+      <h3>Customer safe boxes</h3>
+      <span id="leafCount">0 boxes</span>
+    </div>
+    <div class="safes" id="leaves"></div>
+  </section>
+
+  <section class="log-section">
+    <div class="section-head">
+      <h3>Plain-English proof</h3>
+      <span id="proofState">live</span>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <section class="tech" id="packageStrip"></section>
+</main>
+
+<div class="bottom-actions">
+  <div class="bottom-inner">
+    <button class="danger" id="deleteBtn">Forget Maya memory</button>
+    <button class="ghost" id="resetBtn">Reset demo</button>
+    <button class="icon-btn" id="refreshBtn" aria-label="Refresh">R</button>
+  </div>
+</div>
+
+<script>
+const stories = {
+  return: {
+    title: "Maya needs a refund",
+    label: "Retail return",
+    detail: "Damaged headphones",
+    customer: "Maya"
+  },
+  user_memory: {
+    title: "Maya has a loyalty exception",
+    label: "Saved memory",
+    detail: "Personal preference",
+    customer: "Maya"
+  },
+  claim: {
+    title: "A clinic checks a claim",
+    label: "Healthcare",
+    detail: "Protected client",
+    customer: "Clinic"
+  },
+  chargeback: {
+    title: "A bank reviews a dispute",
+    label: "Banking",
+    detail: "Finance client",
+    customer: "Bank"
+  }
+};
+
+const friendlyNames = {
+  "return-policy": "Return rules",
+  "user-8842-memory": "Maya's memory",
+  "claim-triage": "Healthcare claims",
+  "chargeback-risk": "Bank disputes"
+};
+
+const shortMessages = {
+  return: "Maya received damaged headphones yesterday and wants a refund.",
+  user_memory: "Maya is a loyal customer with a saved exception for escalations.",
+  claim: "A clinic asks why an in-network procedure was denied.",
+  chargeback: "A cardholder asks the bank about an unknown recurring charge."
+};
+
+let appState = null;
+let selectedScenario = "return";
+let activeLeaf = null;
+let lastSurvivorOk = null;
+let privacyBlocked = false;
+
+const el = id => document.getElementById(id);
+const fmt = n => Number(n || 0).toLocaleString("en-US");
+
+function log(kind, msg){
+  const row = document.createElement("div");
+  row.className = "event " + (kind || "");
+  row.innerHTML = `<div class="time">${new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"})}</div><div class="msg">${msg}</div>`;
+  el("log").prepend(row);
+  while (el("log").children.length > 10) el("log").lastChild.remove();
+}
+
+async function api(path, body){
+  const opts = body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {};
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function scenarioMeta(id){
+  return (appState && appState.scenarios && appState.scenarios[id]) || {};
+}
+
+function friendlyExpert(name){
+  return friendlyNames[name] || name || "Safe box";
+}
+
+function setScenario(id){
+  selectedScenario = id;
+  const story = stories[id] || stories.return;
+  el("caseTitle").textContent = story.title;
+  el("caseText").textContent = shortMessages[id] || scenarioMeta(id).text || "";
+  document.querySelectorAll(".scenario").forEach(btn => btn.classList.toggle("active", btn.dataset.id === id));
+}
+
+function renderScenarios(){
+  const ids = Object.keys((appState && appState.scenarios) || {});
+  el("scenarioGrid").innerHTML = ids.map(id => {
+    const story = stories[id] || {label:id, detail:"Customer case"};
+    return `<button class="scenario ${id === selectedScenario ? "active" : ""}" data-id="${id}">
+      <strong>${story.label}</strong><span>${story.detail}</span>
+    </button>`;
+  }).join("");
+  document.querySelectorAll(".scenario").forEach(btn => btn.addEventListener("click", () => setScenario(btn.dataset.id)));
+}
+
+function renderState(){
+  if (!appState) return;
+  el("statusText").textContent = appState.audit && appState.audit.ok ? "ready" : "check proof";
+  el("auditCount").textContent = appState.auditEntries;
+  el("leafCount").textContent = `${appState.experts.length} boxes`;
+  el("slotSaved").textContent = `${appState.cost.leafSlotsSavedPct}%`;
+  el("costText").textContent = `For ${fmt(appState.cost.concurrentAgents)} customers, DAS opens ${fmt(appState.cost.dasHotLeafSlots)} live specialist slots instead of ${fmt(appState.cost.naiveHotLeafSlots)}.`;
+  el("costBenefit").classList.toggle("active", true);
+  el("privacyBenefit").classList.toggle("active", privacyBlocked);
+  el("privacyBenefit").classList.toggle("bad", privacyBlocked);
+  el("privacyState").textContent = privacyBlocked ? "Blocked" : "Ready";
+  el("deleteBtn").disabled = !!appState.deletedUserLeaf;
+  el("deleteState").textContent = appState.deletedUserLeaf ? "Deleted" : "Ready";
+  el("deleteBenefit").classList.toggle("active", !!appState.deletedUserLeaf);
+  el("deleteBenefit").classList.toggle("warn", !appState.deletedUserLeaf);
+  el("deleteText").textContent = appState.deletedUserLeaf
+    ? "Maya's memory is gone. The other boxes still match."
+    : "Remove Maya's saved memory without retraining everything.";
+  el("proofState").textContent = lastSurvivorOk === null ? "live" : (lastSurvivorOk ? "unchanged" : "needs review");
+
+  el("leaves").innerHTML = appState.experts.map(x => {
+    const isOpen = activeLeaf === x.eid;
+    const isTarget = x.forgetTarget;
+    const same = lastSurvivorOk && !isTarget;
+    const cls = ["safe", isOpen ? "open" : "", isTarget ? "delete-target" : "", same ? "same" : ""].join(" ");
+    const state = isOpen ? "opened now" : (same ? "unchanged" : (isTarget ? "can forget" : "closed"));
+    return `<div class="${cls}">
+      <div class="box">${x.index + 1}</div>
+      <div>
+        <div class="name">${friendlyExpert(x.name)}</div>
+        <div class="tenant">${x.tenant}</div>
+      </div>
+      <div class="state">${state}</div>
+    </div>`;
+  }).join("");
+
+  const pkg = appState.package || {};
+  el("packageStrip").innerHTML = [
+    "Under the hood, this page is using the real local DAS package:",
+    pkg.forest || "",
+    pkg.controlPlane || "",
+    pkg.node || ""
+  ].filter(Boolean).map(x => `<span>${x}</span>`).join("");
+}
+
+function setJourney(result){
+  document.querySelectorAll(".step").forEach(n => n.classList.remove("active", "blocked"));
+  el("agentNode").classList.add("active");
+  el("routerNode").classList.add(result.tokenOk ? "active" : "blocked");
+  el("leafNode").classList.add(result.served ? "active" : "blocked");
+  el("routeState").textContent = result.served ? "answered" : "blocked";
+  el("actorOut").textContent = result.actor || "support app";
+  el("routerOut").textContent = result.routed ? result.routed.tenant : "denied";
+  el("confidenceOut").textContent = result.routed ? `${(result.routed.confidence * 100).toFixed(0)}% sure` : "stopped";
+  el("leafOut").textContent = result.routed ? friendlyExpert(result.routed.expert) : "closed";
+  el("responseOut").textContent = result.routed ? result.routed.response : "no answer";
+}
+
+function renderRoute(result){
+  setJourney(result);
+  activeLeaf = result.routed ? result.routed.eid : null;
+  const box = el("resultBox");
+  box.className = "result " + (result.tokenOk ? "good" : "bad");
+  if (result.tokenOk) {
+    el("resultMain").textContent = `${friendlyExpert(result.routed.expert)} answered: ${result.routed.response}.`;
+    el("resultSub").textContent = "Only that one safe box opened. The other customer and company boxes stayed closed.";
+    log("good", `${friendlyExpert(result.routed.expert)} handled the case. One specialist opened, not the whole model fleet.`);
+  } else {
+    privacyBlocked = true;
+    el("resultMain").textContent = "Privacy mistake blocked.";
+    el("resultSub").textContent = `The request belonged to ${result.routed.tenant}, but the token said ${result.tenantToken}. DAS refused to serve it.`;
+    log("bad", `Wrong company token blocked before ${friendlyExpert(result.routed.expert)} could answer.`);
+  }
+  if (result.cost) {
+    appState.cost = result.cost;
+  }
+  renderState();
+}
+
+async function loadState(silent){
+  appState = await api("/api/supercharger/state");
+  renderScenarios();
+  if (!silent) setScenario(selectedScenario);
+  renderState();
+}
+
+async function routeRequest(overrides){
+  el("routeBtn").disabled = true;
+  try{
+    const sc = scenarioMeta(selectedScenario);
+    const body = {
+      scenario: selectedScenario,
+      tenant: sc.tenant,
+      actor: sc.actor,
+      text: sc.text,
+      ...(overrides || {})
+    };
+    const result = await api("/api/supercharger/route", body);
+    renderRoute(result);
+    await loadState(true);
+  }catch(err){
+    log("bad", `Could not run the case: ${err.message}`);
+  }finally{
+    el("routeBtn").disabled = false;
+  }
+}
+
+function wrongToken(){
+  const sc = scenarioMeta(selectedScenario);
+  const realTenant = sc.tenant || "shopstream";
+  const wrong = realTenant === "finwise" ? "shopstream" : "finwise";
+  routeRequest({tenant: wrong});
+}
+
+async function deleteUser(){
+  el("deleteBtn").disabled = true;
+  try{
+    const result = await api("/api/supercharger/delete-user", {});
+    lastSurvivorOk = result.survivorsByteIdentical !== false;
+    appState.experts = result.experts || appState.experts;
+    appState.auditEntries = result.auditEntries || appState.auditEntries;
+    appState.deletedUserLeaf = true;
+    appState.cost = result.cost || appState.cost;
+    activeLeaf = null;
+    const count = result.survivors ? result.survivors.length : appState.experts.length;
+    el("resultBox").className = "result good";
+    el("resultMain").textContent = "Maya's memory was deleted.";
+    el("resultSub").textContent = `${count} remaining safe boxes were checked and stayed unchanged.`;
+    log(lastSurvivorOk ? "good" : "bad", `Deleted Maya's saved memory. Remaining boxes ${lastSurvivorOk ? "stayed unchanged" : "changed"}.`);
+    renderState();
+    await loadState(true);
+  }catch(err){
+    log("bad", `Could not delete memory: ${err.message}`);
+  }
+}
+
+async function resetFleet(){
+  activeLeaf = null;
+  lastSurvivorOk = null;
+  privacyBlocked = false;
+  appState = await api("/api/supercharger/reset", {});
+  renderScenarios();
+  setScenario("return");
+  el("resultBox").className = "result wait";
+  el("resultMain").textContent = "Pick a case and tap Help customer.";
+  el("resultSub").textContent = "DAS will open only the safe box needed for this customer.";
+  setJourney({tokenOk:false, served:false});
+  el("routeState").textContent = "waiting";
+  renderState();
+  log("warn", "Demo reset with four separate safe boxes.");
+}
+
+function setupMesh(){
+  const canvas = el("mesh");
+  const ctx = canvas.getContext("2d");
+  let w = 0, h = 0, t = 0;
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth;
+    h = window.innerHeight;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function draw(){
+    t += 0.011;
+    ctx.clearRect(0,0,w,h);
+    for (let y = 42; y < h; y += 42) {
+      ctx.strokeStyle = "rgba(157,243,192,.045)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      ctx.lineTo(w,y + Math.sin(t + y * .018) * 7);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 22; i++) {
+      const x = (i * 61 + t * 78) % (w + 70) - 35;
+      const y = 72 + ((i * 89) % Math.max(120, h - 140));
+      ctx.fillStyle = i % 4 === 0 ? "rgba(98,213,230,.48)" : "rgba(53,220,132,.38)";
+      ctx.fillRect(x,y,3,3);
+    }
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+  draw();
+}
+
+el("routeBtn").addEventListener("click", () => routeRequest());
+el("wrongBtn").addEventListener("click", wrongToken);
+el("deleteBtn").addEventListener("click", deleteUser);
+el("resetBtn").addEventListener("click", resetFleet);
+el("refreshBtn").addEventListener("click", () => loadState(true));
+
+setupMesh();
+loadState()
+  .then(() => log("good", "DAS safe boxes loaded. Start with Help customer."))
+  .catch(err => log("bad", err.message));
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+"""
+das.platform — the FDE deployment engine.
+
+A thin, repeatable orchestration layer over the proven governance Control Plane
+(``das.governance``). It turns a single declarative ``client.yaml`` into a live,
+governed, multi-tenant expert fleet — so a Forward Deployed Engineer stands up
+the same guarantees at client after client without re-assembling them by hand.
+
+The public surface:
+
+    from das.platform import ClientSpec, Deployment, deploy
+
+    dep = deploy("client.yaml")          # spec -> live ControlPlane
+    print(dep.summary())                 # tenants, experts, users, audit_ok
+    dep.route("bank-agent", "my card was double charged")   # route + escalate?
+    dep.export_bundle("northwind_audit.json")               # the leave-behind
+
+Design notes:
+  * Correctness rests on ``das.governance.ControlPlane`` — the platform never
+    re-implements isolation, RBAC, or the audit chain; it only wires them.
+  * The default expert trainer is deterministic and dependency-free so the whole
+    engine runs (and is tested) with only NumPy. Production swaps in a
+    teacher-backed trainer via the same ``train_fn`` seam.
+  * ``ContextSource`` is the one place a client's real data integration plugs in.
+"""
+from .spec import ClientSpec, ExpertSpec, TenantSpec, UserSpec, SpecError
+from .connectors import (
+    ContextSource,
+    StaticContextSource,
+    CallableContextSource,
+    RestContextSource,
+    SpecKeywordConnector,
+    MiniLMContextSource,
+    RealTextLessonEncoder,
+)
+from .trainer import SyntheticTrainer
+from .teacher_trainer import AlignedVectorTeacher, NonlinearVectorTeacher, TeacherTrainer
+from .germination import (
+    Germinator,
+    GerminationPolicy,
+    STAGE_NAMES,
+    stage_dims,
+    stage_of,
+)
+from .lora_expert import (          # LoRA-on-MiniLM experts; heavy deps load
+    LLMTextLessonTeacher,             # lazily, so this import stays NumPy-only
+    MiniLMLoRABackbone,
+    MiniLMLoRAForest,
+    MiniLMLoRALeaf,
+    MiniLMLoRATrainer,
+    RankGerminator,
+    RANK_STAGE_NAMES,
+    TextLessonBatch,
+    TopicRiskTextTeacher,
+    WordOrderCurriculumTeacher,
+    XorNegationTeacher,
+    rank_stage_of,
+    stage_rank,
+)
+from .deploy import Deployment, deploy
+from .bundle import write_bundle
+from .license import License, LicenseError, issue_license, load_license, verify_license
+
+__all__ = [
+    "License",
+    "LicenseError",
+    "issue_license",
+    "load_license",
+    "verify_license",
+    "ClientSpec",
+    "ExpertSpec",
+    "TenantSpec",
+    "UserSpec",
+    "SpecError",
+    "ContextSource",
+    "StaticContextSource",
+    "CallableContextSource",
+    "RestContextSource",
+    "SpecKeywordConnector",
+    "MiniLMContextSource",
+    "RealTextLessonEncoder",
+    "SyntheticTrainer",
+    "AlignedVectorTeacher",
+    "NonlinearVectorTeacher",
+    "TeacherTrainer",
+    "Germinator",
+    "GerminationPolicy",
+    "STAGE_NAMES",
+    "stage_dims",
+    "stage_of",
+    "LLMTextLessonTeacher",
+    "MiniLMLoRABackbone",
+    "MiniLMLoRAForest",
+    "MiniLMLoRALeaf",
+    "MiniLMLoRATrainer",
+    "RankGerminator",
+    "RANK_STAGE_NAMES",
+    "TextLessonBatch",
+    "TopicRiskTextTeacher",
+    "WordOrderCurriculumTeacher",
+    "XorNegationTeacher",
+    "rank_stage_of",
+    "stage_rank",
+    "Deployment",
+    "deploy",
+    "write_bundle",
+]

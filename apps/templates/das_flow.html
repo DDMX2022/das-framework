@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Where DAS Fits</title>
+<style>
+:root{
+  --bg:#070908;
+  --ink:#f4faf6;
+  --text:#dfe9e3;
+  --muted:#91a39a;
+  --soft:#64766c;
+  --line:#26362f;
+  --panel:#0f1512;
+  --panel2:#141c18;
+  --green:#35dc84;
+  --mint:#9df3c0;
+  --cyan:#62d5e6;
+  --amber:#f4be54;
+  --red:#ff756f;
+  --blue:#85a8ff;
+  --shadow:0 18px 42px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+html{background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{margin:0;min-height:100vh;background:
+  radial-gradient(circle at 10% 8%,rgba(98,213,230,.15),transparent 28%),
+  radial-gradient(circle at 90% 14%,rgba(53,220,132,.15),transparent 25%),
+  linear-gradient(180deg,#070908 0%,#0a100d 52%,#050706 100%);
+  font-size:14px;line-height:1.45}
+button{font:inherit;min-height:46px;border:0;border-radius:8px;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+canvas#bg{position:fixed;inset:0;width:100%;height:100%;z-index:-1;opacity:.5}
+.app{width:min(100%,620px);margin:0 auto;padding:14px 12px 86px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0 14px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mark{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:#101a14;border:1px solid #2b8e55;color:var(--mint);font-weight:850}
+.brand h1{margin:0;font-size:1rem;font-weight:850}
+.brand p{margin:1px 0 0;color:var(--muted);font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(15,21,18,.82);color:var(--muted);font-size:.74rem;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 14px var(--green)}
+.hero{padding:14px 2px 12px}
+.hero h2{margin:0;font-size:1.55rem;line-height:1.06;font-weight:880}
+.hero p{margin:8px 0 0;color:var(--muted);font-size:.9rem;max-width:42rem}
+.panel{background:rgba(15,21,18,.88);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);backdrop-filter:blur(14px)}
+.section{padding:13px;margin-bottom:12px}
+.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.section-head h3{margin:0;font-size:1rem}
+.section-head p{margin:4px 0 0;color:var(--muted);font-size:.8rem}
+.badge{border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--muted);font-size:.7rem;white-space:nowrap}
+.compare{display:grid;grid-template-columns:1fr;gap:10px}
+.diagram{border:1px solid #26362f;background:#0b100e;border-radius:8px;padding:10px}
+.diagram h4{margin:0 0 9px;font-size:.86rem}
+.diagram.normal{border-color:#544139}
+.diagram.das{border-color:#2d6145}
+.flowline{display:grid;grid-template-columns:1fr;gap:8px}
+.node{border:1px solid var(--line);background:#101713;border-radius:8px;padding:10px;min-height:66px}
+.node strong{display:block;font-size:.82rem}
+.node span{display:block;margin-top:3px;color:var(--muted);font-size:.72rem}
+.node.risk{border-color:#6b3a34;background:#1a100f}
+.node.das{border-color:#2d6145;background:#0d1711}
+.node.agent{border-color:#2e4c68;background:#0d1319}
+.arrow{height:18px;display:grid;place-items:center;color:var(--soft);font-weight:850}
+.fit-band{border:1px solid #2b5359;background:#0b1516;border-radius:8px;padding:11px;margin-top:10px}
+.fit-band strong{display:block;color:var(--cyan);font-size:.86rem}
+.fit-band span{display:block;margin-top:3px;color:var(--text);font-size:.78rem}
+.llm-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+.llm-card{border:1px solid #26362f;background:#0b100e;border-radius:8px;padding:10px}
+.llm-card h4{margin:0;font-size:.84rem}
+.llm-card p{margin:5px 0 0;color:var(--muted);font-size:.74rem}
+.llm-card code{font-family:"SF Mono",ui-monospace,Menlo,monospace;color:var(--cyan);font-size:.72rem}
+.code-card{border:1px solid #2b5359;background:#071112;border-radius:8px;margin-top:10px;padding:10px;overflow:auto}
+.code-card pre{margin:0;color:var(--text);font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:.69rem;line-height:1.45;white-space:pre-wrap}
+.dataflow{position:relative;min-height:520px;border:1px solid #26362f;background:#0b100e;border-radius:8px;padding:10px;margin-top:10px;overflow:hidden}
+.flow-rail{position:absolute;left:28px;top:35px;bottom:35px;width:2px;background:linear-gradient(180deg,var(--green),var(--cyan),var(--blue));opacity:.34}
+.packet{position:absolute;left:18px;top:28px;width:22px;height:22px;border-radius:8px;background:var(--green);box-shadow:0 0 22px rgba(53,220,132,.58);opacity:0;z-index:2}
+.dataflow.run-success .packet{animation:packetSuccess 1.7s ease-in-out forwards}
+.dataflow.run-block .packet{animation:packetBlock 1.05s ease-in-out forwards;background:var(--red);box-shadow:0 0 22px rgba(255,117,111,.55)}
+@keyframes packetSuccess{
+  0%{opacity:1;transform:translateY(0)}
+  18%{transform:translateY(82px)}
+  36%{transform:translateY(164px)}
+  54%{transform:translateY(246px)}
+  74%{transform:translateY(328px)}
+  100%{opacity:1;transform:translateY(410px)}
+}
+@keyframes packetBlock{
+  0%{opacity:1;transform:translateY(0)}
+  42%{transform:translateY(82px)}
+  84%{transform:translateY(164px)}
+  100%{opacity:1;transform:translateY(246px)}
+}
+.flow-node{position:absolute;left:52px;right:10px;min-height:58px;border:1px solid var(--line);background:#101713;border-radius:8px;padding:9px;transition:border-color .2s,background .2s,box-shadow .2s}
+.flow-node[data-flow="user"]{top:18px}
+.flow-node[data-flow="agent"]{top:100px}
+.flow-node[data-flow="das"]{top:182px}
+.flow-node[data-flow="router"]{top:264px}
+.flow-node[data-flow="leaf"]{top:346px}
+.flow-node[data-flow="answer"]{top:428px}
+.flow-node.active{border-color:var(--green);box-shadow:0 0 20px rgba(53,220,132,.1);background:#0d1711}
+.flow-node.blocked{border-color:var(--red);background:#190f0e}
+.flow-node.closed{opacity:.6}
+.flow-node strong{display:block;font-size:.8rem}
+.flow-node span{display:block;margin-top:2px;color:var(--muted);font-size:.7rem}
+.flow-tag{float:right;color:var(--soft);font-size:.66rem;margin-left:8px}
+.case-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px}
+.case-btn{background:#111814;border:1px solid var(--line);color:var(--muted);text-align:left;padding:10px}
+.case-btn.active{border-color:var(--green);background:#132118;color:var(--ink)}
+.case-btn strong{display:block;font-size:.8rem}
+.case-btn span{display:block;margin-top:2px;color:var(--soft);font-size:.68rem}
+.run-row{display:grid;grid-template-columns:1.2fr 1fr;gap:8px;margin-top:10px}
+.primary{background:var(--green);color:#041109;font-weight:850}
+.secondary{background:#121b18;color:var(--cyan);border:1px solid #2b5359;font-weight:760}
+.result{border:1px solid var(--line);border-radius:8px;background:#0b100e;padding:11px;margin-top:10px}
+.result.good{border-color:#2f6e4a;background:#0d1711}
+.result.bad{border-color:#713a35;background:#190f0e}
+.result h4{margin:0;font-size:.95rem}
+.result p{margin:5px 0 0;color:var(--muted);font-size:.8rem}
+.runtime{display:grid;gap:8px;margin-top:10px}
+.step{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);background:#0d1310;border-radius:8px;padding:9px}
+.step.done{border-color:#2f6e4a}
+.step.active{border-color:var(--green);box-shadow:0 0 22px rgba(53,220,132,.1)}
+.step.blocked{border-color:#713a35;background:#190f0e}
+.step.closed{opacity:.62}
+.step .num{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:#121b17;border:1px solid #2e4437;color:var(--mint);font-weight:850}
+.step .title{font-weight:820;font-size:.84rem}
+.step .detail{color:var(--muted);font-size:.72rem;margin-top:2px}
+.owner{color:var(--soft);font-size:.68rem;text-align:right}
+.boxes{display:grid;gap:8px}
+.box{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);background:#0d1310;border-radius:8px;padding:9px}
+.box.open{border-color:var(--green)}
+.box .cube{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:#121b17;border:1px solid #2e4437;color:var(--cyan);font-weight:850}
+.box .name{font-weight:820;font-size:.84rem}
+.box .tenant{color:var(--muted);font-size:.72rem}
+.box .state{font-size:.7rem;color:var(--soft);text-align:right}
+.box.open .state{color:var(--green)}
+.tech{border-top:1px solid var(--line);padding:10px 0 4px;color:var(--soft);font-size:.67rem;font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.tech span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.nav{display:flex;gap:8px;margin-bottom:12px}
+.nav a{flex:1;text-align:center;text-decoration:none;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:10px;background:#111714;font-weight:720}
+@media(max-width:390px){
+  .case-grid,.run-row{grid-template-columns:1fr}
+}
+@media(min-width:820px){
+  .app{width:min(100%,1040px);padding-bottom:26px}
+  .compare{grid-template-columns:1fr 1fr}
+  .flowline{grid-template-columns:1fr 22px 1fr 22px 1fr}
+  .arrow{height:auto}
+  .llm-grid{grid-template-columns:repeat(3,1fr)}
+  .workbench{display:grid;grid-template-columns:1.05fr .95fr;gap:14px;align-items:start}
+}
+</style>
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+<main class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">D</div>
+      <div>
+        <h1>DAS Flow Map</h1>
+        <p>Where DAS fits in an AI app</p>
+      </div>
+    </div>
+    <div class="pill"><span class="dot"></span><span id="status">loading</span></div>
+  </header>
+
+  <section class="hero">
+    <h2>See where DAS sits between your agent and the model.</h2>
+    <p>This real-life claims desk uses normal agent logic first. DAS takes over only at the hosting layer: identity check, specialist selection, isolation, answer provenance.</p>
+  </section>
+
+  <nav class="nav">
+    <a href="/supercharger">Customer demo</a>
+    <a href="/">Forest demo</a>
+  </nav>
+
+  <section class="section panel">
+    <div class="section-head">
+      <div>
+        <h3>Normal API flow vs DAS flow</h3>
+        <p>The agent app is the same. The difference is what happens after it needs model help.</p>
+      </div>
+      <span class="badge">architecture</span>
+    </div>
+    <div class="compare">
+      <div class="diagram normal">
+        <h4>Standard shared API</h4>
+        <div class="flowline">
+          <div class="node agent"><strong>Agent app</strong><span>Prompt, tools, business rules</span></div>
+          <div class="arrow">↓</div>
+          <div class="node risk"><strong>One shared model/API</strong><span>All clients enter the same hot model path</span></div>
+          <div class="arrow">↓</div>
+          <div class="node risk"><strong>Answer</strong><span>Harder to prove cost, privacy, and deletion boundaries</span></div>
+        </div>
+      </div>
+      <div class="diagram das">
+        <h4>Agent running on DAS</h4>
+        <div class="flowline">
+          <div class="node agent"><strong>Agent app</strong><span>Same bootcamp/LangGraph workflow</span></div>
+          <div class="arrow">↓</div>
+          <div class="node das"><strong>DAS safety layer</strong><span>Token check + Stem Router + audit proof</span></div>
+          <div class="arrow">↓</div>
+          <div class="node das"><strong>One specialist safe box</strong><span>Only the chosen tenant expert runs</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="fit-band">
+      <strong>DAS fits below the agent logic.</strong>
+      <span>Your app still decides the conversation flow. DAS decides which isolated specialist is allowed to run, proves what ran, and keeps the others closed.</span>
+    </div>
+  </section>
+
+  <section class="section panel">
+    <div class="section-head">
+      <div>
+        <h3>Using DAS with a real LLM</h3>
+        <p>In production, the tiny demo experts become real LLM specialists: LoRA adapters, RAG indexes, fine-tuned heads, or separate model endpoints.</p>
+      </div>
+      <span class="badge">production wiring</span>
+    </div>
+    <div class="llm-grid">
+      <div class="llm-card">
+        <h4>1. Agent builds the task</h4>
+        <p>Your LangGraph or bootcamp app gathers the user message, tools, policy, and tenant token. It does not decide which private model weights are safe to use.</p>
+      </div>
+      <div class="llm-card">
+        <h4>2. DAS selects the specialist</h4>
+        <p>DAS verifies the tenant, routes the request, and opens only one specialist. That specialist can wrap a real LLM call like <code>claim_llm.invoke()</code>.</p>
+      </div>
+      <div class="llm-card">
+        <h4>3. Answer returns with proof</h4>
+        <p>The app gets the answer plus provenance: which tenant, which specialist, confidence, and audit evidence. Other specialists never saw the prompt.</p>
+      </div>
+    </div>
+    <div class="code-card">
+<pre>state = graph.invoke({"message": user_text, "tenant": "careplus"})
+
+# inside the DAS node:
+expert = das.route(tenant=state["tenant"], embedding=state["embedding"])
+answer = expert.real_llm.invoke(state["message"])  # only this specialist runs
+return {"answer": answer, "served_by": expert.name, "tenant": expert.tenant}</pre>
+    </div>
+  </section>
+
+  <section class="section panel">
+    <div class="section-head">
+      <div>
+        <h3>Animated data flow</h3>
+        <p>Run a request below. The data packet moves through the stack; with a wrong token, it stops before the specialist LLM.</p>
+      </div>
+      <span class="badge" id="flowMode">waiting</span>
+    </div>
+    <div class="dataflow" id="dataFlow">
+      <div class="flow-rail"></div>
+      <div class="packet" id="packet"></div>
+      <div class="flow-node" data-flow="user"><span class="flow-tag">outside</span><strong>Real person</strong><span id="flowUser">User sends a support request.</span></div>
+      <div class="flow-node" data-flow="agent"><span class="flow-tag">your app</span><strong>Agent workflow</strong><span id="flowAgent">LangGraph / bootcamp code builds the task.</span></div>
+      <div class="flow-node" data-flow="das"><span class="flow-tag">DAS</span><strong>DAS safety layer</strong><span id="flowDas">Checks tenant token and policy.</span></div>
+      <div class="flow-node" data-flow="router"><span class="flow-tag">DAS</span><strong>Stem Router</strong><span id="flowRouter">Chooses the allowed specialist.</span></div>
+      <div class="flow-node" data-flow="leaf"><span class="flow-tag">LLM</span><strong>Specialist LLM safe box</strong><span id="flowLeaf">Only one real LLM adapter/RAG endpoint runs.</span></div>
+      <div class="flow-node" data-flow="answer"><span class="flow-tag">proof</span><strong>Answer + provenance</strong><span id="flowAnswer">Answer returns with who served it.</span></div>
+    </div>
+  </section>
+
+  <div class="workbench">
+    <section class="section panel">
+      <div class="section-head">
+        <div>
+          <h3>Run a real-life request</h3>
+          <p>Pick a claim, dispute, or warranty case and watch the DAS path light up.</p>
+        </div>
+        <span class="badge" id="auditCount">0 proof notes</span>
+      </div>
+
+      <div class="case-grid" id="caseGrid"></div>
+      <div class="run-row">
+        <button class="primary" id="runBtn">Run through DAS</button>
+        <button class="secondary" id="blockBtn">Try wrong company token</button>
+      </div>
+      <div class="result" id="result">
+        <h4>Waiting for a request</h4>
+        <p>Select a case and run it to see where DAS takes over.</p>
+      </div>
+      <div class="runtime" id="runtime"></div>
+    </section>
+
+    <section class="section panel">
+      <div class="section-head">
+        <div>
+          <h3>Specialist safe boxes</h3>
+          <p>DAS stores each client specialist separately.</p>
+        </div>
+        <span class="badge" id="boxCount">0 boxes</span>
+      </div>
+      <div class="boxes" id="boxes"></div>
+    </section>
+  </div>
+
+  <section class="tech" id="tech"></section>
+</main>
+
+<script>
+const labels = {
+  claim: ["Medical claim", "MRI denial"],
+  dispute: ["Bank dispute", "Unknown charge"],
+  warranty: ["Warranty return", "Failed phone"]
+};
+let state = null;
+let selected = "claim";
+let openExpert = null;
+
+const el = id => document.getElementById(id);
+const flowLabels = {
+  user: "flowUser",
+  agent: "flowAgent",
+  das: "flowDas",
+  router: "flowRouter",
+  leaf: "flowLeaf",
+  answer: "flowAnswer"
+};
+
+async function api(path, body){
+  const opts = body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {};
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function renderCases(){
+  const cases = Object.keys((state && state.cases) || {});
+  el("caseGrid").innerHTML = cases.map(id => {
+    const label = labels[id] || [id, ""];
+    return `<button class="case-btn ${id === selected ? "active" : ""}" data-id="${id}">
+      <strong>${label[0]}</strong><span>${label[1]}</span>
+    </button>`;
+  }).join("");
+  document.querySelectorAll(".case-btn").forEach(btn => btn.addEventListener("click", () => {
+    selected = btn.dataset.id;
+    renderCases();
+    resetAnimatedFlow();
+  }));
+}
+
+function renderBoxes(){
+  el("boxCount").textContent = `${state.experts.length} boxes`;
+  el("boxes").innerHTML = state.experts.map((x, i) => {
+    const open = x.name === openExpert;
+    return `<div class="box ${open ? "open" : ""}">
+      <div class="cube">${i + 1}</div>
+      <div><div class="name">${x.title}</div><div class="tenant">${x.tenant}</div></div>
+      <div class="state">${open ? "opened now" : "closed"}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderTech(){
+  const pkg = state.package || {};
+  el("tech").innerHTML = [
+    "Real package calls behind this diagram:",
+    pkg.forest,
+    pkg.controlPlane,
+    pkg.node
+  ].filter(Boolean).map(x => `<span>${x}</span>`).join("");
+}
+
+function renderState(){
+  el("status").textContent = state.audit && state.audit.ok ? "ready" : "check proof";
+  el("auditCount").textContent = `${state.auditEntries} proof notes`;
+  renderCases();
+  renderBoxes();
+  renderTech();
+  resetAnimatedFlow();
+}
+
+function resetAnimatedFlow(){
+  const flow = el("dataFlow");
+  flow.classList.remove("run-success", "run-block");
+  document.querySelectorAll(".flow-node").forEach(node => node.classList.remove("active", "blocked", "closed"));
+  el("flowMode").textContent = "waiting";
+  const current = state && state.cases ? state.cases[selected] : null;
+  el("flowUser").textContent = current ? current.text : "User sends a support request.";
+  el("flowAgent").textContent = "LangGraph / bootcamp code builds the task.";
+  el("flowDas").textContent = "Checks tenant token and policy.";
+  el("flowRouter").textContent = "Chooses the allowed specialist.";
+  el("flowLeaf").textContent = "Only one real LLM adapter/RAG endpoint runs.";
+  el("flowAnswer").textContent = "Answer returns with who served it.";
+}
+
+function renderAnimatedFlow(data){
+  const flow = el("dataFlow");
+  flow.classList.remove("run-success", "run-block");
+  void flow.offsetWidth;
+  document.querySelectorAll(".flow-node").forEach(node => node.classList.remove("active", "blocked", "closed"));
+
+  data.steps.forEach(step => {
+    const labelId = flowLabels[step.id];
+    if (labelId) el(labelId).textContent = step.detail;
+    const node = document.querySelector(`.flow-node[data-flow="${step.id}"]`);
+    if (node) node.classList.add(step.status === "blocked" ? "blocked" : (step.status === "closed" ? "closed" : "active"));
+  });
+
+  el("flowMode").textContent = data.blocked ? "blocked at DAS" : "reached one LLM";
+  flow.classList.add(data.blocked ? "run-block" : "run-success");
+}
+
+function renderRun(data){
+  openExpert = data.blocked ? null : data.expert;
+  el("auditCount").textContent = `${data.auditEntries} proof notes`;
+  const result = el("result");
+  result.className = "result " + (data.blocked ? "bad" : "good");
+  result.innerHTML = data.blocked
+    ? `<h4>Blocked before the specialist ran</h4><p>${data.message} Token said ${data.tenantToken}, route pointed to ${data.routedTenant}.</p>`
+    : `<h4>${data.expertTitle} answered</h4><p>${data.message}. The other specialist boxes stayed closed.</p>`;
+  el("runtime").innerHTML = data.steps.map((step, i) => {
+    const cls = ["step", step.status].join(" ");
+    return `<div class="${cls}">
+      <div class="num">${i + 1}</div>
+      <div><div class="title">${step.title}</div><div class="detail">${step.detail}</div></div>
+      <div class="owner">${step.owner}</div>
+    </div>`;
+  }).join("");
+  renderAnimatedFlow(data);
+  renderBoxes();
+}
+
+async function load(){
+  state = await api("/api/das-flow/state");
+  renderState();
+}
+
+async function run(overrides){
+  el("runBtn").disabled = true;
+  try{
+    const current = state.cases[selected];
+    const data = await api("/api/das-flow/run", {case:selected, tenant:current.tenant, ...(overrides || {})});
+    renderRun(data);
+    state.auditEntries = data.auditEntries;
+  }catch(err){
+    el("result").className = "result bad";
+    el("result").innerHTML = `<h4>Could not run flow</h4><p>${err.message}</p>`;
+  }finally{
+    el("runBtn").disabled = false;
+  }
+}
+
+function wrongToken(){
+  const current = state.cases[selected];
+  const wrong = current.tenant === "fintrust" ? "careplus" : "fintrust";
+  run({tenant: wrong});
+}
+
+function bg(){
+  const canvas = el("bg");
+  const ctx = canvas.getContext("2d");
+  let w = 0, h = 0, t = 0;
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth; h = window.innerHeight;
+    canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w + "px"; canvas.style.height = h + "px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function draw(){
+    t += .011;
+    ctx.clearRect(0,0,w,h);
+    for(let y=44;y<h;y+=44){
+      ctx.strokeStyle = "rgba(157,243,192,.045)";
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y + Math.sin(t + y*.018)*7); ctx.stroke();
+    }
+    for(let i=0;i<20;i++){
+      const x = (i*67 + t*82) % (w+70) - 35;
+      const y = 70 + ((i*91) % Math.max(120,h-140));
+      ctx.fillStyle = i % 4 === 0 ? "rgba(98,213,230,.48)" : "rgba(53,220,132,.38)";
+      ctx.fillRect(x,y,3,3);
+    }
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener("resize", resize);
+  resize(); draw();
+}
+
+el("runBtn").addEventListener("click", () => run());
+el("blockBtn").addEventListener("click", wrongToken);
+bg();
+load().catch(err => {
+  el("status").textContent = "error";
+  el("result").className = "result bad";
+  el("result").innerHTML = `<h4>Could not load demo</h4><p>${err.message}</p>`;
+});
+</script>
+</body>
+</html>

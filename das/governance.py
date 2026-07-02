@@ -126,15 +126,18 @@ class ControlPlane:
                           payload=self._hashes())
 
     # ── expert lifecycle (governed) ────────────────────────────────
-    def graft(self, actor, tenant, name, train_fn, seed=None):
+    def graft(self, actor, tenant, name, train_fn, seed=None, leaf_dims=None):
         """Add + train a new expert for `tenant`. `train_fn(forest, leaf_index)`
         does the actual (isolated) training and any router update. Proves the
-        existing experts stay byte-identical and records it."""
+        existing experts stay byte-identical and records it. `leaf_dims` lets a
+        new expert start at a different capacity than the forest default (e.g.
+        a germination-stage seed — see das.platform.germination)."""
         self._check(actor, "graft", tenant)
         if tenant not in self.tenants:
             self._deny(actor, "graft", f"unknown tenant '{tenant}' (register it first)")
         before = {r["eid"]: self.forest.leaves[i].weight_hash() for i, r in enumerate(self.experts)}
-        idx = self.life.graft(seed=seed if seed is not None else (abs(hash(name)) % 1000))
+        idx = self.life.graft(new_leaf_dims=leaf_dims,
+                              seed=seed if seed is not None else (abs(hash(name)) % 1000))
         train_fn(self.forest, idx)
         rec = {"eid": self._next_eid, "tenant": tenant, "name": name}
         self._next_eid += 1
@@ -260,6 +263,25 @@ class ControlPlane:
         (SECURITY_REVIEW F1). The anchor must live outside `path`."""
         os.makedirs(path, exist_ok=True)
         f = self.forest
+        if hasattr(f, "save"):
+            # backend forests (e.g. das.platform.lora_expert.MiniLMLoRAForest)
+            # own their persistence format — delegate, and record that load
+            # must be given a matching forest_loader
+            f.save(os.path.join(path, "forest"))
+            meta = {
+                "forest": "external",
+                "d_model": f.d_model,
+                "tenants": sorted(self.tenants),
+                "users": self.users,
+                "experts": self.experts,
+                "next_eid": self._next_eid,
+            }
+            with open(os.path.join(path, "control_plane.json"), "w") as fh:
+                json.dump(meta, fh, indent=2)
+            self.audit.export(os.path.join(path, "audit.json"))
+            if anchor is not None and self.audit.entries:
+                anchor.record(len(self.audit.entries) - 1, self.audit.head)
+            return
         arrays = {"router_W": f.router.W, "router_b": f.router.b}
         leaf_meta = []
         for li, leaf in enumerate(f.leaves):
@@ -284,31 +306,43 @@ class ControlPlane:
             anchor.record(len(self.audit.entries) - 1, self.audit.head)
 
     @classmethod
-    def load(cls, path, secret="das-dev-key", private_key=None, anchor=None):
+    def load(cls, path, secret="das-dev-key", private_key=None, anchor=None,
+             forest_loader=None):
         """Reconstruct a control plane saved by `save`. The same `secret` is
         required to validate the audit log (it is never written to disk). Does
         NOT append to the log — the restored chain is exactly as saved; verify
         it with `verify_audit(...)` and link it to the weights with
         `state_matches_audit()`.
 
+        A snapshot whose forest delegated its own persistence (an "external"
+        forest, e.g. the LoRA backend) needs `forest_loader(dir) -> forest` —
+        the ControlPlane knows governance state, not backend formats.
+
         If `anchor` (a FreshnessAnchor) is given, the restored chain is checked
         against it and a rolled-back / forked snapshot raises `RollbackDetected`
         (SECURITY_REVIEW F1)."""
         with open(os.path.join(path, "control_plane.json")) as fh:
             meta = json.load(fh)
-        npz = np.load(os.path.join(path, "forest.npz"))
-        n = len(meta["leaves"])
-        forest = DASForest(meta["d_model"], meta["leaf_dims"], num_leaves=max(n, 1))
-        forest.leaves = []
-        for li, lm in enumerate(meta["leaves"]):
-            leaf = FibonacciLeaf(lm["dims"])
-            leaf.W = [npz[f"leaf{li}_W{wi}"] for wi in range(lm["depth"])]
-            leaf.b = [npz[f"leaf{li}_b{wi}"] for wi in range(lm["depth"])]
-            leaf.frozen = bool(lm["frozen"])
-            forest.leaves.append(leaf)
-        forest.router.W = npz["router_W"]
-        forest.router.b = npz["router_b"]
-        forest.router.num_leaves = forest.router.W.shape[1]
+        if meta.get("forest") == "external":
+            if forest_loader is None:
+                raise ValueError(
+                    "this snapshot's forest is backend-managed — pass "
+                    "forest_loader (e.g. MiniLMLoRAForest.load)")
+            forest = forest_loader(os.path.join(path, "forest"))
+        else:
+            npz = np.load(os.path.join(path, "forest.npz"))
+            n = len(meta["leaves"])
+            forest = DASForest(meta["d_model"], meta["leaf_dims"], num_leaves=max(n, 1))
+            forest.leaves = []
+            for li, lm in enumerate(meta["leaves"]):
+                leaf = FibonacciLeaf(lm["dims"])
+                leaf.W = [npz[f"leaf{li}_W{wi}"] for wi in range(lm["depth"])]
+                leaf.b = [npz[f"leaf{li}_b{wi}"] for wi in range(lm["depth"])]
+                leaf.frozen = bool(lm["frozen"])
+                forest.leaves.append(leaf)
+            forest.router.W = npz["router_W"]
+            forest.router.b = npz["router_b"]
+            forest.router.num_leaves = forest.router.W.shape[1]
 
         cp = cls.__new__(cls)                       # bypass __init__'s seeding
         cp.forest = forest

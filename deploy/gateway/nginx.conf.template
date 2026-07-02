@@ -1,0 +1,54 @@
+# DAS governance gateway — TLS termination + OIDC auth_request.
+# Rendered by the gateway service's envsubst step: ${DAS_PROXY_SECRET} is the
+# shared proxy secret's VALUE (from the mounted secret file), which is how the
+# API knows a request transited this gateway (SECURITY_REVIEW F2).
+
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/nginx/tls/tls.crt;
+    ssl_certificate_key /etc/nginx/tls/tls.key;
+
+    # oauth2-proxy endpoints (sign-in flow, callbacks)
+    location /oauth2/ {
+        proxy_pass       http://oauth2-proxy:4180;
+        proxy_set_header Host                    $host;
+        proxy_set_header X-Real-IP               $remote_addr;
+        proxy_set_header X-Auth-Request-Redirect $request_uri;
+    }
+
+    # subrequest target: 202 = authenticated, 401 = not
+    location = /oauth2/auth {
+        internal;
+        proxy_pass              http://oauth2-proxy:4180;
+        proxy_set_header        Host             $host;
+        proxy_set_header        X-Real-IP        $remote_addr;
+        proxy_pass_request_body off;
+        proxy_set_header        Content-Length   "";
+    }
+
+    location / {
+        auth_request /oauth2/auth;
+        error_page 401 = /oauth2/sign_in;
+
+        # the OIDC-verified identity becomes the RBAC principal
+        auth_request_set $email $upstream_http_x_auth_request_email;
+
+        proxy_pass http://das-governance:5070;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-DAS-Actor      $email;
+        proxy_set_header X-DAS-Proxy-Auth "${DAS_PROXY_SECRET}";
+
+        # clients must never smuggle their own identity headers past the
+        # gateway — both are overwritten above, unconditionally
+    }
+
+    # unauthenticated liveness probe for load balancers; the API exempts
+    # /health from the proxy-auth check but never trusts an actor on it
+    location = /health {
+        proxy_pass http://das-governance:5070;
+        proxy_set_header X-DAS-Proxy-Auth "${DAS_PROXY_SECRET}";
+    }
+}

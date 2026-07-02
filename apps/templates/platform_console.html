@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAS Platform Console</title>
+<style>
+:root{
+  --bg:#070c10;--side:#0a1117;--panel:#0d141b;--panel2:#111b24;--border:#1c2c38;--line:#16222c;
+  --text:#d6e2ec;--muted:#6b7e8f;--head:#8fb7d6;
+  --green:#46c98a;--green2:#8ff0c2;--blue:#5fb3f2;--amber:#f3b15a;--red:#f5736f;--purple:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;
+     font-size:13px;line-height:1.5;display:flex;min-height:100vh}
+code,.mono{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+button{background:var(--green);color:#04130c;border:none;border-radius:6px;padding:7px 13px;
+       font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;transition:filter .15s}
+button:hover{filter:brightness(1.12)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.ghost{background:transparent;border:1px solid var(--border);color:var(--head);font-weight:500}
+button.danger{background:transparent;border:1px solid #5a2b2b;color:var(--red);font-weight:500}
+button.danger:hover{background:#1d1011}
+input,select,textarea{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;
+             padding:6px 8px;font-family:inherit;font-size:.78rem}
+textarea{font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:.72rem}
+
+/* ── sidebar (the cluster list) ─────────────────────────────── */
+#side{width:224px;min-width:224px;background:var(--side);border-right:1px solid var(--border);
+      padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+#side .logo{font-size:.95rem;font-weight:700;color:var(--green2);letter-spacing:.03em;padding:2px 8px 2px}
+#side .logo .sub{display:block;font-size:.6rem;color:var(--muted);font-weight:400;letter-spacing:.05em}
+#side .sect{font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
+            margin:14px 8px 4px}
+.depitem{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;
+         border:1px solid transparent;color:var(--head)}
+.depitem:hover{background:var(--panel2)}
+.depitem.active{background:var(--panel2);border-color:var(--border);color:var(--text)}
+.depitem .dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
+.depitem .dot.bad{background:var(--red)}
+.depitem .meta{margin-left:auto;font-size:.62rem;color:var(--muted)}
+#side .foot{margin-top:auto;padding:8px;font-size:.62rem;color:var(--muted)}
+
+/* ── main ───────────────────────────────────────────────────── */
+#main{flex:1;padding:18px 22px;max-width:1080px}
+header{display:flex;align-items:center;justify-content:space-between;gap:14px;
+       border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:14px}
+h1{font-size:1rem;color:var(--text);font-weight:600}
+h1 .sub{display:block;font-size:.65rem;color:var(--muted);font-weight:400;margin-top:2px}
+.tabs{display:flex;gap:4px}
+.tab{padding:6px 14px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:.75rem;font-weight:500;
+     border:1px solid transparent}
+.tab:hover{color:var(--head)}
+.tab.active{background:var(--panel2);border-color:var(--border);color:var(--text)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:12px 14px}
+.card .k{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.card .v{font-size:1.3rem;font-weight:700;margin-top:2px}
+.card .v small{font-size:.68rem;color:var(--muted);font-weight:400}
+.card.ok .v{color:var(--green2)} .card.bad .v{color:var(--red)}
+
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:14px}
+.panel h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--head);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:.76rem}
+th{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:left;
+   padding:5px 8px;border-bottom:1px solid var(--border)}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.65rem;font-weight:600}
+.badge.local{background:#0d2b1e;color:var(--green2)}
+.badge.escalate{background:#2b1e0d;color:var(--amber)}
+.badge.tenant{background:#101f2e;color:var(--blue)}
+.badge.ok{background:#0d2b1e;color:var(--green2)}
+.badge.bad{background:#2b0d10;color:var(--red)}
+.badge.role{background:#1a1430;color:var(--purple)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint{font-size:.66rem;color:var(--muted);margin-top:8px}
+.klog{max-height:340px;overflow-y:auto}
+#modal{position:fixed;inset:0;background:rgba(2,6,10,.75);display:none;align-items:center;justify-content:center;z-index:20}
+#modal .box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;width:620px;max-width:92vw}
+#modal h2{font-size:.8rem;color:var(--green2);margin-bottom:10px}
+#modal textarea{width:100%;height:300px}
+.err{color:var(--red);font-size:.72rem;margin-top:6px;min-height:1em}
+.confbar{height:5px;border-radius:3px;background:var(--line);min-width:70px;position:relative;overflow:hidden}
+.confbar i{position:absolute;inset:0;background:var(--blue);border-radius:3px}
+</style></head><body>
+
+<nav id="side">
+  <div class="logo">DAS Platform<span class="sub">FDE deployment console</span></div>
+  <div class="sect">Client deployments</div>
+  <div id="deplist"></div>
+  <button class="ghost" style="margin:10px 8px 0" onclick="openModal()">+ Deploy client</button>
+  <div class="foot" id="licfoot" style="border-top:1px solid var(--line);padding-top:10px"></div>
+  <div class="foot" style="margin-top:0">Every panel is backed by the live control plane — routing, hashes, and the signed audit chain are real, not mocked.</div>
+</nav>
+
+<main id="main">
+  <header>
+    <h1 id="title">—<span class="sub" id="subtitle"></span></h1>
+    <div class="tabs">
+      <div class="tab active" data-tab="overview" onclick="setTab('overview')">Overview</div>
+      <div class="tab" data-tab="route" onclick="setTab('route')">Route console</div>
+      <div class="tab" data-tab="audit" onclick="setTab('audit')">Audit</div>
+      <span id="whoami" style="margin-left:10px;color:var(--muted);font-size:12px"></span>
+    </div>
+  </header>
+
+  <section id="tab-overview">
+    <div class="cards" id="cards"></div>
+    <div class="panel">
+      <h2>Experts <span style="color:var(--muted);text-transform:none;letter-spacing:0">— isolated leaves; the hash is the live SHA-256 weight fingerprint</span></h2>
+      <table><thead><tr><th>eid</th><th>Expert</th><th>Tenant</th><th>Stage</th><th>Params</th><th>Weight fingerprint</th><th></th></tr></thead>
+      <tbody id="experts"></tbody></table>
+      <div class="row" style="margin-top:12px">
+        <input id="g-tenant" placeholder="tenant" style="width:100px">
+        <input id="g-name" placeholder="new expert name" style="width:140px">
+        <input id="g-kw" placeholder="keywords (comma-sep)" style="width:170px">
+        <select id="g-teacher" style="width:150px"></select>
+        <select id="g-stage" style="width:120px">
+          <option value="">stage: default</option>
+          <option value="seed">stage: seed</option>
+          <option value="sprout">stage: sprout</option>
+          <option value="sapling">stage: sapling</option>
+        </select>
+        <button onclick="grow()">Grow specialist</button>
+        <button class="ghost" onclick="connectTeacher()">Connect LLM teacher</button>
+      </div>
+      <div class="err" id="g-err"></div>
+      <div class="hint">Graft trains the new leaf in isolation and re-proves every other expert byte-identical. With a teacher selected, the new expert learns from teacher-generated lessons. <b>Improve</b> runs the Growing-Child loop (candidate in quarantine, accuracy floor + no regression). <b>Germinate</b> runs the Fibonacci capacity ladder: a saturated expert stays small; a stuck one searches higher stages and takes the smallest that earns its parameters. Everything lands in the audit log.</div>
+    </div>
+    <div class="panel">
+      <h2>Tenants</h2>
+      <table><thead><tr><th>Tenant</th><th>Experts</th><th></th></tr></thead><tbody id="tenants"></tbody></table>
+      <div class="hint">Offboard = right-to-be-forgotten: the tenant's experts are structurally deleted and the survivors re-hashed.</div>
+    </div>
+    <div class="panel">
+      <h2>Users / RBAC</h2>
+      <table><thead><tr><th>User</th><th>Role</th><th>Tenant scope</th></tr></thead><tbody id="users"></tbody></table>
+    </div>
+  </section>
+
+  <section id="tab-route" style="display:none">
+    <div class="cards" id="route-cards"></div>
+    <div class="panel">
+      <h2>Route a query</h2>
+      <div class="row">
+        <select id="r-actor" style="min-width:130px"></select>
+        <input id="r-query" placeholder="e.g. unknown recurring card charge from a merchant" style="flex:1;min-width:280px"
+               onkeydown="if(event.key==='Enter')routeQuery()">
+        <button onclick="routeQuery()">Route</button>
+      </div>
+      <div class="err" id="r-err"></div>
+      <div class="hint">Confidence ≥ threshold → LOCAL (served by the specialist, no frontier bill). Below → ESCALATE to the configured frontier LLM. The tally is the live cost-deflection signal.</div>
+    </div>
+    <div class="panel klog">
+      <h2>Query log</h2>
+      <table><thead><tr><th>Query</th><th>Actor</th><th>Expert</th><th>Conf.</th><th></th><th>Decision</th></tr></thead>
+      <tbody id="qlog"></tbody></table>
+    </div>
+  </section>
+
+  <section id="tab-audit" style="display:none">
+    <div class="panel">
+      <h2>Signed audit chain</h2>
+      <div class="row" id="verifyline"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" onclick="loadAudit()">Re-verify chain</button>
+        <button onclick="downloadBundle()">Download compliance bundle</button>
+      </div>
+      <div class="hint">The bundle is self-contained and offline-verifiable: <code>das-verify &lt;bundle.json&gt;</code> — no system access, keyless or keyed.</div>
+    </div>
+    <div class="panel klog">
+      <h2>Events (latest 50)</h2>
+      <table><thead><tr><th>#</th><th>Event</th><th>Detail</th></tr></thead><tbody id="alog"></tbody></table>
+    </div>
+  </section>
+</main>
+
+<div id="modal">
+  <div class="box">
+    <h2>Deploy a new client (paste a spec as JSON)</h2>
+    <textarea id="spec-input"></textarea>
+    <div class="err" id="m-err"></div>
+    <div class="row" style="margin-top:10px;justify-content:flex-end">
+      <button class="ghost" onclick="closeModal()">Cancel</button>
+      <button onclick="deployClient()">das deploy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let CURRENT = null, DETAIL = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(path, opts){ const r = await fetch(path, opts); const j = await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error || r.statusText); return j; }
+
+async function refreshList(){
+  const j = await api('/api/deployments');
+  const el = $('deplist'); el.innerHTML = '';
+  for(const d of j.deployments){
+    const div = document.createElement('div');
+    div.className = 'depitem' + (d.client===CURRENT ? ' active':'');
+    div.innerHTML = `<span class="dot ${d.audit_ok?'':'bad'}"></span>${esc(d.client)}
+                     <span class="meta">${d.experts} exp · ${d.tenants} ten</span>`;
+    div.onclick = () => select(d.client);
+    el.appendChild(div);
+  }
+  if(!CURRENT && j.deployments.length) select(j.deployments[0].client);
+}
+
+async function select(name){
+  CURRENT = name;
+  DETAIL = await api('/api/deployments/'+name);
+  $('title').childNodes[0].textContent = name;
+  $('subtitle').textContent = `escalation → ${DETAIL.escalation.frontier_llm||'—'} @ threshold ${DETAIL.escalation.confidence_threshold}`;
+  renderOverview(); renderRouteCards(); fillActors(); loadAudit();
+  document.querySelectorAll('.depitem').forEach(x=>x.classList.toggle('active', x.textContent.startsWith(name)));
+  refreshList();
+}
+
+function renderOverview(){
+  const s = DETAIL;
+  $('cards').innerHTML = `
+    <div class="card"><div class="k">Tenants</div><div class="v">${s.tenants.length}</div></div>
+    <div class="card"><div class="k">Experts</div><div class="v">${s.experts.length}</div></div>
+    <div class="card"><div class="k">Users</div><div class="v">${Object.keys(s.users).length}</div></div>
+    <div class="card ${s.audit_ok?'ok':'bad'}"><div class="k">Audit chain</div>
+      <div class="v">${s.audit_ok?'VERIFIED':'BROKEN'} <small>${s.audit_entries} entries</small></div></div>`;
+  $('experts').innerHTML = s.experts.map(e=>
+    `<tr><td class="mono">${e.eid}</td><td>${esc(e.name)}</td>
+     <td><span class="badge tenant">${esc(e.tenant)}</span></td>
+     <td><span class="badge role">${esc(e.stage || 'custom')}</span></td>
+     <td class="mono" style="color:var(--muted)">${e.params}</td>
+     <td class="mono" style="color:var(--muted)">${e.hash}…</td>
+     <td style="text-align:right;white-space:nowrap">
+       <button class="ghost" style="padding:4px 9px;font-size:.66rem"
+         onclick="improve(${e.eid},'${esc(e.name)}')">Improve</button>
+       <button class="ghost" style="padding:4px 9px;font-size:.66rem"
+         onclick="germinate(${e.eid},'${esc(e.name)}')">Germinate</button></td></tr>`).join('');
+  const teachers = s.teachers || [];
+  $('g-teacher').innerHTML = `<option value="">trainer: synthetic</option>` +
+    teachers.map(t=>`<option value="${esc(t.id)}">teacher: ${esc(t.id)}</option>`).join('');
+  const byTenant = {};
+  s.experts.forEach(e=>{ (byTenant[e.tenant] ||= []).push(e.name); });
+  $('tenants').innerHTML = s.tenants.map(t=>
+    `<tr><td><span class="badge tenant">${esc(t)}</span></td>
+     <td style="color:var(--muted)">${(byTenant[t]||[]).map(esc).join(', ')||'—'}</td>
+     <td style="text-align:right"><button class="danger" onclick="offboard('${esc(t)}')">Offboard</button></td></tr>`).join('');
+  $('users').innerHTML = Object.entries(s.users).map(([n,u])=>
+    `<tr><td>${esc(n)}</td><td><span class="badge role">${esc(u.role)}</span></td>
+     <td style="color:var(--muted)">${u.tenant?esc(u.tenant):'global'}</td></tr>`).join('');
+}
+
+function renderRouteCards(){
+  const st = DETAIL.stats || {local:0, escalate:0};
+  const total = st.local + st.escalate;
+  const pct = total ? Math.round(100*st.local/total) : 0;
+  $('route-cards').innerHTML = `
+    <div class="card"><div class="k">Queries routed</div><div class="v">${total}</div></div>
+    <div class="card ok"><div class="k">Kept local</div><div class="v">${st.local}</div></div>
+    <div class="card"><div class="k">Escalated</div><div class="v" style="color:var(--amber)">${st.escalate}</div></div>
+    <div class="card"><div class="k">Deflection rate</div><div class="v">${pct}<small>%</small></div></div>`;
+}
+
+function fillActors(){
+  if (ME && ME.auth) {   // identity is the session, not a dropdown choice
+    $('r-actor').innerHTML = `<option>${esc(ME.actor)}</option>`;
+    $('r-actor').disabled = true;
+    return;
+  }
+  $('r-actor').innerHTML = Object.keys(DETAIL.users).map(u=>`<option>${esc(u)}</option>`).join('');
+}
+
+async function routeQuery(){
+  $('r-err').textContent = '';
+  const q = $('r-query').value.trim();
+  if(!q) return;
+  try{
+    const r = await api(`/api/deployments/${CURRENT}/route`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({actor: $('r-actor').value, query: q})});
+    DETAIL.stats = r.stats; renderRouteCards();
+    const pct = Math.round(r.confidence*100);
+    $('qlog').insertAdjacentHTML('afterbegin',
+      `<tr><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis">${esc(q)}</td>
+       <td style="color:var(--muted)">${esc($('r-actor').value)}</td>
+       <td>${esc(r.expert)} <span class="badge tenant">${esc(r.tenant)}</span></td>
+       <td class="mono">${r.confidence.toFixed(2)}</td>
+       <td><div class="confbar"><i style="width:${pct}%"></i></div></td>
+       <td><span class="badge ${r.decision}">${r.decision.toUpperCase()}${r.decision==='escalate'?' → '+esc(r.frontier_llm):''}</span></td></tr>`);
+    $('r-query').value = '';
+  }catch(e){ $('r-err').textContent = e.message; }
+}
+
+async function grow(){
+  $('g-err').textContent = '';
+  try{
+    const kw = $('g-kw').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const r = await api(`/api/deployments/${CURRENT}/grow`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({tenant: $('g-tenant').value.trim(), name: $('g-name').value.trim(),
+                            keywords: kw, teacher: $('g-teacher').value || null,
+                            stage: $('g-stage').value || null})});
+    $('g-err').style.color = 'var(--green2)';
+    const tr = r.teacher_report;
+    $('g-err').textContent = `eid ${r.eid} grafted — others byte-identical: ${r.others_byte_identical}`
+      + (tr ? ` · taught by ${tr.teacher} (${tr.train_examples} lessons, eval acc ${(tr.eval_accuracy*100).toFixed(0)}%)` : '');
+    select(CURRENT);
+  }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
+}
+
+async function improve(eid, name){
+  $('g-err').textContent = '';
+  try{
+    const r = await api(`/api/deployments/${CURRENT}/improve`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({eid, teacher: $('g-teacher').value || null})});
+    $('g-err').style.color = r.accepted ? 'var(--green2)' : 'var(--amber)';
+    $('g-err').textContent = `${name}: ${r.accepted ? 'ACCEPTED' : 'REJECTED'} — `
+      + `target acc ${(r.target_accuracy_before*100).toFixed(0)}% → ${(r.target_accuracy_after*100).toFixed(0)}%`
+      + `, max regression ${(r.max_previous_regression*100).toFixed(1)}%`
+      + ` (teacher ${r.teacher}; audited as ${r.audit_event})`;
+    select(CURRENT);
+  }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
+}
+
+async function germinate(eid, name){
+  $('g-err').textContent = '';
+  try{
+    const r = await api(`/api/deployments/${CURRENT}/germinate`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({eid, teacher: $('g-teacher').value || null})});
+    if(r.action === 'saturated'){
+      $('g-err').style.color = 'var(--green2)';
+      $('g-err').textContent = `${name}: SATURATED at ${r.stage} (${(r.accuracy*100).toFixed(0)}% ≥ target ${(r.target*100).toFixed(0)}%) — stays small (${r.params} params)`;
+    } else if(r.action === 'at_capacity'){
+      $('g-err').style.color = 'var(--amber)';
+      $('g-err').textContent = `${name}: already a full tree at ${(r.accuracy*100).toFixed(0)}% — needs a better curriculum, not capacity`;
+    } else {
+      const searched = (r.searched||[]).map(s=>`${s.stage} ${(s.accuracy*100).toFixed(0)}%`).join(', ');
+      $('g-err').style.color = r.accepted ? 'var(--green2)' : 'var(--amber)';
+      $('g-err').textContent = `${name}: ${r.accepted ? 'PROMOTED' : 'PROMOTION REJECTED'} `
+        + `${r.stage_from} → ${r.stage_to} — acc ${(r.accuracy_before*100).toFixed(0)}% → ${(r.accuracy_after*100).toFixed(0)}%`
+        + `, params ${r.params_before} → ${r.params_after}`
+        + (searched ? ` (searched: ${searched})` : '') + ` — audited`;
+    }
+    select(CURRENT);
+  }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
+}
+
+async function connectTeacher(){
+  const endpoint = prompt('LLM teacher endpoint (e.g. http://192.168.1.50:11434 for Ollama, or an OpenAI-compatible /v1 base):');
+  if(!endpoint) return;
+  const provider = prompt('Provider — ollama | openai-compatible | custom-json:', 'ollama');
+  if(!provider) return;
+  const model = prompt('Model (e.g. qwen2.5:7b-instruct):');
+  if(!model) return;
+  const api_key = prompt('API key (blank if none):', '') || '';
+  const id = prompt('Teacher id:', provider + '-' + model.replace(/[^a-z0-9]+/gi,'-').toLowerCase());
+  if(!id) return;
+  try{
+    await api(`/api/deployments/${CURRENT}/teachers`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id, provider, endpoint, model, api_key})});
+    $('g-err').style.color = 'var(--green2)';
+    $('g-err').textContent = `teacher '${id}' connected — select it and Grow or Improve`;
+    select(CURRENT);
+  }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
+}
+
+async function offboard(tenant){
+  if(!confirm(`Offboard tenant '${tenant}'? This structurally deletes its experts (right-to-be-forgotten).`)) return;
+  try{
+    const r = await api(`/api/deployments/${CURRENT}/offboard`, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({tenant})});
+    alert(`Removed ${r.removed} expert(s). Survivors byte-identical: ${r.non_interference}. Audit ok: ${r.audit_ok}`);
+    select(CURRENT);
+  }catch(e){ alert(e.message); }
+}
+
+async function loadAudit(){
+  const j = await api(`/api/deployments/${CURRENT}/audit`);
+  const v = j.verify;
+  $('verifyline').innerHTML =
+    `<span class="badge ${v.ok?'ok':'bad'}">${v.ok?'CHAIN VERIFIED':'TAMPERED @ '+v.broken_index}</span>
+     <span style="color:var(--muted);font-size:.72rem">${v.entries} signed entries · HMAC + SHA-256 hash-chain</span>`;
+  $('alog').innerHTML = j.entries.slice().reverse().map(e=>
+    `<tr><td class="mono" style="color:var(--muted)">${e.seq}</td>
+     <td><span class="badge ${e.event==='denied'?'bad':'tenant'}">${esc(e.event)}</span></td>
+     <td style="color:var(--muted)">${esc(e.detail)}</td></tr>`).join('');
+}
+
+function downloadBundle(){ window.location = `/api/deployments/${CURRENT}/bundle`; }
+
+function setTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
+  for(const s of ['overview','route','audit']) $('tab-'+s).style.display = (s===t)?'':'none';
+}
+
+function openModal(){
+  $('m-err').textContent = '';
+  $('spec-input').value = JSON.stringify({
+    client:"newclient", d_model:18,
+    escalation:{frontier_llm:"claude-sonnet-5", confidence_threshold:0.7},
+    tenants:[{name:"tenant-a", experts:[{name:"specialist-1", keywords:["example","keyword"]}]}],
+    users:[{name:"agent-a", role:"operator", tenant:"tenant-a"}]
+  }, null, 2);
+  $('modal').style.display = 'flex';
+}
+function closeModal(){ $('modal').style.display = 'none'; }
+
+async function deployClient(){
+  $('m-err').textContent = '';
+  try{
+    const spec = JSON.parse($('spec-input').value);
+    await api('/api/deployments', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({spec})});
+    closeModal(); CURRENT = spec.client; await refreshList(); select(spec.client);
+  }catch(e){ $('m-err').textContent = e.message; }
+}
+
+async function loadLicense(){
+  try{
+    const l = await api('/api/license');
+    $('licfoot').innerHTML = l.licensed
+      ? `<span class="badge ok">LICENSED</span> ${esc(l.customer)} · ${esc(l.tier)} tier · ${l.days_remaining}d left`
+        + (l.warning ? `<div style="color:var(--amber);margin-top:4px">${esc(l.warning)}</div>` : '')
+      : `<span class="badge" style="background:#2b1e0d;color:var(--amber)">EVALUATION</span> ${esc(l.notice)}`;
+  }catch(e){ $('licfoot').textContent = 'license status unavailable'; }
+}
+
+let ME = null;
+async function loadMe(){
+  ME = await api('/api/me');
+  if (ME.auth) {
+    $('whoami').innerHTML = `signed in as <b>${esc(ME.actor)}</b> ·
+      <a href="#" style="color:var(--muted)"
+         onclick="fetch('/logout',{method:'POST'}).then(()=>location='/login');return false">
+        sign out</a>`;
+  }
+}
+loadMe().then(()=>{ refreshList(); loadLicense(); });
+</script>
+</body></html>

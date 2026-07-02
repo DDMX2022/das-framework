@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07100c">
+<title>DAS Mobile Expert Trainer</title>
+<style>
+:root{
+  --bg:#08100c;--panel:#101914;--panel2:#17231d;--border:#30473a;--line:#24352c;
+  --text:#e8f1ea;--muted:#91a198;--head:#c7e0ce;--green:#65d47d;--amber:#e0ae4a;
+  --red:#ee6b6e;--blue:#6bbbe4;--ink:#051006;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:
+  linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px) 0 0/28px 28px,
+  linear-gradient(0deg,rgba(255,255,255,.02) 1px,transparent 1px) 0 0/28px 28px,
+  var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:14px;line-height:1.45;padding:14px;max-width:560px;margin:0 auto}
+a{color:var(--blue);text-decoration:none}
+button,input,select,textarea{font:inherit}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+h1{font-size:1.05rem;color:var(--green);line-height:1.15}
+h1 span{display:block;color:var(--muted);font-size:.68rem;font-weight:500;margin-top:3px}
+.nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.tag{border:2px solid var(--border);border-radius:4px;padding:5px 8px;background:#0d1712;color:var(--head);
+     font-size:.66rem;font-weight:800;text-transform:uppercase}
+.hud{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.metric{background:var(--panel);border:2px solid var(--border);border-radius:5px;padding:10px;
+        box-shadow:inset 0 -4px 0 rgba(0,0,0,.25)}
+.metric .k{font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.metric .v{font-size:1.08rem;font-weight:900;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card{background:var(--panel);border:2px solid var(--border);border-radius:5px;margin-bottom:12px;padding:13px;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.025),0 8px 0 rgba(0,0,0,.08)}
+.card h2{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--head);margin-bottom:10px}
+.row{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:9px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+label{font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+input,select,textarea{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:2px solid var(--border);
+  border-radius:4px;padding:9px 10px}
+textarea{min-height:104px;resize:vertical}
+button{width:100%;background:var(--green);color:var(--ink);border:0;border-radius:4px;padding:10px 12px;
+  font-weight:900;cursor:pointer;box-shadow:inset 0 -4px 0 rgba(0,0,0,.24)}
+button.ghost{background:#121c16;color:var(--head);border:2px solid var(--border)}
+button:disabled{opacity:.55;cursor:not-allowed}
+.stack{display:grid;gap:8px}
+.result{background:#0c1511;border:2px solid var(--border);border-radius:5px;padding:12px;min-height:92px}
+.result .big{font-size:1.4rem;font-weight:950;margin-bottom:4px}
+.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}
+.small{font-size:.72rem;color:var(--muted)}
+.mono{font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.bar{height:8px;background:#26352d;border-radius:99px;overflow:hidden;margin-top:7px}
+.bar span{display:block;height:100%;background:var(--green);width:0%}
+#log{position:fixed;left:12px;right:12px;bottom:12px;display:grid;gap:7px;z-index:10}
+.toast{background:var(--panel2);border:2px solid var(--border);border-left:4px solid var(--blue);border-radius:5px;
+  padding:10px 12px;font-size:.78rem;box-shadow:0 12px 24px rgba(0,0,0,.36)}
+.toast.ok{border-left-color:var(--green)}.toast.err{border-left-color:var(--red)}
+.toast b{display:block;margin-bottom:2px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mobile Expert Trainer<span>train, save, test</span></h1>
+  <div class="nav">
+    <a class="tag" href="/growth">Forest</a>
+    <a class="tag" href="/">Admin</a>
+  </div>
+</header>
+
+<div class="hud">
+  <div class="metric"><div class="k">Actor</div><div class="v" id="mActor">root</div></div>
+  <div class="metric"><div class="k">Experts</div><div class="v" id="mExperts">-</div></div>
+  <div class="metric"><div class="k">Teachers</div><div class="v" id="mTeachers">-</div></div>
+  <div class="metric"><div class="k">Mobile Store</div><div class="v" id="mStore">-</div></div>
+</div>
+
+<div class="card">
+  <h2>Session</h2>
+  <div class="row">
+    <div class="field">
+      <label>Actor</label>
+      <select id="actor">
+        <option value="root">root - admin</option>
+        <option value="alice">alice - acme</option>
+        <option value="bob">bob - globex</option>
+      </select>
+    </div>
+    <div class="field" id="proxyField" style="display:none">
+      <label>Proxy credential</label>
+      <input id="proxy" type="password" placeholder="X-DAS-Proxy-Auth">
+    </div>
+  </div>
+  <button class="ghost" onclick="loadStatus()">Refresh</button>
+</div>
+
+<div class="card">
+  <h2>Connect LLM</h2>
+  <div class="row">
+    <div class="field"><label>Teacher id</label><input id="teacherId" value="mobile-llm"></div>
+    <div class="field"><label>Provider</label><select id="provider"></select></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Model</label><input id="model" placeholder="qwen2.5:7b-instruct"></div>
+    <div class="field"><label>Max examples</label><input id="maxExamples" type="number" value="32" min="4" max="160"></div>
+  </div>
+  <div class="field" style="margin-bottom:9px"><label>Endpoint / base URL</label><input id="endpoint" placeholder="http://localhost:11434"></div>
+  <div class="row">
+    <div class="field"><label>API key</label><input id="apiKey" type="password" placeholder="optional"></div>
+    <div class="field"><label>Temperature</label><input id="temperature" type="number" value="0.2" min="0" max="2" step="0.1"></div>
+  </div>
+  <button id="teacherBtn" onclick="registerTeacher()">Save teacher</button>
+  <div class="small" id="providerHint" style="margin-top:8px">-</div>
+</div>
+
+<div class="card">
+  <h2>Train Expert</h2>
+  <div class="row">
+    <div class="field"><label>Name</label><input id="expertName" placeholder="physics-motion"></div>
+    <div class="field"><label>Tenant</label><input id="tenant" value="learning"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Specialty</label><input id="specialty" placeholder="physics"></div>
+    <div class="field"><label>Teacher</label><select id="teacher"></select></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Steps</label><input id="steps" type="number" value="120" min="1" max="1200"></div>
+    <div class="field"><label>Train examples</label><input id="trainExamples" type="number" value="96" min="32" max="1600"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Eval examples</label><input id="evalExamples" type="number" value="48" min="16" max="1200"></div>
+    <div class="field"><label>Parent branch</label><input id="parent" placeholder="physics"></div>
+  </div>
+  <button id="trainBtn" onclick="trainExpert()">Train new expert</button>
+</div>
+
+<div class="card">
+  <h2>Test Prompt</h2>
+  <div class="row">
+    <div class="field"><label>Expert</label><select id="testExpert"></select></div>
+    <div class="field"><label>Topic override</label><input id="testTopic" placeholder="optional"></div>
+  </div>
+  <div class="field" style="margin-bottom:9px"><label>Prompt</label><textarea id="prompt">Explain force and acceleration in simple words.</textarea></div>
+  <button id="testBtn" onclick="testPrompt()">Test prompt</button>
+  <div class="result" id="result" style="margin-top:10px">
+    <div class="big">Ready</div>
+    <div class="small">No prompt tested yet.</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Mobile Memory</h2>
+  <div class="stack">
+    <div class="result">
+      <div class="small">Folder</div>
+      <div class="mono" id="memPath">-</div>
+      <div class="small" id="memUsed" style="margin-top:6px">-</div>
+      <div class="bar"><span id="memBar"></span></div>
+    </div>
+    <button class="ghost" id="syncBtn" onclick="syncModels()">Sync compact models</button>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+const PROXY_REQUIRED = {{ proxy_required|tojson }};
+if (PROXY_REQUIRED) document.getElementById('proxyField').style.display = '';
+let lastStatus = null;
+let providers = [];
+
+function actor(){ return document.getElementById('actor').value; }
+function headers(json){
+  const h = {'X-DAS-Actor': actor()};
+  if (json) h['Content-Type'] = 'application/json';
+  const p = document.getElementById('proxy');
+  if (p && p.value) h['X-DAS-Proxy-Auth'] = p.value;
+  return h;
+}
+async function api(path, opts={}){
+  const res = await fetch(path, {...opts, headers:{...headers(opts.body != null), ...(opts.headers || {})}});
+  let data = null; try { data = await res.json(); } catch(e){}
+  if (!res.ok){
+    const err = new Error((data && (data.reason || data.error)) || res.statusText);
+    err.status = res.status; throw err;
+  }
+  return data;
+}
+function toast(kind, head, body){
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.innerHTML = `<b>${head}</b>${body || ''}`;
+  document.getElementById('log').appendChild(el);
+  setTimeout(()=>{ el.style.opacity=0; el.style.transition='opacity .35s'; setTimeout(()=>el.remove(),360); }, 4200);
+}
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[ch]);
+}
+function gb(x){ return x == null ? '-' : (Number(x) / (1024 ** 3)).toFixed(2) + ' GB'; }
+function pct(x){ return x == null ? '-' : Math.round(Number(x) * 100) + '%'; }
+function fillSelect(el, rows, labelFn){
+  const old = el.value;
+  el.innerHTML = (rows || []).map(r => `<option value="${esc(r.id)}">${esc(labelFn(r))}</option>`).join('');
+  if ((rows || []).some(r => String(r.id) === old)) el.value = old;
+}
+function updateProviderHint(){
+  const row = providers.find(p => p.id === document.getElementById('provider').value);
+  document.getElementById('providerHint').textContent = row ? row.hint : '-';
+  const endpoint = document.getElementById('endpoint');
+  endpoint.disabled = row && !row.needs_endpoint;
+  if (endpoint.disabled) endpoint.value = '';
+}
+function renderMemory(status){
+  if (!status) return;
+  document.getElementById('mStore').textContent = gb(status.size_bytes);
+  document.getElementById('memPath').textContent = status.path || '-';
+  document.getElementById('memUsed').textContent = `${gb(status.size_bytes)} · next warning ${gb(status.next_warning_bytes)}`;
+  const denom = Math.max(1, Number(status.next_warning_bytes || 1));
+  document.getElementById('memBar').style.width = Math.min(100, Math.round(Number(status.size_bytes || 0) / denom * 100)) + '%';
+}
+async function loadStatus(){
+  try{
+    const st = await api('/growth/status');
+    lastStatus = st;
+    providers = st.providers || [];
+    document.getElementById('mActor').textContent = actor();
+    document.getElementById('mExperts').textContent = st.experts.length;
+    document.getElementById('mTeachers').textContent = st.teachers.length;
+    if (st.actor_profile && st.actor_profile.tenant){
+      document.getElementById('tenant').value = st.actor_profile.tenant;
+    }
+    fillSelect(document.getElementById('provider'), providers, p => p.name);
+    updateProviderHint();
+    fillSelect(document.getElementById('teacher'), st.teachers, t => `${t.name}${t.provider ? ' · ' + t.provider : ''}`);
+    fillSelect(document.getElementById('testExpert'), st.experts.map(e => ({id:e.eid, ...e})), e => `${e.eid} · ${e.tenant}/${e.name}`);
+    renderMemory(st.mobile_store);
+  }catch(e){
+    toast('err', 'Status failed', e.message);
+  }
+}
+async function registerTeacher(){
+  const btn = document.getElementById('teacherBtn');
+  btn.disabled = true;
+  try{
+    const body = {
+      id: document.getElementById('teacherId').value,
+      provider: document.getElementById('provider').value,
+      model: document.getElementById('model').value,
+      endpoint: document.getElementById('endpoint').value,
+      api_key: document.getElementById('apiKey').value,
+      temperature: Number(document.getElementById('temperature').value),
+      max_examples: Number(document.getElementById('maxExamples').value),
+      replace: true
+    };
+    const res = await api('/growth/teachers', {method:'POST', body:JSON.stringify(body)});
+    document.getElementById('apiKey').value = '';
+    toast('ok', 'Teacher saved', res.teacher.name);
+    await loadStatus();
+    document.getElementById('teacher').value = res.teacher.id;
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Teacher failed', e.message);
+  }finally{
+    btn.disabled = false;
+  }
+}
+async function trainExpert(){
+  const btn = document.getElementById('trainBtn');
+  btn.disabled = true;
+  try{
+    const body = {
+      name: document.getElementById('expertName').value,
+      tenant: document.getElementById('tenant').value,
+      specialty: document.getElementById('specialty').value || undefined,
+      parent: document.getElementById('parent').value || document.getElementById('specialty').value || undefined,
+      teacher: document.getElementById('teacher').value,
+      steps: Number(document.getElementById('steps').value),
+      n_train: Number(document.getElementById('trainExamples').value),
+      n_eval: Number(document.getElementById('evalExamples').value)
+    };
+    const res = await api('/growth/create_expert', {method:'POST', body:JSON.stringify(body)});
+    toast('ok', 'Expert trained', `${res.expert.tenant}/${res.expert.name} · seed ${pct(res.seed_accuracy)}`);
+    await loadStatus();
+    document.getElementById('testExpert').value = res.expert.eid;
+    document.getElementById('testTopic').value = res.expert.specialty || '';
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Train failed', e.message);
+  }finally{
+    btn.disabled = false;
+  }
+}
+async function testPrompt(){
+  const btn = document.getElementById('testBtn');
+  const eid = document.getElementById('testExpert').value;
+  if (!eid) return toast('err', 'Test failed', 'choose an expert');
+  btn.disabled = true;
+  try{
+    const body = {
+      eid: Number(eid),
+      prompt: document.getElementById('prompt').value,
+      topic: document.getElementById('testTopic').value || undefined
+    };
+    const res = await api('/growth/mobile/test_prompt', {method:'POST', body:JSON.stringify(body)});
+    const yes = res.direct.belongs;
+    const conf = Math.round(res.direct.confidence * 100);
+    document.getElementById('result').innerHTML = `
+      <div class="big ${yes ? 'ok' : 'warn'}">${yes ? 'Belongs' : 'Does not belong'}</div>
+      <div>${esc(res.expert.tenant)}/${esc(res.expert.name)} · ${conf}%</div>
+      <div class="bar"><span style="width:${conf}%"></span></div>
+      <div class="small" style="margin-top:8px">Router chose ${esc(res.router.tenant)}/${esc(res.router.name)} · ${Math.round(res.router.confidence * 100)}%</div>
+      <div class="small mono" style="margin-top:4px">p0=${res.direct.probabilities[0].toFixed(3)} p1=${res.direct.probabilities[1].toFixed(3)}</div>`;
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Test failed', e.message);
+  }finally{
+    btn.disabled = false;
+  }
+}
+async function syncModels(){
+  const btn = document.getElementById('syncBtn');
+  btn.disabled = true;
+  try{
+    const res = await api('/growth/mobile/save', {method:'POST', body:JSON.stringify({})});
+    renderMemory(res.status);
+    toast('ok', 'Models synced', `${(res.saved || []).length} compact models`);
+  }catch(e){
+    toast('err', e.status === 403 ? 'Denied' : 'Sync failed', e.message);
+  }finally{
+    btn.disabled = false;
+    loadStatus();
+  }
+}
+document.getElementById('actor').addEventListener('change', loadStatus);
+document.getElementById('provider').addEventListener('change', updateProviderHint);
+loadStatus();
+</script>
+</body>
+</html>

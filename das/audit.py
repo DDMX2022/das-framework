@@ -109,6 +109,15 @@ class AuditLog:
         """The chain head — the last entry's signature (or 'genesis' if empty)."""
         return self.entries[-1]["sig"] if self.entries else "genesis"
 
+    def sign_blob(self, obj):
+        """Sign an arbitrary JSON-serializable object with the log's scheme
+        (HMAC or Ed25519) over its canonical form. Used to attest metadata that
+        travels WITH an exported document but outside the entry chain — e.g. a
+        compliance bundle's manifest — so a keyed verifier catches wrapper
+        tampering, not just chain tampering."""
+        body = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+        return self._sign(body)
+
     def to_document(self, meta=None):
         """A self-contained, exportable compliance document: the full signed
         chain (with the actual weight fingerprints) plus scheme/provenance
@@ -222,4 +231,15 @@ def verify_document(doc, secret=None, public_key=None):
             issues.append((len(entries), f"count {doc.get('count')} != {len(entries)} entries present"))
         if doc.get("head") not in (None, prev):
             issues.append((len(entries), "head does not match the final entry signature"))
+        # Wrapper attestation (e.g. a compliance bundle's manifest): the signed
+        # fields are listed in the document itself; authenticity requires a key,
+        # same as entry signatures — keyless verification stays structural-only.
+        if doc.get("bundle_signature") is not None and auth is not None:
+            fields = doc.get("bundle_signed_fields") or []
+            body = json.dumps({k: doc.get(k) for k in fields},
+                              sort_keys=True, separators=(",", ":"))
+            if not auth(body, doc["bundle_signature"]):
+                issues.append((len(entries),
+                               "bundle metadata signature mismatch (manifest/"
+                               "wrapper altered, or wrong key)"))
     return (not issues), issues
