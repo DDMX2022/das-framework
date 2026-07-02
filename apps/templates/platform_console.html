@@ -106,16 +106,18 @@ tr:last-child td{border-bottom:none}
     <div class="cards" id="cards"></div>
     <div class="panel">
       <h2>Experts <span style="color:var(--muted);text-transform:none;letter-spacing:0">— isolated leaves; the hash is the live SHA-256 weight fingerprint</span></h2>
-      <table><thead><tr><th>eid</th><th>Expert</th><th>Tenant</th><th>Weight fingerprint</th></tr></thead>
+      <table><thead><tr><th>eid</th><th>Expert</th><th>Tenant</th><th>Weight fingerprint</th><th></th></tr></thead>
       <tbody id="experts"></tbody></table>
       <div class="row" style="margin-top:12px">
-        <input id="g-tenant" placeholder="tenant" style="width:110px">
-        <input id="g-name" placeholder="new expert name" style="width:160px">
-        <input id="g-kw" placeholder="keywords (comma-sep)" style="width:200px">
+        <input id="g-tenant" placeholder="tenant" style="width:100px">
+        <input id="g-name" placeholder="new expert name" style="width:140px">
+        <input id="g-kw" placeholder="keywords (comma-sep)" style="width:170px">
+        <select id="g-teacher" style="width:150px"></select>
         <button onclick="grow()">Grow specialist</button>
-        <span class="err" id="g-err"></span>
+        <button class="ghost" onclick="connectTeacher()">Connect LLM teacher</button>
       </div>
-      <div class="hint">Graft trains the new leaf in isolation and re-proves every other expert byte-identical.</div>
+      <div class="err" id="g-err"></div>
+      <div class="hint">Graft trains the new leaf in isolation and re-proves every other expert byte-identical. With a teacher selected, the new expert learns from teacher-generated lessons; <b>Improve</b> runs the full Growing-Child loop on an existing expert — candidate trained in quarantine, replaces the live expert only if it passes policy (accuracy floor, no regression), accepted or rejected it lands in the audit log.</div>
     </div>
     <div class="panel">
       <h2>Tenants</h2>
@@ -219,7 +221,12 @@ function renderOverview(){
   $('experts').innerHTML = s.experts.map(e=>
     `<tr><td class="mono">${e.eid}</td><td>${esc(e.name)}</td>
      <td><span class="badge tenant">${esc(e.tenant)}</span></td>
-     <td class="mono" style="color:var(--muted)">${e.hash}…</td></tr>`).join('');
+     <td class="mono" style="color:var(--muted)">${e.hash}…</td>
+     <td style="text-align:right"><button class="ghost" style="padding:4px 9px;font-size:.66rem"
+       onclick="improve(${e.eid},'${esc(e.name)}')">Improve</button></td></tr>`).join('');
+  const teachers = s.teachers || [];
+  $('g-teacher').innerHTML = `<option value="">trainer: synthetic</option>` +
+    teachers.map(t=>`<option value="${esc(t.id)}">teacher: ${esc(t.id)}</option>`).join('');
   const byTenant = {};
   s.experts.forEach(e=>{ (byTenant[e.tenant] ||= []).push(e.name); });
   $('tenants').innerHTML = s.tenants.map(t=>
@@ -273,9 +280,47 @@ async function grow(){
     const kw = $('g-kw').value.split(',').map(s=>s.trim()).filter(Boolean);
     const r = await api(`/api/deployments/${CURRENT}/grow`, {method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({tenant: $('g-tenant').value.trim(), name: $('g-name').value.trim(), keywords: kw})});
+      body: JSON.stringify({tenant: $('g-tenant').value.trim(), name: $('g-name').value.trim(),
+                            keywords: kw, teacher: $('g-teacher').value || null})});
     $('g-err').style.color = 'var(--green2)';
-    $('g-err').textContent = `eid ${r.eid} grafted — others byte-identical: ${r.others_byte_identical}`;
+    const tr = r.teacher_report;
+    $('g-err').textContent = `eid ${r.eid} grafted — others byte-identical: ${r.others_byte_identical}`
+      + (tr ? ` · taught by ${tr.teacher} (${tr.train_examples} lessons, eval acc ${(tr.eval_accuracy*100).toFixed(0)}%)` : '');
+    select(CURRENT);
+  }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
+}
+
+async function improve(eid, name){
+  $('g-err').textContent = '';
+  try{
+    const r = await api(`/api/deployments/${CURRENT}/improve`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({eid, teacher: $('g-teacher').value || null})});
+    $('g-err').style.color = r.accepted ? 'var(--green2)' : 'var(--amber)';
+    $('g-err').textContent = `${name}: ${r.accepted ? 'ACCEPTED' : 'REJECTED'} — `
+      + `target acc ${(r.target_accuracy_before*100).toFixed(0)}% → ${(r.target_accuracy_after*100).toFixed(0)}%`
+      + `, max regression ${(r.max_previous_regression*100).toFixed(1)}%`
+      + ` (teacher ${r.teacher}; audited as ${r.audit_event})`;
+    select(CURRENT);
+  }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
+}
+
+async function connectTeacher(){
+  const endpoint = prompt('LLM teacher endpoint (e.g. http://192.168.1.50:11434 for Ollama, or an OpenAI-compatible /v1 base):');
+  if(!endpoint) return;
+  const provider = prompt('Provider — ollama | openai-compatible | custom-json:', 'ollama');
+  if(!provider) return;
+  const model = prompt('Model (e.g. qwen2.5:7b-instruct):');
+  if(!model) return;
+  const api_key = prompt('API key (blank if none):', '') || '';
+  const id = prompt('Teacher id:', provider + '-' + model.replace(/[^a-z0-9]+/gi,'-').toLowerCase());
+  if(!id) return;
+  try{
+    await api(`/api/deployments/${CURRENT}/teachers`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id, provider, endpoint, model, api_key})});
+    $('g-err').style.color = 'var(--green2)';
+    $('g-err').textContent = `teacher '${id}' connected — select it and Grow or Improve`;
     select(CURRENT);
   }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
 }

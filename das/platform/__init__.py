@@ -32,6 +32,7 @@ from .connectors import (
     SpecKeywordConnector,
 )
 from .trainer import SyntheticTrainer
+from .teacher_trainer import AlignedVectorTeacher, TeacherTrainer
 from .deploy import Deployment, deploy
 from .bundle import write_bundle
 from .license import License, LicenseError, issue_license, load_license, verify_license
@@ -53,6 +54,8 @@ __all__ = [
     "RestContextSource",
     "SpecKeywordConnector",
     "SyntheticTrainer",
+    "AlignedVectorTeacher",
+    "TeacherTrainer",
     "Deployment",
     "deploy",
     "write_bundle",

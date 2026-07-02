@@ -239,8 +239,20 @@ deploys it there.
 ## 11. Honest gaps (what this build does and does not do)
 
 - **Deterministic synthetic trainer** ships as the default so `das deploy` runs
-  end-to-end with zero heavy deps and is fully tested. Production swaps in a
-  teacher-backed trainer (`das/training/`, [GROWING_CHILD.md](GROWING_CHILD.md)).
+  end-to-end with zero heavy deps and is fully tested. **The teacher bridge is
+  now built** ([`das/platform/teacher_trainer.py`](../das/platform/teacher_trainer.py)):
+  `dep.grow(teacher=…)` trains new experts on teacher lessons (offline
+  `AlignedVectorTeacher` by default; Ollama/OpenAI-compatible LLM teachers via
+  `register_teacher`), and `dep.improve(…)` runs the full Growing-Child loop —
+  candidate in quarantine, accuracy floor + no-regression policy, accept/reject,
+  audited as `growth_update`/`growth_rejected`. What remains aspirational is the
+  *substance* of the expert: it is still a routing/scoring head, not a language
+  model — see the pulled-forward Phase-1 item below.
+- **Pulled forward from PRODUCT_PLAN Phase 1 (top of backlog):** experts as
+  **LoRA adapters on a frozen HF transformer** behind the same `train_fn` seam.
+  Kills the "experts are synthetic" objection: growing an expert becomes real
+  adapter fine-tuning (teacher generates corpus → adapter trains → policy gates),
+  with every governance guarantee unchanged (control plane is backend-agnostic).
 - **Reference connectors** (`Static`, `Callable`, `Rest`) define the seam; the
   client-specific SQL/vector integration is still the FDE's ~50 lines.
 - **Cost deflection is now measured**: [`benchmarks/cost_bench.py`](../benchmarks/cost_bench.py)

@@ -22,9 +22,12 @@ from __future__ import annotations
 from typing import Optional
 
 from das.governance import ControlPlane
+from das.training.growth import GrowthManager, GrowthPolicy
+from das.training.teachers import teacher_from_config
 
 from .spec import ClientSpec
 from .trainer import SyntheticTrainer
+from .teacher_trainer import TeacherTrainer
 from .connectors import ContextSource, SpecKeywordConnector
 from .bundle import write_bundle
 from .license import License, load_license
@@ -39,7 +42,14 @@ class Deployment:
         self.spec = spec
         self.cp = cp
         self.trainer = trainer
-        self.connector = connector or SpecKeywordConnector(spec, trainer)
+        # The teacher bridge: grow/improve via das.training teachers behind the
+        # same train_fn seam. The connector consults IT for centers so that
+        # teacher-grown experts (whose geometry is their actual lessons) route
+        # coherently alongside synthetic ones.
+        self.teacher_trainer = TeacherTrainer(trainer)
+        self.teachers = {"local-teacher": self.teacher_trainer.default_teacher}
+        self.growth = GrowthManager(cp)
+        self.connector = connector or SpecKeywordConnector(spec, self.teacher_trainer)
 
     # ── introspection ────────────────────────────────────────────────
     def summary(self) -> dict:
@@ -88,12 +98,38 @@ class Deployment:
         }
 
     # ── lifecycle ops ────────────────────────────────────────────────
-    def grow(self, actor: str, tenant: str, name: str, keywords=None) -> int:
+    def resolve_teacher(self, teacher):
+        """A teacher object, a registered teacher id, or None (synthetic)."""
+        if teacher is None or not isinstance(teacher, str):
+            return teacher
+        if teacher in ("synthetic", ""):
+            return None
+        if teacher not in self.teachers:
+            raise KeyError(f"unknown teacher '{teacher}' "
+                           f"(registered: {sorted(self.teachers)})")
+        return self.teachers[teacher]
+
+    def register_teacher(self, config: dict) -> dict:
+        """Register a runtime teacher (local-vector, or an LLM over Ollama /
+        OpenAI-compatible / custom-JSON endpoints). Returns sanitized metadata —
+        API keys stay in memory, never in the description or on disk."""
+        t = teacher_from_config(config, self.trainer.d_model)
+        self.teachers[t.name] = t
+        return t.describe()
+
+    def grow(self, actor: str, tenant: str, name: str, keywords=None,
+             teacher=None) -> int:
         """Graft a new specialist live (proves the others stay byte-identical).
-        The trainer already keys data by name, so a fresh name just works."""
+        With ``teacher`` (an object or registered id), the new expert learns
+        from teacher-generated lessons — the Growing-Child grow path; otherwise
+        the deterministic synthetic trainer is used. Either way the router is
+        retrained over every expert's real training distribution."""
         if tenant not in self.cp.tenants:
             self.cp.register_tenant(actor, tenant)
-        eid = self.cp.graft(actor, tenant, name, self.trainer.train_fn(name, self.cp),
+        t = self.resolve_teacher(teacher)
+        train_fn = (self.teacher_trainer.train_fn(name, self.cp, teacher=t)
+                    if t is not None else self.trainer.train_fn(name, self.cp))
+        eid = self.cp.graft(actor, tenant, name, train_fn,
                             seed=self.trainer.seed_for(name))
         if keywords:
             # extend the demo connector's keyword map so the new expert routes
@@ -101,6 +137,22 @@ class Deployment:
                 for kw in keywords:
                     self.connector._kw.setdefault(kw.lower(), name)
         return eid
+
+    def improve(self, actor: str, eid: int, teacher=None,
+                policy: Optional[GrowthPolicy] = None,
+                steps: int = 140, topic: Optional[str] = None) -> dict:
+        """The full Growing-Child loop on an EXISTING expert: the teacher
+        generates lessons, a CANDIDATE (clone) trains in quarantine, and it
+        replaces the live expert only if it passes policy — accuracy floor, no
+        regression on any expert's frozen eval set, non-target hashes unchanged.
+        Accepted or rejected, the attempt is signed into the audit log."""
+        t = self.resolve_teacher(teacher) or self.teacher_trainer.default_teacher
+        result = self.growth.improve_expert(
+            actor, eid, t, topic=topic,
+            eval_sets=self.teacher_trainer.eval_sets(self.cp),
+            policy=policy, steps=steps,
+        )
+        return result.to_dict()
 
     def offboard(self, tenant: str, actor: Optional[str] = None) -> dict:
         """Right-to-be-forgotten at tenant granularity. Survivors proven intact."""

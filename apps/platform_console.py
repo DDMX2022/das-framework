@@ -171,6 +171,8 @@ def deployment_detail(client):
         s = dep.summary()
         s["experts"] = _expert_rows(dep)
         s["stats"] = dict(STATS[client])
+        s["teachers"] = [t.describe() for t in dep.teachers.values()]
+        s["growth_history"] = dep.growth.recent(10)
         return jsonify(s)
 
 
@@ -210,13 +212,51 @@ def grow(client):
         before = {r["eid"]: dep.cp.forest.leaves[i].weight_hash()
                   for i, r in enumerate(dep.cp.experts)}
         try:
-            eid = dep.grow(actor, tenant, name, keywords=body.get("keywords") or [])
+            eid = dep.grow(actor, tenant, name, keywords=body.get("keywords") or [],
+                           teacher=body.get("teacher") or None)
         except AccessDenied as e:
             return jsonify({"error": str(e), "denied": True}), 403
+        except KeyError as e:
+            return jsonify({"error": str(e)}), 400
         intact = all(dep.cp.forest.leaves[i].weight_hash() == before[r["eid"]]
                      for i, r in enumerate(dep.cp.experts) if r["eid"] in before)
         return jsonify({"eid": eid, "others_byte_identical": intact,
-                        "audit_ok": dep.verify()["ok"]})
+                        "audit_ok": dep.verify()["ok"],
+                        "teacher_report": dep.teacher_trainer.reports.get(name)})
+
+
+@app.post("/api/deployments/<client>/improve")
+def improve(client):
+    body = request.get_json(silent=True) or {}
+    actor = body.get("actor", "root")
+    if body.get("eid") is None:
+        return jsonify({"error": "need 'eid'"}), 400
+    with LOCK:
+        dep, err = _dep_or_404(client)
+        if err:
+            return err
+        try:
+            result = dep.improve(actor, int(body["eid"]),
+                                 teacher=body.get("teacher") or None)
+        except AccessDenied as e:
+            return jsonify({"error": str(e), "denied": True}), 403
+        except (KeyError, ValueError) as e:
+            return jsonify({"error": str(e)}), 400
+        result["audit_ok"] = dep.verify()["ok"]
+        return jsonify(result)
+
+
+@app.post("/api/deployments/<client>/teachers")
+def register_teacher(client):
+    body = request.get_json(silent=True) or {}
+    with LOCK:
+        dep, err = _dep_or_404(client)
+        if err:
+            return err
+        try:
+            return jsonify(dep.register_teacher(body)), 201
+        except (ValueError, TypeError) as e:
+            return jsonify({"error": str(e)}), 400
 
 
 @app.post("/api/deployments/<client>/offboard")
