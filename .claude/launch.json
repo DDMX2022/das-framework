@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["apps/platform_console.py"],
       "port": 5090
+    },
+    {
+      "name": "vendor-console",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["apps/vendor_console.py"],
+      "port": 5095
     }
   ]
 }

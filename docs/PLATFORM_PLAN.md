@@ -89,6 +89,7 @@ already-proven Control Plane, so its correctness rests on tested foundations.
 | Compliance bundle | `das/platform/bundle.py` | the FDE "leave-behind" audit artifact |
 | CLI | `das/platform/cli.py` | `das deploy / verify / offboard / bundle` |
 | Console UI | `apps/platform_console.py` | Rancher-style multi-client dashboard over the engine |
+| Vendor console | `apps/vendor_console.py` | superadmin licensing UI (issue/renew/revoke) — vendor-side only, never shipped |
 
 ---
 
