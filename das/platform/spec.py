@@ -104,6 +104,10 @@ class ClientSpec:
     d_model: int = 18
     leaf_dims: Optional[List[int]] = None  # default derived from d_model
     root: str = "root"
+    # expert backend: "synthetic" (NumPy, zero heavy deps — the default) or
+    # "lora-minilm" (LoRA adapters on a frozen MiniLM's attention layers;
+    # needs the [hf] extra — see das.platform.lora_expert)
+    backend: str = "synthetic"
 
     # ── convenience views ────────────────────────────────────────────
     @property
@@ -245,6 +249,11 @@ def _parse(data: Dict[str, Any]) -> ClientSpec:
         private_key_file=aud.get("private_key_file"),
     )
 
+    backend = data.get("backend", "synthetic")
+    if backend not in ("synthetic", "lora-minilm"):
+        raise SpecError(f"spec.backend '{backend}' invalid "
+                        f"(choose from ['synthetic', 'lora-minilm'])")
+
     d_model = data.get("d_model", 18)
     if not isinstance(d_model, int) or d_model < 2:
         raise SpecError("spec.d_model must be an integer >= 2")
@@ -264,4 +273,5 @@ def _parse(data: Dict[str, Any]) -> ClientSpec:
         d_model=d_model,
         leaf_dims=leaf_dims,
         root=data.get("root", "root"),
+        backend=backend,
     )

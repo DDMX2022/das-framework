@@ -40,15 +40,27 @@ class Deployment:
     """A stood-up client fleet: the ControlPlane plus the spec and connector that
     produced it, with FDE-facing operations (route, offboard, verify, bundle)."""
 
-    def __init__(self, spec: ClientSpec, cp: ControlPlane, trainer: SyntheticTrainer,
+    def __init__(self, spec: ClientSpec, cp: ControlPlane, trainer,
                  connector: Optional[ContextSource] = None,
                  license: Optional[License] = None):
         self.spec = spec
         self.cp = cp
         self.trainer = trainer
+        self.backend = spec.backend
         # Held so entitlements are enforced across the deployment's LIFETIME
         # (grow re-checks limits + expiry), not only at deploy time.
         self.license = license
+        if self.backend == "lora-minilm":
+            # transformer backend: text teachers, the rank germinator, and a
+            # real-encoder connector — same governance, different substance
+            from .connectors import MiniLMContextSource
+            from .lora_expert import RankGerminator
+            self.teacher_trainer = None
+            self.teachers = {trainer.default_teacher.name: trainer.default_teacher}
+            self.growth = None       # improve() is germinate() on this backend
+            self.germinator = RankGerminator(cp, trainer)
+            self.connector = connector or MiniLMContextSource()
+            return
         # The teacher bridge: grow/improve via das.training teachers behind the
         # same train_fn seam. The connector consults IT for centers so that
         # teacher-grown experts (whose geometry is their actual lessons) route
@@ -121,6 +133,14 @@ class Deployment:
         """Register a runtime teacher (local-vector, or an LLM over Ollama /
         OpenAI-compatible / custom-JSON endpoints). Returns sanitized metadata —
         API keys stay in memory, never in the description or on disk."""
+        if self.backend == "lora-minilm":
+            # vector teachers emit encoded arrays; LoRA experts need the raw
+            # text (the adapter lives inside the encoder) — the LLM-teacher →
+            # TextLessonBatch bridge is PLATFORM_PLAN §12 step 3
+            raise NotImplementedError(
+                "runtime teacher registration on the lora-minilm backend "
+                "needs the text-lesson bridge (PLATFORM_PLAN §12); pass a "
+                "text teacher object to grow()/germinate() directly")
         t = teacher_from_config(config, self.trainer.d_model)
         self.teachers[t.name] = t
         return t.describe()
@@ -142,12 +162,19 @@ class Deployment:
         if tenant not in self.cp.tenants:
             self.cp.register_tenant(actor, tenant)
         t = self.resolve_teacher(teacher)
-        train_fn = (self.teacher_trainer.train_fn(name, self.cp, teacher=t)
-                    if t is not None else self.trainer.train_fn(name, self.cp))
-        dims = None
-        if stage is not None:
-            out_dim = self.trainer.leaf_dims[-1]
-            dims = stage_dims(self.trainer.d_model, out_dim, stage)
+        if self.backend == "lora-minilm":
+            # the LoRA trainer is teacher-driven either way (its default is a
+            # text teacher); `stage` is the backend's capacity knob and passes
+            # straight through graft -> forest.graft as the new leaf's rank
+            train_fn = self.trainer.train_fn(name, self.cp, teacher=t)
+            dims = stage
+        else:
+            train_fn = (self.teacher_trainer.train_fn(name, self.cp, teacher=t)
+                        if t is not None else self.trainer.train_fn(name, self.cp))
+            dims = None
+            if stage is not None:
+                out_dim = self.trainer.leaf_dims[-1]
+                dims = stage_dims(self.trainer.d_model, out_dim, stage)
         eid = self.cp.graft(actor, tenant, name, train_fn,
                             seed=self.trainer.seed_for(name), leaf_dims=dims)
         if keywords and isinstance(self.connector, SpecKeywordConnector):
@@ -163,6 +190,12 @@ class Deployment:
         replaces the live expert only if it passes policy — accuracy floor, no
         regression on any expert's frozen eval set, non-target hashes unchanged.
         Accepted or rejected, the attempt is signed into the audit log."""
+        if self.backend == "lora-minilm":
+            # same-capacity retraining of a NumPy leaf doesn't map to this
+            # backend; the LoRA improve path IS the rank ladder
+            raise NotImplementedError(
+                "improve() on the lora-minilm backend is germinate() — rank "
+                "promotion through the same quarantine-and-gate loop")
         t = self.resolve_teacher(teacher) or self.teacher_trainer.default_teacher
         result = self.growth.improve_expert(
             actor, eid, t, topic=topic,
@@ -179,7 +212,13 @@ class Deployment:
         its current stage it stays small (parsimony); otherwise candidates at
         higher stages train on fresh teacher lessons and the SMALLEST stage
         that earns its parameters replaces the live expert — audited either
-        way. ``search=False`` restricts to the single next stage."""
+        way. ``search=False`` restricts to the single next stage (the
+        lora-minilm backend always steps one rung — its ladder is rank)."""
+        if self.backend == "lora-minilm":
+            t = self.resolve_teacher(teacher)
+            return self.germinator.auto_germinate(actor, eid, teacher=t,
+                                                  target_acc=target_acc,
+                                                  policy=policy)
         t = self.resolve_teacher(teacher) or self.teacher_trainer.default_teacher
         return self.germinator.auto_germinate(actor, eid, t,
                                               target_acc=target_acc,
@@ -189,6 +228,10 @@ class Deployment:
                       policy: Optional[GerminationPolicy] = None) -> dict:
         """Fleet-wide plateau sweep: saturated experts stay small, stuck ones
         attempt searched promotion; one `germination_sweep` audit summary."""
+        if self.backend == "lora-minilm":
+            t = self.resolve_teacher(teacher)
+            return self.germinator.sweep(actor, teacher=t,
+                                         target_acc=target_acc, policy=policy)
         t = self.resolve_teacher(teacher) or self.teacher_trainer.default_teacher
         return self.germinator.sweep(actor, t, target_acc=target_acc, policy=policy)
 
@@ -212,7 +255,10 @@ class Deployment:
         teacher-grown experts. Grow-time keywords are saved too — they extend
         the connector beyond what the spec declares."""
         self.cp.save(path, anchor=anchor)
-        self.teacher_trainer.save_lessons(os.path.join(path, "lessons"))
+        if self.backend == "lora-minilm":
+            self.trainer.save_lessons(os.path.join(path, "lessons"))
+        else:
+            self.teacher_trainer.save_lessons(os.path.join(path, "lessons"))
         if isinstance(self.connector, SpecKeywordConnector):
             with open(os.path.join(path, "keywords.json"), "w", encoding="utf-8") as fh:
                 json.dump(self.connector.keyword_map(), fh, indent=2, sort_keys=True)
@@ -234,10 +280,19 @@ class Deployment:
         else:
             spec = ClientSpec.from_file(source)
         audit_secret = secret if secret is not None else spec.resolve_secret()
+        lic = license if license is not None else load_license()
+        if spec.backend == "lora-minilm":
+            from .lora_expert import MiniLMLoRAForest, MiniLMLoRATrainer
+            cp = ControlPlane.load(path, secret=audit_secret,
+                                   private_key=_load_private_key(spec),
+                                   forest_loader=MiniLMLoRAForest.load)
+            trainer = MiniLMLoRATrainer(cp.forest.backbone)
+            dep = cls(spec, cp, trainer, connector=connector, license=lic)
+            trainer.load_lessons(os.path.join(path, "lessons"))
+            return dep
         cp = ControlPlane.load(path, secret=audit_secret,
                                private_key=_load_private_key(spec))
         trainer = SyntheticTrainer(spec.d_model, spec.resolved_leaf_dims())
-        lic = license if license is not None else load_license()
         dep = cls(spec, cp, trainer, connector=connector, license=lic)
         dep.teacher_trainer.load_lessons(os.path.join(path, "lessons"))
         kw_path = os.path.join(path, "keywords.json")
@@ -250,13 +305,15 @@ class Deployment:
 
 def deploy(source, secret: Optional[str] = None,
            connector: Optional[ContextSource] = None,
-           license: Optional[License] = None) -> Deployment:
+           license: Optional[License] = None,
+           trainer=None) -> Deployment:
     """Stand up a governed fleet from a client spec.
 
     ``source`` is a path to ``client.yaml`` / ``.json``, a ``dict``, or an
     already-parsed ``ClientSpec``. ``secret`` overrides the spec's audit-secret
     resolution (useful in tests); otherwise the secret is read at runtime from the
-    file/env the spec names and never stored.
+    file/env the spec names and never stored. ``trainer`` overrides the
+    spec-backend default trainer (tuning knobs for tests / an FDE).
 
     Licensing: pass a verified ``License`` to enforce its entitlements, or leave
     it ``None`` to resolve per the trust model (``DAS_LICENSE`` env; evaluation
@@ -280,12 +337,17 @@ def deploy(source, secret: Optional[str] = None,
     audit_secret = secret if secret is not None else spec.resolve_secret()
     private_key = _load_private_key(spec)
 
-    trainer = SyntheticTrainer(spec.d_model, spec.resolved_leaf_dims())
-
     # Seed the ControlPlane over the first declared expert of the first tenant
     # (its spec-level seed override is honoured, same as grafted experts).
     seed_tenant, seed_expert = spec.experts[0]
-    forest = trainer.seed_forest(seed_expert.name, seed=seed_expert.seed)
+    if spec.backend == "lora-minilm":
+        if trainer is None:
+            from .lora_expert import MiniLMLoRATrainer  # needs the [hf] extra
+            trainer = MiniLMLoRATrainer()
+        forest = trainer.seed_forest(seed_expert.name)
+    else:
+        trainer = trainer or SyntheticTrainer(spec.d_model, spec.resolved_leaf_dims())
+        forest = trainer.seed_forest(seed_expert.name, seed=seed_expert.seed)
     cp = ControlPlane(forest, seed_tenant=seed_tenant, seed_name=seed_expert.name,
                       secret=audit_secret, root=spec.root, private_key=private_key)
 

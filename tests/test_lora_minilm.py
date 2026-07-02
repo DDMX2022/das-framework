@@ -136,6 +136,15 @@ def test_prune_survivor_byte_identical(backbone):
 
 # ── the rank ladder ──────────────────────────────────────────────────────────
 
+def test_alpha_over_rank_scaling(backbone):
+    """α/r scaling: rank 1 keeps scale 1 (the measured-good regime), bigger
+    adapters are damped proportionally — the fix for high-rank instability."""
+    assert MiniLMLoRALeaf(backbone, rank=1).scale == 1.0
+    assert MiniLMLoRALeaf(backbone, rank=8).scale == 0.125
+    assert MiniLMLoRALeaf(backbone, rank=8, alpha=8.0).scale == 1.0
+    assert MiniLMLoRALeaf(backbone, rank=0).scale == 1.0   # head-only, unused
+
+
 def test_rank_ladder_shape():
     assert RANK_STAGE_NAMES == ["seed", "sprout", "sapling", "young-tree", "tree"]
     assert [stage_rank(s) for s in RANK_STAGE_NAMES] == [0, 1, 2, 4, 8]
@@ -194,6 +203,25 @@ def test_parsimony_gate_leaves_saturated_experts_alone(fleet):
     assert cp.forest.leaves[1].rank == stage_rank("seed")
 
 
+def test_save_load_byte_identical(fleet, tmp_path):
+    """Persistence without the backbone: every leaf's weight_hash and the
+    router's routing must survive a save/load round-trip byte-for-byte —
+    including the mixed-rank state left by the promotion tests."""
+    cp, tr = fleet
+    d = str(tmp_path / "fleet")
+    cp.forest.save(d)
+    g = type(cp.forest).load(d)
+    assert [l.weight_hash() for l in g.leaves] == \
+           [l.weight_hash() for l in cp.forest.leaves]
+    assert [l.rank for l in g.leaves] == [l.rank for l in cp.forest.leaves]
+    assert np.array_equal(g.router.W, cp.forest.router.W)
+    texts = ["the arbitration clause was blocked pending urgent review",
+             "the MRI scan completed on schedule"]
+    out_a, idx_a = cp.forest.predict(texts)
+    out_b, idx_b = g.predict(texts)
+    assert np.array_equal(idx_a, idx_b) and np.allclose(out_a, out_b)
+
+
 def test_rbac_gates_promotion(fleet):
     cp, tr = fleet
     cp.add_user("root", "viewer", "auditor")
@@ -201,3 +229,67 @@ def test_rbac_gates_promotion(fleet):
     from das.governance import AccessDenied
     with pytest.raises(AccessDenied):
         g.promote("viewer", eid=0)
+
+
+# ── the deployment engine on the LoRA backend ────────────────────────────────
+
+SPEC = {
+    "client": "acme-lora",
+    "backend": "lora-minilm",
+    "tenants": [
+        {"name": "legalco", "experts": [{"name": "legal"}]},
+        {"name": "medico", "experts": [{"name": "medical"}]},
+    ],
+}
+
+
+@pytest.fixture(scope="module")
+def deployment(backbone):
+    from das.platform import deploy
+    return deploy(SPEC, secret="test-secret", trainer=_trainer(backbone))
+
+
+def test_deploy_stands_up_a_lora_fleet(deployment):
+    """client.yaml (backend: lora-minilm) -> a live governed transformer
+    fleet: same summary, same audit chain, real-text routing."""
+    s = deployment.summary()
+    assert s["audit_ok"] and len(s["experts"]) == 2
+    assert deployment.backend == "lora-minilm"
+    r = deployment.route("root", "the arbitration clause triggered a security alert")
+    assert r["expert"] == "legal" and r["decision"] in ("local", "escalate")
+    r = deployment.route("root", "the MRI scan was blocked pending urgent review")
+    assert r["expert"] == "medical"
+
+
+def test_deploy_grow_and_germinate_live(deployment):
+    """grow() grafts a rank-ladder seed through the ControlPlane; the
+    parsimony gate then refuses to promote a saturated expert."""
+    eid = deployment.grow("root", "medico", "finance", stage="seed")
+    leaf = deployment.cp.forest.leaves[-1]
+    assert leaf.rank == stage_rank("seed")
+    res = deployment.germinate("root", eid, target_acc=0.85)
+    assert res["action"] == "saturated"
+    assert [r["stage"] for r in deployment.growth_report()].count("seed") >= 1
+
+
+def test_deploy_honest_backend_limits(deployment):
+    """improve() and runtime vector-teacher registration don't silently
+    degrade — they say what to use instead."""
+    with pytest.raises(NotImplementedError, match="germinate"):
+        deployment.improve("root", 0)
+    with pytest.raises(NotImplementedError, match="text-lesson bridge"):
+        deployment.register_teacher({"kind": "local-vector", "name": "t"})
+
+
+def test_deploy_save_load_round_trip(deployment, tmp_path):
+    """Restart survival: ControlPlane delegates forest persistence to the
+    backend; hashes, audit chain, and routing all survive byte-for-byte."""
+    from das.platform import Deployment
+    d = str(tmp_path / "state")
+    deployment.save(d)
+    dep2 = Deployment.load(d, SPEC, secret="test-secret")
+    assert [l.weight_hash() for l in dep2.cp.forest.leaves] == \
+           [l.weight_hash() for l in deployment.cp.forest.leaves]
+    assert dep2.verify()["ok"] and dep2.cp.state_matches_audit()
+    q = "the arbitration clause triggered a security alert"
+    assert dep2.route("root", q)["expert"] == deployment.route("root", q)["expert"]

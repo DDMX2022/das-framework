@@ -42,9 +42,11 @@ n_train=320, train/eval vocabulary disjoint):
   * Word order (agent-patient reversal, identical vocabulary per class): the
     frozen mean-pooled embedding is the bottleneck — rank 0 scores 0.71
     while rank 1 scores 1.00. THIS is what re-weighting the encoder's own
-    attention buys, and the FIRST rung buys all of it: rank 2 adds nothing
-    and rank 8 is actively unstable at the same budget (mean 0.83, worst
-    seed 0.47) — over-capacity is not merely cosmetic, it can hurt.
+    attention buys, and the FIRST rung buys all of it. Before α/r scaling,
+    rank 8 at the same budget was actively unstable (mean 0.83, worst seed
+    0.47) — over-capacity is not merely cosmetic; with the standard α/r
+    scaling now in the hook, every rank is stable at 1.00 (re-measured),
+    and there is still no reason to pay for more than rank 1.
   * Negation XOR valence (interaction label, unigrams balanced): a second
     real rung — rank 0 ≈ 0.90, rank 1 = 1.00, at n_train=64 as well as 320.
   * Two traps the protocol caught, recorded so they aren't re-invented:
@@ -60,6 +62,8 @@ lazy: importing this module — and ``das.platform`` — stays NumPy-only.
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -392,6 +396,7 @@ class MiniLMLoRABackbone:
             for n, m in self.model.named_modules() if n in set(self.targets)
         }
         self._active: Dict[str, tuple] = {}
+        self._scale = 1.0
 
     @classmethod
     def cached(cls, model_name: str = None, device: str = "cpu"):
@@ -408,21 +413,24 @@ class MiniLMLoRABackbone:
             if ab is None:
                 return output
             A, B = ab
-            return output + inputs[0] @ A.T @ B.T
+            return output + (inputs[0] @ A.T @ B.T) * self._scale
         return hook
 
     @contextmanager
     def adapter(self, leaf):
-        """Attach ``leaf``'s LoRA matrices for the duration of the block.
-        Single-active-adapter by design: the forest routes top-1, so exactly
-        one expert's delta is ever live inside the encoder at a time."""
+        """Attach ``leaf``'s LoRA matrices (at the leaf's α/r scale) for the
+        duration of the block. Single-active-adapter by design: the forest
+        routes top-1, so exactly one expert's delta is ever live inside the
+        encoder at a time."""
         if self._active:
             raise RuntimeError("an adapter is already active on this backbone")
         self._active = leaf.lora
+        self._scale = leaf.scale
         try:
             yield
         finally:
             self._active = {}
+            self._scale = 1.0
 
     def pool(self, texts, grad: bool = False):
         """texts -> L2-normalised mean-pooled embeddings [n, dim] (torch).
@@ -464,7 +472,7 @@ class MiniLMLoRALeaf:
     leaf_type = "minilm-lora"
 
     def __init__(self, backbone: MiniLMLoRABackbone, rank: int = 0,
-                 out_dim: int = 2, seed: int = 0):
+                 out_dim: int = 2, seed: int = 0, alpha: float = 1.0):
         import torch
         if rank < 0:
             raise ValueError("rank must be >= 0")
@@ -472,6 +480,13 @@ class MiniLMLoRALeaf:
         self.rank = int(rank)
         self.out_dim = int(out_dim)
         self.seed = int(seed)
+        # standard LoRA α/r scaling. α=1 keeps rank 1 exactly as measured
+        # (scale 1) while damping bigger adapters (rank 8 -> 1/8), which is
+        # the targeted fix for the measured high-rank instability
+        # (benchmarks/lora_rank_bench.py: pre-scaling, rank 8 on word order
+        # hit 0.47 on its worst seed at the same budget).
+        self.alpha = float(alpha)
+        self.scale = self.alpha / rank if rank > 0 else 1.0
         g = torch.Generator().manual_seed(seed)
         # head first, so same-seed leaves share a head regardless of rank —
         # that keeps "a fresh adapter is a no-op" testable byte-for-byte
@@ -529,6 +544,28 @@ class MiniLMLoRALeaf:
             p.requires_grad_(True)
         self.frozen = False
 
+    # ── persistence ──────────────────────────────────────────────────
+    def state(self) -> dict:
+        """Adapter + head tensors as float32 NumPy arrays (the backbone is
+        NOT here — it is someone else's pinned, shared download)."""
+        d = {"head_W": self.head_W.detach().cpu().numpy().astype(np.float32),
+             "head_b": self.head_b.detach().cpu().numpy().astype(np.float32)}
+        for name, (A, B) in self.lora.items():
+            d[name + "::A"] = A.detach().cpu().numpy().astype(np.float32)
+            d[name + "::B"] = B.detach().cpu().numpy().astype(np.float32)
+        return d
+
+    def load_state(self, arrays) -> None:
+        """Load tensors saved by ``state`` — float32 round-trips exactly, so
+        ``weight_hash`` is byte-identical across save/load (tested)."""
+        import torch
+        with torch.no_grad():
+            self.head_W.data = torch.from_numpy(np.asarray(arrays["head_W"]))
+            self.head_b.data = torch.from_numpy(np.asarray(arrays["head_b"]))
+            for name, (A, B) in self.lora.items():
+                A.data = torch.from_numpy(np.asarray(arrays[name + "::A"]))
+                B.data = torch.from_numpy(np.asarray(arrays[name + "::B"]))
+
     # ── forward ──────────────────────────────────────────────────────
     def forward(self, texts, grad: bool = False):
         """texts -> logits [n, out_dim] (torch). The pooled embedding runs
@@ -544,6 +581,14 @@ class MiniLMLoRALeaf:
     def predict(self, texts) -> np.ndarray:
         """texts -> logits as NumPy (the forest's inference path)."""
         return self.forward(texts, grad=False).detach().cpu().numpy()
+
+    def head_logits(self, h) -> np.ndarray:
+        """Pooled-embedding rows -> head logits, bypassing the adapter (which
+        needs tokens). Exact for a rank-0 leaf; for an adapted leaf this is
+        the frozen-feature approximation the governed vector read path uses."""
+        import torch
+        hh = torch.tensor(np.asarray(h, dtype=np.float32))
+        return (hh @ self.head_W.T + self.head_b).detach().cpu().numpy()
 
     def accuracy(self, texts, y) -> float:
         return float((self.predict(texts).argmax(1) == np.asarray(y)).mean())
@@ -576,17 +621,34 @@ class MiniLMLoRAForest:
     def embed(self, texts) -> np.ndarray:
         return self.backbone.embed(texts)
 
-    def predict(self, texts):
-        """Route each text on the frozen embedding, run only the chosen
-        expert's adapter. Returns (logits [n, out_dim], leaf_idx) as NumPy."""
-        texts = [texts] if isinstance(texts, str) else list(texts)
-        h = self.embed(texts)
+    def predict(self, X):
+        """Route + predict. TEXTS give the exact path: route on the frozen
+        embedding, run only the chosen expert's adapter over the tokens.
+        A numeric array (the governed ``route_explain`` read path — queries
+        already embedded at the connector) routes identically but predicts
+        with each expert's head over the given embedding: exact for rank-0
+        experts, the frozen-feature approximation for adapted ones (an
+        adapter needs the tokens). Returns (logits, leaf_idx) as NumPy."""
+        if isinstance(X, str) or (isinstance(X, (list, tuple)) and X
+                                  and isinstance(X[0], str)):
+            texts = [X] if isinstance(X, str) else list(X)
+            h = self.embed(texts)
+            leaf_idx, _ = self.router.route(h)
+            out = np.zeros((len(texts), self.out_dim))
+            for i, leaf in enumerate(self.leaves):
+                mask = leaf_idx == i
+                if mask.any():
+                    out[mask] = leaf.predict([texts[j] for j in np.where(mask)[0]])
+            return out, leaf_idx
+        h = np.asarray(X, dtype=float)
+        if h.ndim == 1:
+            h = h[None, :]
         leaf_idx, _ = self.router.route(h)
-        out = np.zeros((len(texts), self.out_dim))
+        out = np.zeros((h.shape[0], self.out_dim))
         for i, leaf in enumerate(self.leaves):
             mask = leaf_idx == i
             if mask.any():
-                out[mask] = leaf.predict([texts[j] for j in np.where(mask)[0]])
+                out[mask] = leaf.head_logits(h[mask])
         return out, leaf_idx
 
     def graft(self, new_leaf_dims=None, seed=99):
@@ -610,6 +672,56 @@ class MiniLMLoRAForest:
 
     def leaf_hashes(self):
         return {i: leaf.weight_hash() for i, leaf in enumerate(self.leaves)}
+
+    # ── persistence ──────────────────────────────────────────────────
+    def save(self, dirpath: str) -> None:
+        """Persist the fleet WITHOUT the backbone: adapters + heads (one .npz
+        per leaf), the router, and a manifest that pins the backbone by model
+        name and records each leaf's rank/alpha/seed so ``load`` rebuilds the
+        exact shapes. Mirrors das_torch.LoRAForest.save — the shared frozen
+        encoder is a pinned download, not fleet state."""
+        os.makedirs(dirpath, exist_ok=True)
+        manifest = {
+            "model_name": self.backbone.model_name,
+            "d_model": self.d_model,
+            "out_dim": self.out_dim,
+            "default_rank": self.default_rank,
+            "leaves": [{"rank": l.rank, "alpha": l.alpha, "seed": l.seed}
+                       for l in self.leaves],
+        }
+        np.savez(os.path.join(dirpath, "router.npz"),
+                 W=self.router.W, b=self.router.b)
+        for i, leaf in enumerate(self.leaves):
+            np.savez(os.path.join(dirpath, f"leaf_{i}.npz"), **leaf.state())
+        with open(os.path.join(dirpath, "manifest.json"), "w") as f:
+            json.dump(manifest, f, indent=2)
+
+    @classmethod
+    def load(cls, dirpath: str, backbone: MiniLMLoRABackbone = None,
+             device: str = "cpu") -> "MiniLMLoRAForest":
+        """Rebuild a fleet from ``save`` output. The backbone comes from the
+        process cache (or the caller) keyed by the manifest's model name —
+        leaf ``weight_hash``es are byte-identical to the saved fleet's."""
+        with open(os.path.join(dirpath, "manifest.json")) as f:
+            manifest = json.load(f)
+        backbone = backbone or MiniLMLoRABackbone.cached(
+            manifest["model_name"], device)
+        recs = manifest["leaves"]
+        forest = cls(backbone, out_dim=manifest["out_dim"],
+                     num_leaves=len(recs), stage=manifest["default_rank"])
+        router = np.load(os.path.join(dirpath, "router.npz"))
+        forest.router.W = router["W"]
+        forest.router.b = router["b"]
+        forest.router.num_leaves = router["W"].shape[1]
+        forest.leaves = []
+        for i, rec in enumerate(recs):
+            leaf = MiniLMLoRALeaf(backbone, rank=rec["rank"],
+                                  out_dim=manifest["out_dim"],
+                                  seed=rec["seed"], alpha=rec["alpha"])
+            leaf.load_state(np.load(os.path.join(dirpath, f"leaf_{i}.npz")))
+            leaf.freeze()
+            forest.leaves.append(leaf)
+        return forest
 
 
 # ── the train_fn seam ────────────────────────────────────────────────────────
@@ -730,6 +842,47 @@ class MiniLMLoRATrainer:
             self._train_router(forest, names)
         return _fn
 
+    # ── lesson persistence ───────────────────────────────────────────
+    def save_lessons(self, dirpath: str) -> int:
+        """Persist the text-lesson store (JSON — lessons are sentences, not
+        arrays) so a restarted deployment keeps every expert's routing
+        geometry. Returns the number of experts saved."""
+        os.makedirs(dirpath, exist_ok=True)
+        for name, b in self.lessons.items():
+            doc = {"teacher": b.teacher, "topic": b.topic,
+                   "dataset_version": b.dataset_version, "notes": b.notes,
+                   "texts_train": b.texts_train,
+                   "y_train": [int(v) for v in b.y_train],
+                   "texts_eval": b.texts_eval,
+                   "y_eval": [int(v) for v in b.y_eval]}
+            with open(os.path.join(dirpath, f"{name}.json"), "w",
+                      encoding="utf-8") as fh:
+                json.dump(doc, fh, indent=2)
+        return len(self.lessons)
+
+    def load_lessons(self, dirpath: str) -> int:
+        """Restore a lesson store written by ``save_lessons``."""
+        if not os.path.isdir(dirpath):
+            return 0
+        n = 0
+        for fname in sorted(os.listdir(dirpath)):
+            if not fname.endswith(".json"):
+                continue
+            with open(os.path.join(dirpath, fname), encoding="utf-8") as fh:
+                doc = json.load(fh)
+            name = fname[:-len(".json")]
+            self.lessons[name] = TextLessonBatch(
+                teacher=doc["teacher"], topic=doc["topic"],
+                dataset_version=doc["dataset_version"],
+                texts_train=list(doc["texts_train"]),
+                y_train=np.asarray(doc["y_train"], dtype=int),
+                texts_eval=list(doc["texts_eval"]),
+                y_eval=np.asarray(doc["y_eval"], dtype=int),
+                notes=doc.get("notes", ""))
+            self._emb_cache.pop(name, None)
+            n += 1
+        return n
+
 
 # ── germination: the rank ladder ─────────────────────────────────────────────
 
@@ -746,9 +899,31 @@ class RankGerminator:
     the target at its current rank is left alone — on topical text that is
     most experts, at rank 0 (measured: benchmarks/lora_rank_bench.py)."""
 
-    def __init__(self, cp, trainer: MiniLMLoRATrainer):
+    def __init__(self, cp, trainer: MiniLMLoRATrainer, restarts: int = 2):
         self.cp = cp
         self.trainer = trainer
+        # Restarts give the candidate its best honest shot (adapters at a
+        # fixed budget are init-sensitive — measured). Selection uses TRAIN
+        # accuracy only, same rule as the width-ladder Germinator: selecting
+        # on eval would contaminate the gate.
+        self.restarts = max(1, int(restarts))
+
+    def _fit_candidate(self, name: str, to_stage: str, to_rank: int,
+                       out_dim: int, lessons):
+        """Best-of-restarts candidate at a rank (selected on TRAIN accuracy).
+        Returns (candidate, eval_accuracy)."""
+        best, best_train = None, -1.0
+        for r in range(self.restarts):
+            cand = MiniLMLoRALeaf(
+                self.trainer.backbone, rank=to_rank, out_dim=out_dim,
+                seed=stable_seed("rank-germinate", name, to_stage, str(r)))
+            self.trainer.fit_leaf(
+                cand, lessons,
+                seed=stable_seed("rank-fit", name, to_stage, str(r)))
+            train_acc = cand.accuracy(lessons.texts_train, lessons.y_train)
+            if train_acc > best_train:
+                best, best_train = cand, train_acc
+        return best, best.accuracy(lessons.texts_eval, lessons.y_eval)
 
     def report(self) -> list:
         rows = []
@@ -786,12 +961,8 @@ class RankGerminator:
         lessons = t.generate(rec["name"], n_train=self.trainer.n_train,
                              n_eval=self.trainer.n_eval)
         live_acc = live.accuracy(lessons.texts_eval, lessons.y_eval)
-        candidate = MiniLMLoRALeaf(
-            self.trainer.backbone, rank=to_rank, out_dim=live.out_dim,
-            seed=stable_seed("rank-germinate", rec["name"], to_stage))
-        self.trainer.fit_leaf(candidate, lessons,
-                              seed=stable_seed("rank-fit", rec["name"], to_stage))
-        cand_acc = candidate.accuracy(lessons.texts_eval, lessons.y_eval)
+        candidate, cand_acc = self._fit_candidate(rec["name"], to_stage,
+                                                  to_rank, live.out_dim, lessons)
         delta = cand_acc - live_acc
 
         before_hashes = self.cp._hashes()

@@ -22,12 +22,15 @@ The table also answers the gate question directly: given each stage's
 accuracy, would GerminationPolicy (floor 0.55, min improvement +0.05 over the
 rank-0 seed) promote?
 
-Findings from the 2026-07-02 run (CPU, 3 seeds, n_train=320, steps=400,
+Findings from the 2026-07-02 runs (CPU, 3 seeds, n_train=320, steps=400,
 disjoint train/eval vocabulary; recorded in das/platform/lora_expert.py too):
 easy saturates at rank 0 (1.00 — growth refused); word order is the measured
-rung (rank 0 = 0.71 -> rank 1 = 1.00) and OVER-capacity destabilizes (rank 8:
-mean 0.83, worst seed 0.47 at the same budget); xor-negation is a second real
-rung (0.90 -> 1.00, and also at n_train=64).
+rung (rank 0 = 0.71 -> rank 1 = 1.00); xor-negation is a second real rung
+(0.90 -> 1.00, and also at n_train=64). Before α/r scaling, rank 8 on word
+order was unstable at the same budget (mean 0.83, worst seed 0.47); with the
+scaling in the adapter hook, every rank re-measured stable at 1.00 — and the
+smallest-qualifying-rank rule still holds, because nothing above rank 1 buys
+anything.
 
 Two traps the protocol caught, noted so they aren't re-invented: negation
 PARITY measured easy (~1.00 head-only — counting "not" tokens is linear in
@@ -115,8 +118,9 @@ def main():
     print(f"  hard: rank 0 = {hard[0]['eval_mean']:.3f}, rank "
           f"{first['rank']} = {first['eval_mean']:.3f} — word order is what "
           f"re-weighting the encoder's own attention buys; rank "
-          f"{last['rank']} = {last['eval_mean']:.3f} (min "
-          f"{last['eval_min']:.2f}) shows over-capacity destabilizing.")
+          f"{last['rank']} worst seed = {last['eval_min']:.2f} "
+          f"(pre-α/r-scaling this was 0.47 — the scaling is what keeps "
+          f"over-capacity stable).")
     print(f"  interaction: rank 0 = {adv[0]['eval_mean']:.3f}, rank "
           f"{adv[1]['rank']} = {adv[1]['eval_mean']:.3f} — a second, milder "
           f"compositional rung.")

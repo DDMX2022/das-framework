@@ -283,7 +283,8 @@ deploys it there.
   measured honestly (benchmarks/lora_rank_bench.py): topical text saturates at
   rank 0 (growth refused — parsimony); compositional labels (word order,
   negation×valence) are the real first rung (0.71→1.00, 0.90→1.00); above
-  rank 1 buys nothing and can destabilize (rank 8 worst seed 0.47). Lessons
+  rank 1 buys nothing (pre-α/r-scaling it even destabilized — rank 8 worst
+  seed 0.47; the standard scaling fixed it, re-measured all-stable). Lessons
   are template-teacher text — real labeled design-partner data remains open.
 - **Reference connectors** (`Static`, `Callable`, `Rest`) define the seam; the
   client-specific SQL/vector integration is still the FDE's ~50 lines.
@@ -300,3 +301,34 @@ deploys it there.
   deflection misroutes novel queries as the over-confident router keeps them local).
   Constants are illustrative; a real-traffic study on a design partner's mix remains.
 - Real large-model backend + latency SLA remain roadmap Phase 1, unchanged.
+
+## 12. Next steps — making the LoRA backend deployable
+
+The attention-LoRA expert (§11) proves the substance; this sequence makes it
+something an FDE can actually stand up. Each step has an exit proof, in
+dependency order; none of it outranks the §8 rule that a design partner comes
+before more building.
+
+1. **Adapter persistence** — `MiniLMLoRAForest.save/load`: adapters + heads +
+   ranks in a manifest, the shared backbone excluded (it's the pretrained
+   download, pinned by name/revision). *Exit:* leaf `weight_hash`es
+   byte-identical across a reload (test).
+2. **Backend switch in the deployment engine** — `backend: lora-minilm` in
+   `client.yaml`; `dep.grow`/`dep.improve` and the growth worker/API drive
+   `MiniLMLoRATrainer` + `RankGerminator` behind the same seam. *Exit:*
+   `das deploy` stands up a governed transformer fleet end-to-end.
+3. **LLM-teacher → text-lesson bridge** — `EndpointLLMTeacher` already fetches
+   `{"input", "label"}` rows; a thin shim emits `TextLessonBatch` so a real
+   LLM writes the corpus an adapter trains on (no template teachers in the
+   production path). *Exit:* an endpoint-taught adapter passes the same
+   promotion gate.
+4. **Latency numbers** — route-on-frozen-embedding vs route+adapter forward,
+   batch 1/16, p50/p95 CPU, in the rank bench. *Exit:* the honest-gaps line
+   about latency cites a measurement instead of an absence. (A real SLA at
+   scale still waits for GPU/serving integration — deliberately out of scope
+   until partner pull, per PRODUCT_PLAN Phase 1.)
+5. **The demo moment on the LoRA fleet** — grow a specialist live in the
+   dashboard while streaming the other experts' unchanged hashes; §8 calls
+   this the moment that closes, now on real adapters.
+6. **Design partner** (the standing blocker) — real labeled lessons replace
+   template teachers; the cost benchmark reruns on their traffic mix.
