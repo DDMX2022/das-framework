@@ -165,6 +165,13 @@ a torch-free NumPy+Flask control plane, so it fits almost anywhere.
 | **Air-gapped / offline** | high-security | NumPy core only; audit verified offline with `das-verify` |
 | **Edge / mobile** | field / disconnected | compact expert store (`das/mobile_store.py`) syncs to a folder |
 
+**The container front door.** The image boots from the spec: set `DAS_SPEC` to a
+mounted `client.yaml` and the entrypoint runs `das deploy` on first start
+(materializing the fleet to `DAS_STATE`), then serves it — restart-safe, since a
+present state skips the deploy. In k8s the spec is a `ConfigMap`, so changing the
+fleet is editing declarative config, not rebuilding an image. Unset `DAS_SPEC`
+and behaviour is unchanged (the API bootstraps a demo fleet).
+
 Non-negotiables everywhere: **single audit writer** (one replica owns the chain),
 **state on a durable volume**, **secrets from mounted files not env** in prod,
 and the API behind a gateway that authenticates `X-DAS-Actor` (mTLS/OIDC).
