@@ -256,6 +256,13 @@ deploys it there.
   with every governance guarantee unchanged (control plane is backend-agnostic).
 - **Reference connectors** (`Static`, `Callable`, `Rest`) define the seam; the
   client-specific SQL/vector integration is still the FDE's ~50 lines.
+  **Real-text semantics now exist behind the same seam** (`[hf]` extra):
+  `MiniLMContextSource` routes real text through a frozen MiniLM encoder and
+  `RealTextLessonEncoder` puts LLM-teacher lessons in the same geometry — plus
+  `HierarchicalDASNode` slots the specialty tree under LangGraph with two-level
+  provenance and per-branch escalation. Remaining Phase-1 substance: LoRA
+  adapters on the transformer's own attention layers, real labeled lesson data
+  (design-partner gated), and a latency SLA at scale.
 - **Cost deflection is now measured**: [`benchmarks/cost_bench.py`](../benchmarks/cost_bench.py)
   sweeps the escalation threshold and reports deflection %, answer quality, and
   `$ / 1k` vs a 100%-frontier baseline — including the honest trade-off (aggressive

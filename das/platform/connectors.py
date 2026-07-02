@@ -105,6 +105,45 @@ class RestContextSource(ContextSource):
         return np.asarray(payload[self.field], dtype=float)
 
 
+class MiniLMContextSource(ContextSource):
+    """The REAL last mile for text: queries embed through a frozen pretrained
+    sentence encoder (MiniLM by default, 384-d) instead of keywords or hashes —
+    actual semantics, the Phase-1 substance for routing real text.
+
+    Requires the ``[hf]`` extra (torch + sentence-transformers); imported lazily
+    so the platform stays NumPy-only without it. Pair with experts trained on
+    the SAME encoder's embeddings (e.g. teacher lessons encoded via
+    :class:`RealTextLessonEncoder`) — routing geometry must match training
+    geometry. See examples/hf_governance_demo.py for the end-to-end story."""
+
+    def __init__(self, model_name=None, device="cpu"):
+        from das_text import TextEncoder  # lazy: needs the [hf] extra
+        self._enc = TextEncoder(model_name or TextEncoder.DEFAULT, device=device)
+        super().__init__(self._enc.dim)
+
+    def _embed(self, query) -> np.ndarray:
+        return self._enc.embed(str(query)).cpu().numpy().astype(float)
+
+
+class RealTextLessonEncoder:
+    """Adapter that lets an :class:`~das.training.teachers.EndpointLLMTeacher`
+    encode its text lessons with the REAL frozen encoder instead of the
+    word-hashing fallback — so LLM-taught experts learn on the same semantic
+    geometry that a :class:`MiniLMContextSource` routes with.
+
+    Implements the teacher's encoder contract: ``encode(rows, topic) ->
+    (n, d_model) array`` over ``rows = [{"input": text, ...}, ...]``."""
+
+    def __init__(self, model_name=None, device="cpu"):
+        from das_text import TextEncoder  # lazy: needs the [hf] extra
+        self._enc = TextEncoder(model_name or TextEncoder.DEFAULT, device=device)
+        self.d_model = self._enc.dim
+
+    def encode(self, rows, topic=""):
+        texts = [str(r["input"]) for r in rows]
+        return self._enc.embed(texts).cpu().numpy().astype(float)
+
+
 class SpecKeywordConnector(ContextSource):
     """A demo/POC connector that makes *text* route sensibly without a real
     encoder. It keyword-matches the query against each expert's declared keywords,

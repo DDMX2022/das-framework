@@ -30,6 +30,8 @@ from .connectors import (
     CallableContextSource,
     RestContextSource,
     SpecKeywordConnector,
+    MiniLMContextSource,
+    RealTextLessonEncoder,
 )
 from .trainer import SyntheticTrainer
 from .teacher_trainer import AlignedVectorTeacher, NonlinearVectorTeacher, TeacherTrainer
@@ -60,6 +62,8 @@ __all__ = [
     "CallableContextSource",
     "RestContextSource",
     "SpecKeywordConnector",
+    "MiniLMContextSource",
+    "RealTextLessonEncoder",
     "SyntheticTrainer",
     "AlignedVectorTeacher",
     "NonlinearVectorTeacher",

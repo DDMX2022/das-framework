@@ -179,6 +179,7 @@ class EndpointLLMTeacher:
         temperature=0.2,
         timeout=60,
         max_examples=48,
+        encoder=None,
     ):
         self.name = str(name)
         self.label = label or self.name
@@ -190,7 +191,11 @@ class EndpointLLMTeacher:
         self.temperature = float(temperature)
         self.timeout = int(timeout)
         self.max_examples = max(2, int(max_examples))
-        self.encoder = HashingTextEncoder(d_model)
+        # `encoder` swaps the offline word-hashing fallback for a REAL text
+        # encoder (contract: encode(rows, topic) -> (n, d_model)); e.g.
+        # das.platform.connectors.RealTextLessonEncoder over frozen MiniLM,
+        # so lessons live in the same semantic geometry queries route with.
+        self.encoder = encoder or HashingTextEncoder(d_model)
 
     def describe(self):
         return {
