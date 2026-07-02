@@ -221,7 +221,22 @@ deploys it there.
 - Audit bundle accepted as a compliance artifact by the partner.
 - Green CI; semver PyPI releases; the platform CLI documented.
 
-## 10. Honest gaps (what this build does and does not do)
+## 10. Backlog — server/production hardening (before any hosted sale)
+
+1. **Gateway reference deployment** — nginx/oauth2-proxy or k8s Ingress + TLS +
+   OIDC in front of the governance API, `DAS_TRUSTED_PROXY_SECRET` wired.
+2. **Platform-console authentication** — currently a local/demo surface with no
+   authn; needs login + the hardened API as its backend before exposure.
+3. **Vendor console stays internal-only** (it holds the signing key) — VPN/private
+   network policy, documented.
+4. **Backup/restore runbook** — state volume + freshness anchor together.
+5. **Independent security audit** (self-review exists; buyers will ask for third-party).
+6. **Legal open-core split** (MIT → core-MIT + commercial platform) + EULA — the
+   hard prerequisite to any sale.
+7. Managed-cloud operator layer (dedicated instances / BYOC provisioning,
+   monitoring, SLA) and marketplace packaging (AWS/Azure container listing).
+
+## 11. Honest gaps (what this build does and does not do)
 
 - **Deterministic synthetic trainer** ships as the default so `das deploy` runs
   end-to-end with zero heavy deps and is fully tested. Production swaps in a
