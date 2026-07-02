@@ -1,359 +1,204 @@
-<div align="center">
+# DAS — a governance layer for fleets of AI experts
 
-# DAS
+**v0.2.0** · MIT core · 225 tests passing · NumPy-only core, optional torch/HF backend
 
-### Governance for fleets of AI models — add, remove, and audit capabilities without touching what's already certified
+> **Governed AI capabilities you can add, remove, and audit — without ever
+> touching what's already certified.**
 
-[![CI](https://github.com/DDMX2022/das-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/DDMX2022/das-framework/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#license)
-![Status](https://img.shields.io/badge/status-research%20preview-orange.svg)
+DAS runs your specialists as a **forest**: a router in front of isolated
+expert leaves, wrapped in a control plane that makes every change provable.
+Grow a new expert and the others are proven byte-identical. Delete a tenant
+and the survivors are proven untouched. Every privileged action lands in a
+tamper-evident, offline-verifiable audit chain. Experts can be real **LoRA
+adapters on a real transformer's own attention layers** — and growing one is
+real adapter fine-tuning, gated by policy, not vibes.
 
-</div>
-
-DAS is a **hard-routed Mixture-of-Experts** where every expert is **isolated, hot-swappable, and cryptographically auditable**. Route each request to exactly one expert; **graft** a new capability without disturbing the others; **prune** one to delete it cleanly; and get a **tamper-evident, signed audit trail** that proves non-interference.
-
-It is the **governance layer** for a fleet of specialist models — it runs *under* your orchestration (LangGraph) and serving stack, not against them. The defensible value is not raw capability; it's **provable isolation, deletion, and auditability** for regulated and multi-tenant deployments.
-
-> **Status — research preview.** The governance control plane, the deployable API, integrations, and a measured benchmark are built and tested. Scaling to large real-model backends and securing a production design partner are open ([roadmap](#roadmap)). This README keeps an [honest evaluation](#honest-evaluation) of what is proven vs. aspirational front and center — credibility is the point.
-
----
-
-## Contents
-
-- [Why DAS](#why-das)
-- [Capabilities](#capabilities)
-- [Quickstart](#quickstart)
-- [Proof: the governance benchmark](#proof-the-governance-benchmark)
-- [How it works](#how-it-works)
-- [Deployment](#deployment)
-- [Integrate under an orchestrator](#integrate-under-an-orchestrator)
-- [Documentation](#documentation)
-- [Honest evaluation](#honest-evaluation)
-- [Roadmap](#roadmap)
-- [Repository layout](#repository-layout)
-- [License](#license)
-
----
-
-## Why DAS
-
-Production models are **monolithic** — one shared set of weights. That creates four problems DAS is built to fix:
-
-| Problem with monolithic models | What DAS does instead |
-|---|---|
-| **Catastrophic forgetting** — teaching the model something new degrades what it knew. | Each capability is an **isolated expert**; training a new one leaves the others **byte-identical** (SHA-256 verified). |
-| **Risky, slow updates** — any change re-opens validation of the *whole* model. | **Graft** a new expert without touching the rest, so you re-certify only the new piece. |
-| **No clean deletion** — removing one capability or one tenant's data influence is unsolved in a shared network. | **Prune** an expert: its capability is gone, the rest provably untouched. |
-| **No proof of isolation** — you can't show a regulator that tenant A wasn't affected by B. | A **signed audit trail of weight fingerprints** *is* the compliance evidence. |
-
-**DAS is for teams who must answer:** *"Prove adding this feature didn't change the certified model." · "Delete this tenant's model and prove it's gone." · "Show tenant A's data never influenced tenant B's model."* Monolithic models — and even standard fine-tuning / MoE — cannot answer these cleanly.
-
-**DAS is not** trying to be a smarter or cheaper model than a frontier LLM. It is a **governance layer for a fleet of models**: it sits under LangGraph and uses LoRA-style adapters as the expert format.
-
----
-
-## Capabilities
-
-- **Provable isolation** — adding or retraining one expert leaves every other byte-identical (SHA-256 weight hashing).
-- **Zero catastrophic forgetting** — structural, not a soft penalty: BWT = 0.000, proven cryptographically.
-- **Right-to-be-forgotten** — delete one expert or an entire tenant; survivors proven byte-identical, deleted capability structurally gone.
-- **Tamper-evident audit log** — every privileged action (and every *denied* attempt) is HMAC-signed and hash-chained; any edit/reorder/insert is detected.
-- **RBAC + multi-tenancy** — `admin / operator / auditor / viewer` roles, operators scoped per tenant; denials are logged.
-- **Per-query provenance** — every routed answer carries which tenant/expert served it, and the router's confidence.
-- **Persistence with state↔audit binding** — save/restore is byte-identical, and a swapped (unsigned) weights file is caught against the signed log.
-- **Deploy-ready** — a NumPy + Flask REST control plane, a torch-free Docker image, and a Kubernetes manifest.
-- **Integrates under orchestrators** — drop-in LangGraph node.
-
----
-
-## Quickstart
-
-Requires Python 3.9+. The governance control plane is **NumPy + Flask only** (no PyTorch).
-
-```bash
-pip install -e ".[web]"     # governance control plane + REST API
-# or: pip install -e .             (NumPy core only)
-#     pip install -e ".[hf]"       (real frozen text encoder: torch + sentence-transformers)
-#     pip install -e ".[crypto]"   (public-key-verifiable Ed25519 audit signing: cryptography)
-#     pip install -e ".[all]"      (everything: torch, flask, sentence-transformers, cryptography, scikit-learn, pandas)
-```
-
-### Run the governance API
-
-```bash
-DAS_AUDIT_SECRET=prod-secret DAS_STATE=./state python apps/governance_api.py   # http://localhost:5070
-```
-
-On boot it loads a persisted fleet from `DAS_STATE`, or bootstraps a demo two-tenant fleet. The audit secret is supplied at runtime and **never written to disk**.
-
-```bash
-curl localhost:5070/health
-#   { "experts": 4, "tenants": ["acme","globex"], "audit_chain_ok": true, "state_matches_audit": true, ... }
-
-curl -X POST localhost:5070/predict -H 'Content-Type: application/json' \
-     -d '{"embedding": [ ...d floats... ]}'
-#   { "tenant": "globex", "name": "globex-vision", "eid": 2, "confidence": 0.99, "prediction": [...] }
-
-curl -X POST localhost:5070/delete_tenant -H 'X-DAS-Actor: root' \
-     -H 'Content-Type: application/json' -d '{"tenant":"acme"}'      # right-to-be-forgotten
-
-curl localhost:5070/audit/verify                                     # re-walk the signed chain
-```
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /health` | fleet status + audit-chain health |
-| `GET /experts` | registry (tenant-scoped to the caller) |
-| `POST /predict` | routing with provenance |
-| `POST /prune` · `POST /delete_tenant` | right-to-be-forgotten |
-| `GET /audit` · `GET /audit/verify` | the tamper-evident log |
-| `GET /audit/export` | download a self-contained, independently-verifiable audit document |
-| `POST /save` | persist current state |
-
-The exported document carries the full signed chain **and the actual weight fingerprints**, so a recipient can verify it offline with the bundled CLI — no system access, and (keyless) no secret:
-
-```bash
-curl localhost:5070/audit/export -H 'X-DAS-Actor: carol' -o das_audit.json
-das-verify das_audit.json                    # keyless: chain + fingerprints intact?
-das-verify das_audit.json --secret $SECRET   # + HMAC authenticity
-```
-
-For an arms-length verifier (a regulator), sign asymmetrically instead — set
-`DAS_AUDIT_PRIVKEY` to an Ed25519 PEM and they verify with only the **public key**, no secret:
-
-```bash
-das-verify das_audit.json --pubkey <public-hex>   # Ed25519: authorship, no shared secret
-```
-
-> Identity comes from the `X-DAS-Actor` header — authenticate it at a gateway (mTLS/OIDC) and set `DAS_TRUSTED_PROXY_SECRET` so the API only honours requests carrying the gateway's `X-DAS-Proxy-Auth` credential. With `DAS_ENV=production` the API **refuses to start** without that (F2) or on the default audit secret (F3). See the [security review](docs/SECURITY_REVIEW.md).
-
-### Try the interactive console
-
-```bash
-python apps/console.py        # http://localhost:5070
-```
-
-Route a query and watch it hit the right expert; graft a new expert (existing ones stay byte-identical); prune one; and watch the SHA-256 audit trail update live. With the `[hf]` extra installed, the console runs on a **real frozen pretrained sentence encoder (MiniLM) over real text** — each expert is a LoRA adapter on those embeddings; with only `torch` it uses synthetic vectors; with neither, the NumPy core.
-
-### See the guarantees, with numbers
-
-```bash
-python benchmarks/governance_benchmark.py  # Monolith vs Isolated experts vs DAS control plane
-python examples/control_plane_demo.py      # RBAC, tenant-delete isolation, tamper detection, persistence
-python examples/demo.py                    # core lifecycle + the byte-identical forgetting proof (NumPy only)
-python examples/hf_governance_demo.py      # the same guarantees on a REAL encoder + REAL text ([hf] extra)
-python examples/audit_export_demo.py       # export the signed log → verify it offline (the das-verify story)
-python examples/ed25519_audit_demo.py      # public-key-verifiable audit — regulator needs no secret ([crypto])
-python examples/freshness_demo.py          # refuse a rolled-back snapshot — a deletion can't be silently undone
-pytest -q                          # full test suite
-```
-
----
-
-## Proof: the governance benchmark
-
-A reproducible, deterministic head-to-head on the axes that matter — not raw accuracy, but **governance**. Three ways to run a fleet across two tenants: a **Monolith** (one shared model fine-tuned per task), **Isolated experts** (the LoRA-per-task equivalent), and the **DAS control plane**. Run it yourself: [`benchmarks/governance_benchmark.py`](benchmarks/governance_benchmark.py).
-
-| Governance axis | Monolith | Isolated experts | **DAS control plane** |
-|---|:---:|:---:|:---:|
-| Mean task accuracy | 0.55 | 0.95 | 0.94 |
-| Forgetting (BWT, 0 = none) | **−0.467** | 0.000 | **0.000** |
-| Add a capability: others byte-identical | 0% | 100% | **100%** |
-| Delete: survivors byte-identical | 0% | 100% | **100%** |
-| Capability actually removable | ✗ | ✓ | **✓** |
-| Tamper-evident audit log | ✗ | ✗ | **✓** |
-| RBAC enforced | ✗ | ✗ | **✓** |
-| Per-query provenance | ✗ | ✗ | **✓** |
-
-**How to read this honestly:** the monolith fails every isolation requirement. Isolated adapters fix the top half — and **DAS ties them there**, because that is simply what isolation buys (DAS ≈ LoRA + a router). DAS's distinct, measured contribution is the **bottom half — audit, RBAC, provenance** — the governance plane you would otherwise build yourself.
+**DAS is not** a smarter or cheaper model. Measured against per-task LoRA
+adapters it *ties* on isolation and forgetting — that's what isolation buys,
+and we publish the benchmark that says so. Its contribution is everything
+around the adapters: routing, RBAC, multi-tenancy, provenance, provable
+deletion, gated growth, and the audit artifact a compliance team can verify
+without trusting you.
 
 ---
 
 ## How it works
 
-1. **Stem Router** ([`das/routing.py`](das/routing.py)) — a linear layer + softmax; `argmax` selects exactly one expert (hard top-1 routing). Trained to predict each input's domain.
-2. **Expert leaf** ([`das/functional.py`](das/functional.py)) — a standalone MLP with a `frozen` flag, so a frozen expert cannot move even when gradients flow. `weight_hash()` is its SHA-256 fingerprint.
-3. **Forest** ([`das/model.py`](das/model.py)) — routes inputs to experts; `graft()` adds an expert plus a router slot.
-4. **Control plane** ([`das/governance.py`](das/governance.py)) — wraps the forest with RBAC, multi-tenancy, the signed audit log, and persistence. Backend-agnostic via a `train_fn` callback, so the guarantees hold over the NumPy core or a torch LoRA backend.
+```
+                      client.yaml  ──  das deploy
+                                           │
+            ┌───────────── ControlPlane (governance) ─────────────┐
+            │  RBAC · tenants · signed audit chain · persistence  │
+            │                                                     │
+ query ──►  │   embed ──► StemRouter ──► one expert leaf ──► out  │ ──► answer
+            │                │                                    │   or escalate
+            │       confidence < threshold ──► frontier LLM       │
+            └─────────────────────────────────────────────────────┘
 
-### Inference — one input, one expert
-
-The router commits 100% of the signal to a single expert; all others stay frozen and untouched.
-
-```mermaid
-flowchart LR
-    X([Input x]) --> R{{"Stem Router<br/>linear → softmax → argmax"}}
-    R -- "τ = [0.02, 0.95, 0.03]<br/>argmax → Expert 1" --> L1["Expert 1 (active)"]
-    R -. frozen .-> L0["Expert 0"]
-    R -. frozen .-> L2["Expert 2"]
-    L1 --> OUT([Output])
-    classDef active fill:#2e7d32,stroke:#1b5e20,color:#fff;
-    classDef idle fill:#424242,stroke:#212121,color:#aaa;
-    class L1 active;
-    class L0,L2 idle;
+ leaves (pick a backend, same guarantees):
+   synthetic     NumPy heads — zero heavy deps, deterministic, CI-fast
+   lora-minilm   LoRA adapters on frozen MiniLM's q/v attention projections
+                 (rank ladder: seed r=0 → sprout 1 → sapling 2 → … → tree 8)
 ```
 
-### The forgetting proof
+Three properties hold by construction and are re-proven on every change:
 
-Each expert is trained in isolation. Before grafting a new one, every existing expert is fingerprinted with SHA-256; after training, the fingerprints are re-checked. They are always byte-identical — that is the proof.
+1. **Isolation** — experts share nothing trainable; grafting or pruning one
+   leaves every other expert's SHA-256 weight fingerprint unchanged, and the
+   control plane records that proof in the audit entry.
+2. **Earned growth** — a new or bigger expert trains as a *candidate* in
+   quarantine and replaces the live expert only if it clears an accuracy
+   floor and a minimum improvement (the parsimony gate refuses capacity that
+   isn't needed — most experts live and die as seeds).
+3. **Verifiable history** — the audit chain is HMAC- or Ed25519-signed,
+   survives restarts bound to the weights (`state_matches_audit`), detects
+   snapshot rollback via a freshness anchor, and exports as a bundle an
+   auditor verifies offline.
 
-```mermaid
-flowchart TD
-    D["📸 Snapshot: hash every expert"] --> E["Graft new expert + router slot"]
-    E --> F["Train new expert in isolation<br/>(others frozen)"]
-    F --> G["📸 Re-hash all experts"]
-    G --> H{"old hashes == new hashes?"}
-    H -- yes --> P["✅ Zero forgetting (byte-identical)"]
-    H -- no --> Q["❌ A frozen expert moved"]
-    classDef pass fill:#2e7d32,stroke:#1b5e20,color:#fff;
-    classDef fail fill:#b71c1c,stroke:#7f0000,color:#fff;
-    class P pass;
-    class Q fail;
-```
-
-The mature design uses a **shared frozen backbone** (features extracted once), the **router on those features**, tiny **isolated heads** per capability, and a continuous **grow → graft → prune → regrow** lifecycle — every frozen head provably byte-identical across the whole cycle.
-
----
-
-## Deployment
-
-The control plane is packaged as a torch-free image (small, non-root, served by **gunicorn**, state on a volume):
+## Quickstart
 
 ```bash
-docker build -t das-governance .
-docker run -p 5070:5070 -e DAS_AUDIT_SECRET=prod-secret -v das_state:/data das-governance
-
-# production-hardened (see the security review):
-docker run -p 5070:5070 -v das_state:/data \
-  -e DAS_ENV=production \
-  -e DAS_AUDIT_SECRET_FILE=/run/secrets/audit -e DAS_TRUSTED_PROXY_SECRET_FILE=/run/secrets/proxy \
-  -e DAS_ANCHOR=/anchor/anchor.log -e DAS_RATE_LIMIT=120 \
-  das-governance
+pip install -e ".[platform]"        # NumPy core + the `das` CLI
+# extras: [hf] LoRA-on-MiniLM backend · [web] serving · [crypto] Ed25519 · [all]
 ```
 
-In `DAS_ENV=production` the API refuses to start without a non-default audit secret (F3) and a trusted-proxy secret (F2); secrets are read from mounted files (F6), the audit log can be Ed25519-signed (F7) and freshness-anchored (F1), and a per-client rate limit (F5) backs the reverse proxy.
+**Create a forest** — one spec, one command:
 
-For the **LoRA-on-MiniLM expert backend**, build the image with the `[hf]` extra and declare it in the spec — every guarantee and endpoint is unchanged (the control plane is backend-agnostic):
+```yaml
+# client.yaml
+client: acme
+backend: lora-minilm          # or omit for the NumPy backend
+tenants:
+  - name: legalco
+    experts: [{name: legal}]
+  - name: medico
+    experts: [{name: medical}]
+users:
+  - {name: care-agent, role: operator, tenant: medico}
+escalation: {frontier_llm: claude-sonnet-5, confidence_threshold: 0.7}
+```
 
 ```bash
-docker build --build-arg DAS_EXTRAS=web,platform,hf -t das-governance:hf .
-# client.yaml:  backend: lora-minilm
+das deploy client.yaml --save state/
 ```
 
-Kubernetes (`Deployment` + `Service` + `PVC` + secrets + an Ingress stub for TLS/OIDC):
-
-```bash
-kubectl apply -f deploy/k8s.yaml
-```
-
-A single replica owns the audit chain (single writer). State persists on the PVC, so the forest and the signed log survive restarts. For real exposure, put the reference **authn gateway** in front ([`deploy/gateway/`](deploy/gateway/README.md) — nginx TLS + oauth2-proxy OIDC wiring the trusted-proxy contract), and operate it per the **backup/restore runbook** ([`docs/RUNBOOK.md`](docs/RUNBOOK.md)).
-
----
-
-## Integrate under an orchestrator
-
-DAS slots **beneath** the orchestrator you already use. [`DASExpertNode`](das/integrations/langgraph_node.py) is a plain `state -> state` callable (LangGraph's node contract, no hard dependency): it routes a query to the right governed expert and writes provenance — tenant, expert, confidence, acting principal — back into graph state, so the orchestrated run is attributable. RBAC denials surface as state rather than crashing the graph.
+Or in Python:
 
 ```python
-from das.integrations import DASExpertNode, build_graph
+from das.platform import deploy
 
-node = DASExpertNode(control_plane)          # use directly, or:
-graph = build_graph(control_plane)           # compile a minimal LangGraph StateGraph
-graph.invoke({"embedding": vec, "actor": "svc"})
-#   -> {..., "das_tenant": "globex", "das_expert": "globex-vision", "das_confidence": 0.99}
+dep = deploy("client.yaml")
+dep.route("care-agent", "the MRI scan was blocked pending urgent review")
+#  {'expert': 'medical', 'confidence': 0.71, 'decision': 'local', ...}
+
+dep.grow("root", "medico", "insurance", stage="seed")   # others proven untouched
+dep.germinate("root", eid=2, target_acc=0.85)           # promote ONLY if earned
+dep.offboard("legalco")                                 # provable right-to-be-forgotten
+dep.export_bundle("acme_audit.json")                    # the auditor's leave-behind
+dep.save("state/")                                      # byte-exact across restarts
 ```
 
-See [`examples/langgraph_demo.py`](examples/langgraph_demo.py) for an end-to-end two-tenant example.
+Teachers write the lessons experts learn from: deterministic template
+teachers offline, or a real LLM over Ollama / OpenAI-compatible endpoints
+(`dep.register_teacher({...})`) writing the text corpus an adapter trains on.
 
----
+## See it
+
+```bash
+python apps/lora_growth_app.py       # :5099 — grow a specialist live in the
+                                     # browser; watch every other expert's hash
+                                     # stay byte-identical; parsimony gate; audit
+python apps/platform_console.py     # :5090 — Rancher-style console over many
+                                     # fleets (session login: the logged-in user
+                                     # IS the RBAC principal)
+python examples/lora_growth_demo.py  # the same demo moment, in a terminal
+```
+
+## Measured, honestly
+
+**Latency** ([lora_latency_bench.py](benchmarks/lora_latency_bench.py), CPU p50):
+routing floor ~7 ms/query; a seed expert costs exactly the floor (its head
+reuses the routing embedding); an adapted expert ~14 ms (its own encoder
+pass). Batch-16: ~1 / ~2.4 ms per text.
+
+**The rank ladder** ([lora_rank_bench.py](benchmarks/lora_rank_bench.py), 3 seeds,
+train/eval vocabulary disjoint):
+
+| curriculum | rank 0 (seed, 770 params) | rank 1 (~10K) | above |
+|---|---|---|---|
+| topical (lexical label) | **1.00** | 1.00 | pure cost — growth refused |
+| word order (identical vocab) | 0.71 | **1.00** | buys nothing |
+| negation × valence (XOR) | 0.90 | **1.00** | buys nothing |
+
+The first rung is real on compositional labels; everything above it is
+cosmetic, and the promotion gate enforces exactly that. Two failed designs
+are documented in the bench so they don't come back (negation *parity* is
+lexically countable under mean pooling; a 16-sentence corpus can't support a
+held-out eval).
+
+**Governance** ([governance_benchmark.py](benchmarks/governance_benchmark.py)):
+against a monolith and per-task isolated adapters, DAS ties the adapters on
+isolation/forgetting/deletion — and is alone on audit, RBAC, and provenance.
+**Cost deflection** ([cost_bench.py](benchmarks/cost_bench.py)): the
+deflection-vs-quality curve across escalation thresholds, including the
+failure mode (aggressive deflection misroutes novel queries). Dollar
+constants are illustrative until measured on a real traffic mix.
+
+## Production
+
+```bash
+docker build -t das-governance .                                  # torch-free image
+docker build --build-arg DAS_EXTRAS=web,platform,hf -t das:hf .   # + LoRA backend
+kubectl apply -f deploy/k8s.yaml                                  # single writer + PVCs
+```
+
+`DAS_ENV=production` refuses to start without real secrets and a trusted-proxy
+contract; secrets are file-mounted; the audit chain can be Ed25519-signed and
+freshness-anchored. Put the reference **authn gateway** in front —
+[deploy/gateway/](deploy/gateway/README.md) (nginx TLS + oauth2-proxy OIDC;
+the gateway is the only thing allowed to assert identity) — and operate it
+per the **runbook** ([docs/RUNBOOK.md](docs/RUNBOOK.md): backup/restore,
+rollback detection, key custody).
 
 ## Documentation
 
-| Document | What's in it |
+| | |
 |---|---|
-| [CASE_STUDY.md](docs/CASE_STUDY.md) | A worked multi-tenant regulated-AI scenario (illustrative), each requirement mapped to a measured capability. |
-| [SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) | Threat model, what's protected, and a ranked list of real gaps (authors' self-review). |
-| [STATUS.md](docs/STATUS.md) | Single-page summary of everything built and every measured number. |
-| [PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) | The phased plan from research prototype to product. |
+| [PLATFORM_PLAN.md](docs/PLATFORM_PLAN.md) | the FDE platform: strategy, §10 hardening, §11 honest gaps, §12 execution |
+| [PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) | the maturity roadmap (Phase 0→4) and what we deliberately dropped |
+| [GROWING_CHILD.md](docs/GROWING_CHILD.md) | the growth loop: teachers, quarantine, germination |
+| [SPECIALTY_FORESTS.md](docs/SPECIALTY_FORESTS.md) | hierarchical specialty trees under LangGraph |
+| [SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) · [THREAT_MODEL.md](docs/THREAT_MODEL.md) | findings F1–F7, mitigations, control→test traceability |
+| [RUNBOOK.md](docs/RUNBOOK.md) | backup, restore, key custody, vendor-console policy |
+| [CHANGELOG.md](CHANGELOG.md) | release history (current: v0.2.0) |
 
----
-
-## Honest evaluation
-
-Credibility is the product, so the limitations are documented as plainly as the strengths.
-
-**What is genuinely proven:**
-- Isolated, hot-swappable experts with **zero catastrophic forgetting** (byte-identical, BWT 0), provable deletion, and multi-tenant isolation.
-- A tamper-evident signed audit log, RBAC, persistence with state↔audit binding, and per-query provenance — all tested.
-
-**What DAS is — and is not:**
-- DAS is, at its core, a competent **hard-routed Mixture-of-Experts ≈ per-task LoRA + a router** ([`benchmarks/lora_bench.py`](benchmarks/lora_bench.py)). On isolation, forgetting, and deletion it **ties** isolated LoRA adapters — it does not beat them. Its edge is the **task-free router plus the governance plane**.
-- The branding from the original concept (Fibonacci layer widths, "vector torque", "coiled strings") is **cosmetic** over a standard softmax-routed MoE — measured, not asserted: Fibonacci vs power-of-two vs linear widths score within 0.006 ([`benchmarks/leaf_shapes_bench.py`](benchmarks/leaf_shapes_bench.py)).
-
-**Known limits:**
-- **Routing is the bottleneck on hard data.** A linear router collapses to 0.42 on raw CIFAR; a shared conv backbone only lifts it to 0.66 (vs ~0.98 on MNIST). The experts are fine; routing caps end-to-end quality.
-- **Scale is unproven** at large-real-model sizes; the sparse mechanic scales (stored grows, active/latency flat) but real-LLM quality is not demonstrated.
-- **Self-organising routing and auditable isolation are in tension:** co-training the router to discover domains unsupervised destroys the byte-identical guarantee. You get one or the other ([`benchmarks/unsupervised_routing.py`](benchmarks/unsupervised_routing.py)).
-- Claims of "beating frontier models" or large cost cuts are **unsupported** by any measurement here.
-
-The defensible home is **governance — auditable, isolated, deletable model fleets — not raw capability.**
-
----
-
-## Roadmap
-
-| Phase | Goal | Status |
-|---|---|---|
-| **0 · Foundation** | Credible engineering | ✅ Versioned package, green CI, test suite |
-| **1 · Real backend** | Stop being toy-scale | 🟡 Experts are now **LoRA adapters on MiniLM's own attention layers** (`backend: lora-minilm` — rank-ladder germination, honestly benchmarked, ~7–14 ms/query CPU); large-model scale + GPU serving remain |
-| **2 · Governance control plane** | The product | ✅ Signed audit, RBAC, multi-tenancy, registry, persistence |
-| **3 · Integrations** | Fit existing stacks | 🟡 LangGraph node + Docker/k8s deploy done; HF Hub interop remains |
-| **4 · Prove & launch** | Evidence + GTM | 🟡 Benchmark + case study + self security review done; real design partner, independent audit, open-core 1.0 remain |
-
-**North star:** *governed AI capabilities you can add, remove, and audit without touching what's already certified.* Full detail in [PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md).
-
----
-
-## Repository layout
+## Repository map
 
 ```
-das/                         NumPy core + governance (the product)
-├── functional.py            Expert leaf (MLP + frozen flag + weight_hash)
-├── routing.py               Stem Router (linear → softmax → argmax)
-├── model.py                 DASForest — router + leaves, graft/prune, proofs
-├── lifecycle.py             Grow → graft → prune → regrow loop
-├── audit.py                 Tamper-evident, HMAC-signed, hash-chained log
-├── governance.py            ControlPlane — RBAC, multi-tenancy, persistence
-├── integrations/            Adapters that slot DAS under existing stacks
-│   └── langgraph_node.py    DASExpertNode — governed expert as a LangGraph node
-└── hub.py                   Leaf marketplace (publish / pull / graft, hash-verified)
-das_torch.py                 PyTorch backend (autograd, checkpointing, ConvLeaf, LoRA)
-das_text.py                  Real frozen pretrained encoder (MiniLM) + real demo text
-
-apps/                        Runnable entry points
-├── governance_api.py        REST control plane (NumPy + Flask) — the deployable unit
-├── console.py               Interactive product UI
-├── serve.py                 Torch-backed inference server
-├── app.py                   Research visualizer dashboard
-└── templates/               HTML for the Flask apps
-
-examples/                    Demos (hf_governance_demo, governance_demo, langgraph_demo, lifecycle, …)
-benchmarks/                  Benchmarks + research scripts
-├── governance_benchmark.py  Monolith vs Isolated vs DAS-CP (with numbers)
-├── lora_bench.py            DAS ≈ per-task LoRA + a router
-├── leaf_shapes_bench.py     Fibonacci vs power-of-two vs linear widths
-└── …                        CIFAR/MNIST stress, scaling, routing studies
-
-deploy/                      Dockerfile (root) + k8s.yaml — containerize & deploy
-docs/                        STATUS · PRODUCT_PLAN · CASE_STUDY · SECURITY_REVIEW
-tests/                       Test suite (NumPy core runs in CI)
+das/                 the MIT core: forest, router, leaves, lifecycle,
+                     governance ControlPlane, audit, hierarchy, training
+das/platform/        the deployment engine: spec → deploy, LoRA experts,
+                     germination, teachers, licensing, bundles, CLI
+das_torch.py         torch backend (autograd leaves, LoRA-on-MLP, checkpoints)
+das_text.py          the frozen MiniLM text encoder (+ demo corpus)
+apps/                consoles, dashboards, demo surfaces
+benchmarks/          every number this README cites, reproducible
+deploy/              Dockerfile entrypoint, k8s, the reference authn gateway
+tests/               225 tests — isolation proofs, gates, RBAC, persistence
 ```
 
-`examples/` and `benchmarks/` cover an extensive set of demos and research studies (continual-learning baselines, CIFAR/MNIST stress tests, paging, scaling, the web visualizer). Every one is logged with measured results in [STATUS.md](docs/STATUS.md). Run scripts from the repo root after `pip install -e .` so `das` and `das_torch` resolve.
+## Honest limits
 
----
+Experts are MiniLM-class adapters, not large generative models — GPU/serving
+scale is deliberately deferred until a design partner's workload demands it.
+Lessons come from template or endpoint-LLM teachers, not yet real labeled
+production data. The control plane is a single writer by design (one audit
+chain, one owner). The open-core/commercial split is planned, not yet
+executed. What's next, in order: a design partner, their real data, their
+traffic on the cost benchmark, an independent security audit.
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE). The `das/platform` deployment engine is
+intended to become the commercial layer of an open-core split; today the
+whole repository is MIT.
