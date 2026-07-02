@@ -126,15 +126,18 @@ class ControlPlane:
                           payload=self._hashes())
 
     # ── expert lifecycle (governed) ────────────────────────────────
-    def graft(self, actor, tenant, name, train_fn, seed=None):
+    def graft(self, actor, tenant, name, train_fn, seed=None, leaf_dims=None):
         """Add + train a new expert for `tenant`. `train_fn(forest, leaf_index)`
         does the actual (isolated) training and any router update. Proves the
-        existing experts stay byte-identical and records it."""
+        existing experts stay byte-identical and records it. `leaf_dims` lets a
+        new expert start at a different capacity than the forest default (e.g.
+        a germination-stage seed — see das.platform.germination)."""
         self._check(actor, "graft", tenant)
         if tenant not in self.tenants:
             self._deny(actor, "graft", f"unknown tenant '{tenant}' (register it first)")
         before = {r["eid"]: self.forest.leaves[i].weight_hash() for i, r in enumerate(self.experts)}
-        idx = self.life.graft(seed=seed if seed is not None else (abs(hash(name)) % 1000))
+        idx = self.life.graft(new_leaf_dims=leaf_dims,
+                              seed=seed if seed is not None else (abs(hash(name)) % 1000))
         train_fn(self.forest, idx)
         rec = {"eid": self._next_eid, "tenant": tenant, "name": name}
         self._next_eid += 1

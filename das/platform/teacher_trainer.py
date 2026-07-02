@@ -67,6 +67,36 @@ class AlignedVectorTeacher(VectorTeacher):
         return d
 
 
+class NonlinearVectorTeacher(AlignedVectorTeacher):
+    """A HARD curriculum in the platform's geometry: labels are the XOR of two
+    half-space tests on the deviation from the cluster center, so the rule is
+    not linearly separable. Measured stage response (see germination_bench):
+    a seed leaf sits at chance while larger stages climb — this is the teacher
+    that makes capacity growth EARN its parameters, and the honest test that a
+    germination promotion is real learning, not theater."""
+
+    def _rules(self, topic):
+        r1 = self._base.rule("xor-a:" + topic)
+        r2 = self._base.rule("xor-b:" + topic)
+        return (r1 / (np.linalg.norm(r1) + 1e-9),
+                r2 / (np.linalg.norm(r2) + 1e-9))
+
+    def _sample(self, topic, n, tag):
+        from das.training.teachers import stable_seed
+        rng = np.random.default_rng(stable_seed(self.seed, self.name, topic, tag))
+        c = self.center_for(topic)
+        X = c + rng.normal(0, self.noise, (int(n), self.d_model))
+        dev = X - c
+        r1, r2 = self._rules(topic)
+        y = ((dev @ r1 > 0).astype(int) ^ (dev @ r2 > 0).astype(int))
+        return X.astype(float), y
+
+    def describe(self):
+        d = super().describe()
+        d["provider"] = "local-nonlinear"
+        return d
+
+
 class TeacherTrainer:
     """Teacher-driven ``train_fn`` factory, duck-typed to the surfaces the
     platform already consumes (``d_model`` / ``center`` / ``data`` /

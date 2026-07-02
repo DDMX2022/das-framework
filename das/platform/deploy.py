@@ -28,6 +28,7 @@ from das.training.teachers import teacher_from_config
 from .spec import ClientSpec
 from .trainer import SyntheticTrainer
 from .teacher_trainer import TeacherTrainer
+from .germination import Germinator, GerminationPolicy, stage_dims
 from .connectors import ContextSource, SpecKeywordConnector
 from .bundle import write_bundle
 from .license import License, load_license
@@ -49,6 +50,7 @@ class Deployment:
         self.teacher_trainer = TeacherTrainer(trainer)
         self.teachers = {"local-teacher": self.teacher_trainer.default_teacher}
         self.growth = GrowthManager(cp)
+        self.germinator = Germinator(cp, self.teacher_trainer)
         self.connector = connector or SpecKeywordConnector(spec, self.teacher_trainer)
 
     # ── introspection ────────────────────────────────────────────────
@@ -118,19 +120,27 @@ class Deployment:
         return t.describe()
 
     def grow(self, actor: str, tenant: str, name: str, keywords=None,
-             teacher=None) -> int:
+             teacher=None, stage: Optional[str] = None) -> int:
         """Graft a new specialist live (proves the others stay byte-identical).
         With ``teacher`` (an object or registered id), the new expert learns
         from teacher-generated lessons — the Growing-Child grow path; otherwise
         the deterministic synthetic trainer is used. Either way the router is
-        retrained over every expert's real training distribution."""
+        retrained over every expert's real training distribution.
+
+        ``stage`` starts the expert at a germination stage ('seed', 'sprout',
+        'sapling', 'young-tree', 'tree') instead of the fleet default — pair
+        with ``germinate`` to grow capacity only when learning demands it."""
         if tenant not in self.cp.tenants:
             self.cp.register_tenant(actor, tenant)
         t = self.resolve_teacher(teacher)
         train_fn = (self.teacher_trainer.train_fn(name, self.cp, teacher=t)
                     if t is not None else self.trainer.train_fn(name, self.cp))
+        dims = None
+        if stage is not None:
+            out_dim = self.trainer.leaf_dims[-1]
+            dims = stage_dims(self.trainer.d_model, out_dim, stage)
         eid = self.cp.graft(actor, tenant, name, train_fn,
-                            seed=self.trainer.seed_for(name))
+                            seed=self.trainer.seed_for(name), leaf_dims=dims)
         if keywords:
             # extend the demo connector's keyword map so the new expert routes
             if isinstance(self.connector, SpecKeywordConnector):
@@ -153,6 +163,21 @@ class Deployment:
             policy=policy, steps=steps,
         )
         return result.to_dict()
+
+    def germinate(self, actor: str, eid: int, teacher=None,
+                  target_acc: float = 0.85,
+                  policy: Optional[GerminationPolicy] = None) -> dict:
+        """The Fibonacci germination step: if the expert meets ``target_acc`` at
+        its current stage it stays small (parsimony); otherwise a candidate at
+        the NEXT stage trains on fresh teacher lessons and replaces the live
+        expert only if the added capacity earns it — audited either way."""
+        t = self.resolve_teacher(teacher) or self.teacher_trainer.default_teacher
+        return self.germinator.auto_germinate(actor, eid, t,
+                                              target_acc=target_acc, policy=policy)
+
+    def growth_report(self) -> list:
+        """Per-expert germination metrics: stage, dims, parameter count."""
+        return self.germinator.report()
 
     def offboard(self, tenant: str, actor: Optional[str] = None) -> dict:
         """Right-to-be-forgotten at tenant granularity. Survivors proven intact."""
