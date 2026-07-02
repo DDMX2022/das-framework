@@ -31,12 +31,15 @@ Two operations, two safety shapes:
 """
 from __future__ import annotations
 
+import json
+import os
+import re
 from typing import Dict, Optional
 
 import numpy as np
 
 from das.training.evaluator import ExpertEvalSet, evaluate_leaf, train_leaf
-from das.training.teachers import VectorTeacher
+from das.training.teachers import LessonBatch, VectorTeacher
 
 from .trainer import SyntheticTrainer
 
@@ -170,6 +173,47 @@ class TeacherTrainer:
                 i = rng.integers(0, len(Xr), min(64, len(Xr)))
                 forest.router.train_step(Xr[i], dr[i], lr=self.base.router_lr)
         return _fn
+
+    # ── persistence ──────────────────────────────────────────────────
+    def save_lessons(self, dirpath: str) -> int:
+        """Persist the lesson store (one .npz per teacher-grown expert plus a
+        manifest). Without this, a restart loses the empirical routing centers
+        of LLM-taught experts — the connector would embed their queries in the
+        wrong geometry."""
+        os.makedirs(dirpath, exist_ok=True)
+        manifest = {}
+        for name, batch in self.lessons.items():
+            safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-") or "expert"
+            np.savez(os.path.join(dirpath, safe + ".npz"),
+                     X_train=batch.X_train, y_train=batch.y_train,
+                     X_eval=batch.X_eval, y_eval=batch.y_eval)
+            manifest[name] = {"file": safe + ".npz", "teacher": batch.teacher,
+                              "dataset_version": batch.dataset_version,
+                              "notes": batch.notes,
+                              "report": self.reports.get(name)}
+        with open(os.path.join(dirpath, "manifest.json"), "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, indent=2, sort_keys=True)
+        return len(manifest)
+
+    def load_lessons(self, dirpath: str) -> int:
+        """Restore a saved lesson store; returns how many experts were loaded.
+        Missing directory is fine (a fleet with no teacher-grown experts)."""
+        path = os.path.join(dirpath, "manifest.json")
+        if not os.path.exists(path):
+            return 0
+        with open(path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+        for name, meta in manifest.items():
+            npz = np.load(os.path.join(dirpath, meta["file"]))
+            self.lessons[name] = LessonBatch(
+                teacher=meta["teacher"], topic=name,
+                dataset_version=meta["dataset_version"],
+                X_train=npz["X_train"], y_train=npz["y_train"],
+                X_eval=npz["X_eval"], y_eval=npz["y_eval"],
+                notes=meta.get("notes", ""))
+            if meta.get("report"):
+                self.reports[name] = meta["report"]
+        return len(manifest)
 
     # ── improve: eval sets for the Growing-Child policy ─────────────
     def eval_sets(self, cp):

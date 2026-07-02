@@ -119,3 +119,78 @@ def test_promotion_rbac_denied(dep):
         dep.germinator.promote("auditor-jane", dep.cp.experts[0]["eid"],
                                dep.teachers["hard"], to_stage="tree")
     assert "denied" in _events(dep)
+
+
+# ── solution #1: multi-stage search ──────────────────────────────────
+def test_promote_search_takes_smallest_earning_stage(dep):
+    dep.germinator.steps, dep.germinator.restarts = 800, 2
+    eid = dep.grow("root", "t", "hard-domain", teacher="hard", stage="seed")
+    result = dep.germinator.promote_search("root", eid, dep.teachers["hard"])
+    assert result["accepted"] is True
+    assert len(result["searched"]) == 4              # sprout..tree all fitted
+    chosen = result["stage_to"]
+    order = [s["stage"] for s in result["searched"]]
+    # every stage smaller than the chosen one failed to qualify
+    for s in result["searched"][:order.index(chosen)]:
+        assert s["qualifies"] is False
+    assert result["others_byte_identical"] is True
+    assert "growth_promoted" in _events(dep)
+    assert dep.cp.state_matches_audit()
+
+
+# ── solution #2: distillation transfer ───────────────────────────────
+def test_distill_transfers_live_behaviour_across_dims(dep):
+    import numpy as np
+    from das.functional import FibonacciLeaf
+    live = dep.cp.forest.leaves[0]                    # trained anchor
+    X, _ = dep.trainer.sample("anchor", 200)
+    cand = FibonacciLeaf([18, 8, 5, 2], seed=1)       # different capacity
+    before = float((cand.forward(X).argmax(1) == live.forward(X).argmax(1)).mean())
+    dep.germinator._distill(cand, live, X, seed=1)
+    after = float((cand.forward(X).argmax(1) == live.forward(X).argmax(1)).mean())
+    assert after >= 0.9 and after > before            # behaviour carried over
+
+
+# ── solution #3: momentum ────────────────────────────────────────────
+def test_momentum_training_path(dep):
+    from das.functional import FibonacciLeaf
+    from das.training.evaluator import evaluate_leaf, train_leaf
+    lessons = dep.teachers["local-teacher"].generate("m-domain", 200, 150)
+    leaf = FibonacciLeaf([18, 8, 5, 2], seed=0)
+    train_leaf(leaf, lessons.X_train, lessons.y_train,
+               steps=600, lr=0.03, momentum=0.9, seed=0)
+    assert leaf.frozen is True
+    assert evaluate_leaf(leaf, lessons.X_eval, lessons.y_eval) > 0.85
+
+
+# ── solution #4: lesson persistence / Deployment.load ────────────────
+def test_save_load_restores_lessons_and_routing(dep, tmp_path):
+    dep.grow("root", "t", "pharma", keywords=["pharmacy", "rx"],
+             teacher="local-teacher", stage="seed")
+    before_route = dep.route("root", "pharmacy rx refill")
+    assert before_route["expert"] == "pharma"
+    dep.save(str(tmp_path / "state"))
+
+    from das.platform import Deployment
+    loaded = Deployment.load(str(tmp_path / "state"), SPEC, secret="s")
+    assert loaded.verify()["ok"] and loaded.cp.state_matches_audit()
+    assert "pharma" in loaded.teacher_trainer.lessons          # store restored
+    assert loaded.teacher_trainer.reports["pharma"]["teacher"] == "local-teacher"
+    # routing geometry AND grow-time keywords survived the restart
+    r = loaded.route("root", "pharmacy rx refill")
+    assert r["expert"] == "pharma" and r["confidence"] > 0.5
+    stages = {g["name"]: g["stage"] for g in loaded.growth_report()}
+    assert stages["pharma"] == "seed"                          # dims survived
+
+
+# ── solution #5: fleet sweep ─────────────────────────────────────────
+def test_sweep_gates_the_whole_fleet(dep):
+    dep.germinator.steps, dep.germinator.restarts = 600, 2
+    dep.grow("root", "t", "hard-domain", teacher="hard", stage="seed")
+    summary = dep.germinate_all("root", teacher="hard", target_acc=0.85)
+    assert summary["attempted"] == 2                  # anchor + hard-domain
+    counted = sum(v for k, v in summary.items()
+                  if k in ("saturated", "promoted", "promotion_rejected", "at_capacity"))
+    assert counted == 2
+    assert "germination_sweep" in _events(dep)
+    assert dep.verify()["ok"] and dep.cp.state_matches_audit()

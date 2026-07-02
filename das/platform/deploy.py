@@ -19,6 +19,8 @@ with the spec's escalation policy applied.
 """
 from __future__ import annotations
 
+import json
+import os
 from typing import Optional
 
 from das.governance import ControlPlane
@@ -166,14 +168,24 @@ class Deployment:
 
     def germinate(self, actor: str, eid: int, teacher=None,
                   target_acc: float = 0.85,
-                  policy: Optional[GerminationPolicy] = None) -> dict:
+                  policy: Optional[GerminationPolicy] = None,
+                  search: bool = True) -> dict:
         """The Fibonacci germination step: if the expert meets ``target_acc`` at
-        its current stage it stays small (parsimony); otherwise a candidate at
-        the NEXT stage trains on fresh teacher lessons and replaces the live
-        expert only if the added capacity earns it — audited either way."""
+        its current stage it stays small (parsimony); otherwise candidates at
+        higher stages train on fresh teacher lessons and the SMALLEST stage
+        that earns its parameters replaces the live expert — audited either
+        way. ``search=False`` restricts to the single next stage."""
         t = self.resolve_teacher(teacher) or self.teacher_trainer.default_teacher
         return self.germinator.auto_germinate(actor, eid, t,
-                                              target_acc=target_acc, policy=policy)
+                                              target_acc=target_acc,
+                                              policy=policy, search=search)
+
+    def germinate_all(self, actor: str, teacher=None, target_acc: float = 0.85,
+                      policy: Optional[GerminationPolicy] = None) -> dict:
+        """Fleet-wide plateau sweep: saturated experts stay small, stuck ones
+        attempt searched promotion; one `germination_sweep` audit summary."""
+        t = self.resolve_teacher(teacher) or self.teacher_trainer.default_teacher
+        return self.germinator.sweep(actor, t, target_acc=target_acc, policy=policy)
 
     def growth_report(self) -> list:
         """Per-expert germination metrics: stage, dims, parameter count."""
@@ -190,8 +202,41 @@ class Deployment:
         return write_bundle(self, path, actor=actor or self.spec.root)
 
     def save(self, path: str, anchor: Optional[str] = None):
-        """Persist the fleet + signed log so it survives restarts."""
+        """Persist the fleet + signed log + the teacher lesson store, so a
+        restart keeps both the weights AND the routing geometry of
+        teacher-grown experts. Grow-time keywords are saved too — they extend
+        the connector beyond what the spec declares."""
         self.cp.save(path, anchor=anchor)
+        self.teacher_trainer.save_lessons(os.path.join(path, "lessons"))
+        if isinstance(self.connector, SpecKeywordConnector):
+            with open(os.path.join(path, "keywords.json"), "w", encoding="utf-8") as fh:
+                json.dump(self.connector._kw, fh, indent=2, sort_keys=True)
+
+    @classmethod
+    def load(cls, path: str, source, secret: Optional[str] = None,
+             connector: Optional[ContextSource] = None) -> "Deployment":
+        """Reconstruct a saved deployment: the ControlPlane (weights + signed
+        log, integrity-checked), the trainers, and the persisted lesson store.
+        ``source`` is the same client spec that produced it (path/dict/spec) —
+        the spec is configuration, the state directory is the data."""
+        if isinstance(source, ClientSpec):
+            spec = source
+        elif isinstance(source, dict):
+            spec = ClientSpec.from_dict(source)
+        else:
+            spec = ClientSpec.from_file(source)
+        audit_secret = secret if secret is not None else spec.resolve_secret()
+        cp = ControlPlane.load(path, secret=audit_secret,
+                               private_key=_load_private_key(spec))
+        trainer = SyntheticTrainer(spec.d_model, spec.resolved_leaf_dims())
+        dep = cls(spec, cp, trainer, connector=connector)
+        dep.teacher_trainer.load_lessons(os.path.join(path, "lessons"))
+        kw_path = os.path.join(path, "keywords.json")
+        if os.path.exists(kw_path) and isinstance(dep.connector, SpecKeywordConnector):
+            with open(kw_path, "r", encoding="utf-8") as fh:
+                for kw, name in json.load(fh).items():
+                    dep.connector._kw.setdefault(kw, name)
+        return dep
 
 
 def deploy(source, secret: Optional[str] = None,

@@ -43,14 +43,30 @@ def evaluate_leaf(leaf, X, y):
     return accuracy(leaf.forward(X), y)
 
 
-def train_leaf(leaf, X, y, steps=120, lr=0.05, batch=32, seed=0):
-    """Train one candidate leaf in isolation and return it frozen."""
+def train_leaf(leaf, X, y, steps=120, lr=0.05, batch=32, seed=0, momentum=0.0):
+    """Train one candidate leaf in isolation and return it frozen.
+
+    ``momentum`` > 0 switches to SGD-with-momentum (velocity on every W/b) —
+    plain SGD on tiny nets over nonconvex curricula is init-sensitive, and
+    momentum tightens the spread. Default 0 keeps the original behaviour."""
     rng = np.random.default_rng(seed)
     leaf.frozen = False
     n = len(X)
-    for _ in range(int(steps)):
-        idx = rng.integers(0, n, min(int(batch), n))
-        leaf.backward(_ce_grad(leaf.forward(X[idx]), y[idx]), lr)
+    if momentum > 0:
+        vW = [np.zeros_like(w) for w in leaf.W]
+        vb = [np.zeros_like(b) for b in leaf.b]
+        for _ in range(int(steps)):
+            idx = rng.integers(0, n, min(int(batch), n))
+            gW, gb = leaf.grads(_ce_grad(leaf.forward(X[idx]), y[idx]))
+            for i in range(len(leaf.W)):
+                vW[i] = momentum * vW[i] - lr * gW[i]
+                vb[i] = momentum * vb[i] - lr * gb[i]
+                leaf.W[i] += vW[i]
+                leaf.b[i] += vb[i]
+    else:
+        for _ in range(int(steps)):
+            idx = rng.integers(0, n, min(int(batch), n))
+            leaf.backward(_ce_grad(leaf.forward(X[idx]), y[idx]), lr)
     leaf.frozen = True
     return leaf
 

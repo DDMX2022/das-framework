@@ -98,9 +98,12 @@ def _dep_or_404(client):
 
 
 def _expert_rows(dep):
-    """Expert registry with live weight fingerprints (registry order == leaf order)."""
+    """Expert registry with live weight fingerprints plus germination stage and
+    parameter count (registry order == leaf order)."""
+    germ = {g["eid"]: g for g in dep.growth_report()}
     return [
-        {**r, "hash": dep.cp.forest.leaves[i].weight_hash()[:16]}
+        {**r, "hash": dep.cp.forest.leaves[i].weight_hash()[:16],
+         "stage": germ[r["eid"]]["stage"], "params": germ[r["eid"]]["params"]}
         for i, r in enumerate(dep.cp.experts)
     ]
 
@@ -213,10 +216,11 @@ def grow(client):
                   for i, r in enumerate(dep.cp.experts)}
         try:
             eid = dep.grow(actor, tenant, name, keywords=body.get("keywords") or [],
-                           teacher=body.get("teacher") or None)
+                           teacher=body.get("teacher") or None,
+                           stage=body.get("stage") or None)
         except AccessDenied as e:
             return jsonify({"error": str(e), "denied": True}), 403
-        except KeyError as e:
+        except (KeyError, ValueError) as e:
             return jsonify({"error": str(e)}), 400
         intact = all(dep.cp.forest.leaves[i].weight_hash() == before[r["eid"]]
                      for i, r in enumerate(dep.cp.experts) if r["eid"] in before)
@@ -238,6 +242,28 @@ def improve(client):
         try:
             result = dep.improve(actor, int(body["eid"]),
                                  teacher=body.get("teacher") or None)
+        except AccessDenied as e:
+            return jsonify({"error": str(e), "denied": True}), 403
+        except (KeyError, ValueError) as e:
+            return jsonify({"error": str(e)}), 400
+        result["audit_ok"] = dep.verify()["ok"]
+        return jsonify(result)
+
+
+@app.post("/api/deployments/<client>/germinate")
+def germinate(client):
+    body = request.get_json(silent=True) or {}
+    actor = body.get("actor", "root")
+    if body.get("eid") is None:
+        return jsonify({"error": "need 'eid'"}), 400
+    with LOCK:
+        dep, err = _dep_or_404(client)
+        if err:
+            return err
+        try:
+            result = dep.germinate(actor, int(body["eid"]),
+                                   teacher=body.get("teacher") or None,
+                                   target_acc=float(body.get("target_acc", 0.85)))
         except AccessDenied as e:
             return jsonify({"error": str(e), "denied": True}), 403
         except (KeyError, ValueError) as e:

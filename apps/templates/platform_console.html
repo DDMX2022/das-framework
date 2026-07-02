@@ -106,18 +106,24 @@ tr:last-child td{border-bottom:none}
     <div class="cards" id="cards"></div>
     <div class="panel">
       <h2>Experts <span style="color:var(--muted);text-transform:none;letter-spacing:0">— isolated leaves; the hash is the live SHA-256 weight fingerprint</span></h2>
-      <table><thead><tr><th>eid</th><th>Expert</th><th>Tenant</th><th>Weight fingerprint</th><th></th></tr></thead>
+      <table><thead><tr><th>eid</th><th>Expert</th><th>Tenant</th><th>Stage</th><th>Params</th><th>Weight fingerprint</th><th></th></tr></thead>
       <tbody id="experts"></tbody></table>
       <div class="row" style="margin-top:12px">
         <input id="g-tenant" placeholder="tenant" style="width:100px">
         <input id="g-name" placeholder="new expert name" style="width:140px">
         <input id="g-kw" placeholder="keywords (comma-sep)" style="width:170px">
         <select id="g-teacher" style="width:150px"></select>
+        <select id="g-stage" style="width:120px">
+          <option value="">stage: default</option>
+          <option value="seed">stage: seed</option>
+          <option value="sprout">stage: sprout</option>
+          <option value="sapling">stage: sapling</option>
+        </select>
         <button onclick="grow()">Grow specialist</button>
         <button class="ghost" onclick="connectTeacher()">Connect LLM teacher</button>
       </div>
       <div class="err" id="g-err"></div>
-      <div class="hint">Graft trains the new leaf in isolation and re-proves every other expert byte-identical. With a teacher selected, the new expert learns from teacher-generated lessons; <b>Improve</b> runs the full Growing-Child loop on an existing expert — candidate trained in quarantine, replaces the live expert only if it passes policy (accuracy floor, no regression), accepted or rejected it lands in the audit log.</div>
+      <div class="hint">Graft trains the new leaf in isolation and re-proves every other expert byte-identical. With a teacher selected, the new expert learns from teacher-generated lessons. <b>Improve</b> runs the Growing-Child loop (candidate in quarantine, accuracy floor + no regression). <b>Germinate</b> runs the Fibonacci capacity ladder: a saturated expert stays small; a stuck one searches higher stages and takes the smallest that earns its parameters. Everything lands in the audit log.</div>
     </div>
     <div class="panel">
       <h2>Tenants</h2>
@@ -221,9 +227,14 @@ function renderOverview(){
   $('experts').innerHTML = s.experts.map(e=>
     `<tr><td class="mono">${e.eid}</td><td>${esc(e.name)}</td>
      <td><span class="badge tenant">${esc(e.tenant)}</span></td>
+     <td><span class="badge role">${esc(e.stage || 'custom')}</span></td>
+     <td class="mono" style="color:var(--muted)">${e.params}</td>
      <td class="mono" style="color:var(--muted)">${e.hash}…</td>
-     <td style="text-align:right"><button class="ghost" style="padding:4px 9px;font-size:.66rem"
-       onclick="improve(${e.eid},'${esc(e.name)}')">Improve</button></td></tr>`).join('');
+     <td style="text-align:right;white-space:nowrap">
+       <button class="ghost" style="padding:4px 9px;font-size:.66rem"
+         onclick="improve(${e.eid},'${esc(e.name)}')">Improve</button>
+       <button class="ghost" style="padding:4px 9px;font-size:.66rem"
+         onclick="germinate(${e.eid},'${esc(e.name)}')">Germinate</button></td></tr>`).join('');
   const teachers = s.teachers || [];
   $('g-teacher').innerHTML = `<option value="">trainer: synthetic</option>` +
     teachers.map(t=>`<option value="${esc(t.id)}">teacher: ${esc(t.id)}</option>`).join('');
@@ -281,7 +292,8 @@ async function grow(){
     const r = await api(`/api/deployments/${CURRENT}/grow`, {method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({tenant: $('g-tenant').value.trim(), name: $('g-name').value.trim(),
-                            keywords: kw, teacher: $('g-teacher').value || null})});
+                            keywords: kw, teacher: $('g-teacher').value || null,
+                            stage: $('g-stage').value || null})});
     $('g-err').style.color = 'var(--green2)';
     const tr = r.teacher_report;
     $('g-err').textContent = `eid ${r.eid} grafted — others byte-identical: ${r.others_byte_identical}`
@@ -301,6 +313,30 @@ async function improve(eid, name){
       + `target acc ${(r.target_accuracy_before*100).toFixed(0)}% → ${(r.target_accuracy_after*100).toFixed(0)}%`
       + `, max regression ${(r.max_previous_regression*100).toFixed(1)}%`
       + ` (teacher ${r.teacher}; audited as ${r.audit_event})`;
+    select(CURRENT);
+  }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
+}
+
+async function germinate(eid, name){
+  $('g-err').textContent = '';
+  try{
+    const r = await api(`/api/deployments/${CURRENT}/germinate`, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({eid, teacher: $('g-teacher').value || null})});
+    if(r.action === 'saturated'){
+      $('g-err').style.color = 'var(--green2)';
+      $('g-err').textContent = `${name}: SATURATED at ${r.stage} (${(r.accuracy*100).toFixed(0)}% ≥ target ${(r.target*100).toFixed(0)}%) — stays small (${r.params} params)`;
+    } else if(r.action === 'at_capacity'){
+      $('g-err').style.color = 'var(--amber)';
+      $('g-err').textContent = `${name}: already a full tree at ${(r.accuracy*100).toFixed(0)}% — needs a better curriculum, not capacity`;
+    } else {
+      const searched = (r.searched||[]).map(s=>`${s.stage} ${(s.accuracy*100).toFixed(0)}%`).join(', ');
+      $('g-err').style.color = r.accepted ? 'var(--green2)' : 'var(--amber)';
+      $('g-err').textContent = `${name}: ${r.accepted ? 'PROMOTED' : 'PROMOTION REJECTED'} `
+        + `${r.stage_from} → ${r.stage_to} — acc ${(r.accuracy_before*100).toFixed(0)}% → ${(r.accuracy_after*100).toFixed(0)}%`
+        + `, params ${r.params_before} → ${r.params_after}`
+        + (searched ? ` (searched: ${searched})` : '') + ` — audited`;
+    }
     select(CURRENT);
   }catch(e){ $('g-err').style.color = 'var(--red)'; $('g-err').textContent = e.message; }
 }

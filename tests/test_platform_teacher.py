@@ -145,6 +145,19 @@ def test_console_improve_endpoint(client):
     assert denied.status_code == 403
 
 
+def test_console_germinate_endpoint(client):
+    detail = client.get("/api/deployments/northwind").get_json()
+    assert all("stage" in e and "params" in e for e in detail["experts"])
+    r = client.post("/api/deployments/northwind/germinate", json={"eid": 0})
+    j = r.get_json()
+    assert r.status_code == 200
+    assert j["action"] in ("saturated", "promoted", "promotion_rejected", "at_capacity")
+    assert j["audit_ok"] is True
+    denied = client.post("/api/deployments/northwind/germinate",
+                         json={"eid": 0, "actor": "auditor-jane"})
+    assert denied.status_code == 403
+
+
 def test_console_teacher_registration(client):
     r = client.post("/api/deployments/northwind/teachers",
                     json={"id": "lab-llm", "provider": "openai-compatible",
