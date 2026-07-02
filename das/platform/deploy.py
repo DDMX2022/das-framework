@@ -133,15 +133,18 @@ class Deployment:
         """Register a runtime teacher (local-vector, or an LLM over Ollama /
         OpenAI-compatible / custom-JSON endpoints). Returns sanitized metadata —
         API keys stay in memory, never in the description or on disk."""
-        if self.backend == "lora-minilm":
-            # vector teachers emit encoded arrays; LoRA experts need the raw
-            # text (the adapter lives inside the encoder) — the LLM-teacher →
-            # TextLessonBatch bridge is PLATFORM_PLAN §12 step 3
-            raise NotImplementedError(
-                "runtime teacher registration on the lora-minilm backend "
-                "needs the text-lesson bridge (PLATFORM_PLAN §12); pass a "
-                "text teacher object to grow()/germinate() directly")
         t = teacher_from_config(config, self.trainer.d_model)
+        if self.backend == "lora-minilm":
+            # LoRA experts need the raw text (the adapter lives inside the
+            # encoder): endpoint LLM teachers bridge to text lessons; local
+            # vector teachers have no text to give and are refused honestly
+            if not hasattr(t, "fetch_rows"):
+                raise NotImplementedError(
+                    "the lora-minilm backend needs teachers that produce "
+                    "TEXT — register an LLM endpoint teacher, or pass a "
+                    "text teacher object to grow()/germinate() directly")
+            from .lora_expert import LLMTextLessonTeacher
+            t = LLMTextLessonTeacher(t)
         self.teachers[t.name] = t
         return t.describe()
 

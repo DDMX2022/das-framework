@@ -307,13 +307,25 @@ class EndpointLLMTeacher:
             eval_rows = train
         return train, eval_rows
 
-    def generate(self, topic, n_train=160, n_eval=120, dataset_version=None):
+    def fetch_rows(self, topic, n_train=160, n_eval=120):
+        """The raw-lesson seam: fetch, split, and validate the teacher's rows
+        WITHOUT encoding them. Returns ``(train_rows, eval_rows, notes)`` where
+        each row is ``{"input": str, "label": 0|1}`` — vector experts encode
+        these (``generate``), LoRA experts consume the text itself
+        (``das.platform.lora_expert.LLMTextLessonTeacher``)."""
         requested_train = min(int(n_train), self.max_examples)
         requested_eval = min(int(n_eval), max(2, self.max_examples // 2))
         payload = self._fetch_payload(topic, requested_train, requested_eval)
         train_rows, eval_rows = self._split_rows(payload)
         train_rows = _coerce_rows(train_rows, "train")
         eval_rows = _coerce_rows(eval_rows, "eval")
+        notes = ""
+        if isinstance(payload, dict):
+            notes = str(payload.get("notes") or payload.get("summary") or "")
+        return train_rows, eval_rows, notes
+
+    def generate(self, topic, n_train=160, n_eval=120, dataset_version=None):
+        train_rows, eval_rows, notes = self.fetch_rows(topic, n_train, n_eval)
         X_train = self.encoder.encode(train_rows, topic=topic)
         X_eval = self.encoder.encode(eval_rows, topic=topic)
         y_train = np.asarray([row["label"] for row in train_rows], dtype=int)
@@ -322,9 +334,6 @@ class EndpointLLMTeacher:
             f"{self.name}:{topic}:llm:{len(train_rows)}-{len(eval_rows)}:"
             f"{stable_seed(self.name, topic, len(train_rows), len(eval_rows))}"
         )
-        notes = ""
-        if isinstance(payload, dict):
-            notes = str(payload.get("notes") or payload.get("summary") or "")
         return LessonBatch(
             teacher=self.name,
             topic=topic,

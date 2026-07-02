@@ -349,6 +349,50 @@ class XorNegationTeacher:
         )
 
 
+class LLMTextLessonTeacher:
+    """The LLM-teacher → text-lesson bridge (PLATFORM_PLAN §12 step 3): wraps
+    an :class:`~das.training.teachers.EndpointLLMTeacher` (Ollama /
+    OpenAI-compatible / custom-JSON endpoints) and emits the RAW teacher-
+    written sentences as a :class:`TextLessonBatch` instead of encoding them
+    to vectors — because a LoRA expert's adapter lives inside the encoder and
+    must see the tokens. With this, "teacher generates corpus → adapter
+    trains → policy gates" runs with a real LLM writing the corpus and no
+    template teachers in the path.
+
+    One honest caveat, inherited from whatever the LLM writes: the promotion
+    gate can only measure generalization ACROSS the eval split the teacher
+    provided. A teacher that writes near-duplicate train/eval rows inflates
+    every candidate — corpus quality is the design partner's axis, not the
+    gate's."""
+
+    def __init__(self, llm_teacher):
+        if not hasattr(llm_teacher, "fetch_rows"):
+            raise TypeError("LLMTextLessonTeacher wraps a teacher exposing "
+                            "fetch_rows(topic, n_train, n_eval) — e.g. "
+                            "das.training.teachers.EndpointLLMTeacher")
+        self.base = llm_teacher
+        self.name = llm_teacher.name
+
+    def describe(self):
+        d = dict(self.base.describe())
+        d["lessons"] = "text (LoRA bridge)"
+        return d
+
+    def generate(self, topic, n_train=96, n_eval=48, dataset_version=None):
+        train_rows, eval_rows, notes = self.base.fetch_rows(topic, n_train,
+                                                            n_eval)
+        version = dataset_version or (
+            f"{self.name}:{topic}:llm-text:{len(train_rows)}-{len(eval_rows)}")
+        return TextLessonBatch(
+            teacher=self.name, topic=topic, dataset_version=version,
+            texts_train=[r["input"] for r in train_rows],
+            y_train=np.asarray([r["label"] for r in train_rows], dtype=int),
+            texts_eval=[r["input"] for r in eval_rows],
+            y_eval=np.asarray([r["label"] for r in eval_rows], dtype=int),
+            notes=notes or f"LLM text lessons via '{self.name}'",
+        )
+
+
 # ── the shared frozen backbone ───────────────────────────────────────────────
 
 _BACKBONE_CACHE: Dict[str, "MiniLMLoRABackbone"] = {}
@@ -637,7 +681,14 @@ class MiniLMLoRAForest:
             out = np.zeros((len(texts), self.out_dim))
             for i, leaf in enumerate(self.leaves):
                 mask = leaf_idx == i
-                if mask.any():
+                if not mask.any():
+                    continue
+                if leaf.rank == 0:
+                    # a seed has no adapter: its head over the ROUTING
+                    # embedding is the exact same math as re-encoding —
+                    # measured, this halves seed-expert latency
+                    out[mask] = leaf.head_logits(h[mask])
+                else:
                     out[mask] = leaf.predict([texts[j] for j in np.where(mask)[0]])
             return out, leaf_idx
         h = np.asarray(X, dtype=float)

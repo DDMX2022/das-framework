@@ -273,12 +273,52 @@ def test_deploy_grow_and_germinate_live(deployment):
 
 
 def test_deploy_honest_backend_limits(deployment):
-    """improve() and runtime vector-teacher registration don't silently
-    degrade — they say what to use instead."""
+    """improve() doesn't silently degrade — it says what to use instead."""
     with pytest.raises(NotImplementedError, match="germinate"):
         deployment.improve("root", 0)
-    with pytest.raises(NotImplementedError, match="text-lesson bridge"):
-        deployment.register_teacher({"kind": "local-vector", "name": "t"})
+
+
+def _fake_llm_rows(url, body, headers=None, timeout=60):
+    """Canned custom-json endpoint: an 'LLM' writing insurance-claim lessons."""
+    routine = ["the claim form was submitted with all receipts attached",
+               "the policy renewal was processed at the standard premium",
+               "the adjuster confirmed the estimate matches the invoice",
+               "the deductible was applied according to the policy terms"]
+    risky = ["the same collision was claimed twice under different policies",
+             "the fire report contradicts the claimant's timeline entirely",
+             "the invoice was backdated to fall inside the coverage window",
+             "the witness statement was written by the policyholder's broker"]
+    row = lambda t, y: {"input": t, "label": y}
+    return {"train": [row(t, 0) for t in routine[:3]] + [row(t, 1) for t in risky[:3]],
+            "eval": [row(routine[3], 0), row(risky[3], 1)],
+            "notes": "insurance fixture lessons"}
+
+
+def test_llm_teacher_text_bridge(deployment, monkeypatch):
+    """§12 step 3: a real (here: canned) LLM endpoint writes the corpus, the
+    bridge hands the RAW sentences to the adapter path, and grow() runs the
+    whole loop — teacher generates corpus -> adapter trains -> gate."""
+    import das.training.teachers as teacher_mod
+    from das.platform.lora_expert import LLMTextLessonTeacher
+    monkeypatch.setattr(teacher_mod, "_post_json", _fake_llm_rows)
+
+    meta = deployment.register_teacher({
+        "id": "claims-llm", "provider": "custom-json",
+        "endpoint": "http://llm.local/lessons", "model": "any"})
+    assert meta["lessons"] == "text (LoRA bridge)"
+
+    eid = deployment.grow("root", "medico", "insurance",
+                          teacher="claims-llm", stage="seed")
+    rep = deployment.trainer.reports["insurance"]
+    assert rep["teacher"] == "claims-llm"
+    batch = deployment.trainer.lessons["insurance"]
+    assert "collision" in " ".join(batch.texts_train)     # raw LLM text, not vectors
+    assert deployment.cp.forest.leaves[-1].rank == stage_rank("seed")
+    assert deployment.verify()["ok"]
+
+    # vector teachers have no text to give — refused honestly
+    with pytest.raises(NotImplementedError, match="TEXT"):
+        deployment.register_teacher({"id": "vec", "provider": "local-vector"})
 
 
 def test_deploy_save_load_round_trip(deployment, tmp_path):

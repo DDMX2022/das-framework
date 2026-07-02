@@ -309,24 +309,28 @@ something an FDE can actually stand up. Each step has an exit proof, in
 dependency order; none of it outranks the §8 rule that a design partner comes
 before more building.
 
-1. **Adapter persistence** — `MiniLMLoRAForest.save/load`: adapters + heads +
-   ranks in a manifest, the shared backbone excluded (it's the pretrained
-   download, pinned by name/revision). *Exit:* leaf `weight_hash`es
-   byte-identical across a reload (test).
-2. **Backend switch in the deployment engine** — `backend: lora-minilm` in
-   `client.yaml`; `dep.grow`/`dep.improve` and the growth worker/API drive
-   `MiniLMLoRATrainer` + `RankGerminator` behind the same seam. *Exit:*
-   `das deploy` stands up a governed transformer fleet end-to-end.
-3. **LLM-teacher → text-lesson bridge** — `EndpointLLMTeacher` already fetches
-   `{"input", "label"}` rows; a thin shim emits `TextLessonBatch` so a real
-   LLM writes the corpus an adapter trains on (no template teachers in the
-   production path). *Exit:* an endpoint-taught adapter passes the same
-   promotion gate.
-4. **Latency numbers** — route-on-frozen-embedding vs route+adapter forward,
-   batch 1/16, p50/p95 CPU, in the rank bench. *Exit:* the honest-gaps line
-   about latency cites a measurement instead of an absence. (A real SLA at
-   scale still waits for GPU/serving integration — deliberately out of scope
-   until partner pull, per PRODUCT_PLAN Phase 1.)
+1. **Adapter persistence** — **done**: `MiniLMLoRAForest.save/load` (adapters
+   + heads + ranks in a manifest, backbone excluded — pinned by model name);
+   leaf `weight_hash`es byte-identical across a reload (tested).
+2. **Backend switch in the deployment engine** — **done**: `backend:
+   lora-minilm` in the spec; `deploy()` stands up a governed transformer
+   fleet end-to-end (`ControlPlane` delegates forest persistence via
+   `forest_loader`); `grow(stage=…)` grafts rank-ladder seeds, `germinate`
+   runs the parsimony gate, save/load survives restarts with the chain
+   verified (tested). `improve()` on this backend IS `germinate()` and says
+   so.
+3. **LLM-teacher → text-lesson bridge** — **done**: `EndpointLLMTeacher`
+   grew a public `fetch_rows` seam and `LLMTextLessonTeacher` emits the raw
+   sentences as `TextLessonBatch`; `dep.register_teacher` on the LoRA backend
+   bridges endpoint teachers automatically (and refuses vector teachers
+   honestly). An endpoint-taught adapter passes the same promotion gate
+   (tested).
+4. **Latency numbers** — **done**: [`benchmarks/lora_latency_bench.py`](../benchmarks/lora_latency_bench.py)
+   (CPU, p50): routing floor ~7 ms/query; a seed expert costs exactly the
+   floor (its head reuses the routing embedding); an adapted expert ~14 ms
+   (its own encoder pass); batch-16 amortizes to ~1 / ~2.4 ms per text. A
+   real SLA at scale (bigger encoder, GPU, concurrency) still waits for
+   partner pull, per PRODUCT_PLAN Phase 1.
 5. **The demo moment on the LoRA fleet** — grow a specialist live in the
    dashboard while streaming the other experts' unchanged hashes; §8 calls
    this the moment that closes, now on real adapters.

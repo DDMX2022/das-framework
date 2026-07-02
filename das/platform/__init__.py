@@ -43,7 +43,8 @@ from .germination import (
     stage_of,
 )
 from .lora_expert import (          # LoRA-on-MiniLM experts; heavy deps load
-    MiniLMLoRABackbone,             # lazily, so this import stays NumPy-only
+    LLMTextLessonTeacher,             # lazily, so this import stays NumPy-only
+    MiniLMLoRABackbone,
     MiniLMLoRAForest,
     MiniLMLoRALeaf,
     MiniLMLoRATrainer,
@@ -87,6 +88,7 @@ __all__ = [
     "STAGE_NAMES",
     "stage_dims",
     "stage_of",
+    "LLMTextLessonTeacher",
     "MiniLMLoRABackbone",
     "MiniLMLoRAForest",
     "MiniLMLoRALeaf",
