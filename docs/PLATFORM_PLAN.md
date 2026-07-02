@@ -59,6 +59,26 @@ function and do repeat deployments**:
 Common wedge: they must answer *"prove tenant A wasn't affected by B,"* *"delete
 this client and prove it,"* and *"cut the frontier-LLM bill"* — on every account.
 
+### Vertical: creative-IP fleets (second sales area)
+
+Studios and creative-tooling vendors using AI art manage their real assets as
+**fleets of LoRA adapters** — one per character, one per style. That fleet has
+exactly the governance shape DAS sells:
+
+- add a character mid-series → graft; established characters provably cannot drift
+- a character license expires / an artist revokes style permission → prune, with
+  a cryptographic proof the style is STRUCTURALLY GONE (not filtered) — legal
+  right-to-be-forgotten for creative IP
+- per-panel provenance: which character/style expert produced what, audited
+
+The wedge is NOT "make comics" (crowded generation market) — it is the
+**rights-and-provenance registrar** for teams already generating and worried
+about legal exposure. Honestly gated: requires the Phase-1 LoRA leaf format
+first, then a diffusion-LoRA backend behind the same `train_fn` seam
+(architecturally the same move — the control plane never cared what an expert
+is made of; unbuilt, unpromised until measured). Candidate design partner
+profile: an AI-art tooling vendor or a studio pipeline team, not end artists.
+
 ---
 
 ## 4. Product architecture — three tiers
