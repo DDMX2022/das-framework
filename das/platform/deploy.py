@@ -41,10 +41,14 @@ class Deployment:
     produced it, with FDE-facing operations (route, offboard, verify, bundle)."""
 
     def __init__(self, spec: ClientSpec, cp: ControlPlane, trainer: SyntheticTrainer,
-                 connector: Optional[ContextSource] = None):
+                 connector: Optional[ContextSource] = None,
+                 license: Optional[License] = None):
         self.spec = spec
         self.cp = cp
         self.trainer = trainer
+        # Held so entitlements are enforced across the deployment's LIFETIME
+        # (grow re-checks limits + expiry), not only at deploy time.
+        self.license = license
         # The teacher bridge: grow/improve via das.training teachers behind the
         # same train_fn seam. The connector consults IT for centers so that
         # teacher-grown experts (whose geometry is their actual lessons) route
@@ -132,6 +136,9 @@ class Deployment:
         ``stage`` starts the expert at a germination stage ('seed', 'sprout',
         'sapling', 'young-tree', 'tree') instead of the fleet default — pair
         with ``germinate`` to grow capacity only when learning demands it."""
+        if self.license is not None:
+            # entitlements hold for the deployment's lifetime, not just at boot
+            self.license.check_expert_count(len(self.cp.experts) + 1)
         if tenant not in self.cp.tenants:
             self.cp.register_tenant(actor, tenant)
         t = self.resolve_teacher(teacher)
@@ -214,11 +221,14 @@ class Deployment:
 
     @classmethod
     def load(cls, path: str, source, secret: Optional[str] = None,
-             connector: Optional[ContextSource] = None) -> "Deployment":
+             connector: Optional[ContextSource] = None,
+             license: Optional[License] = None) -> "Deployment":
         """Reconstruct a saved deployment: the ControlPlane (weights + signed
         log, integrity-checked), the trainers, and the persisted lesson store.
         ``source`` is the same client spec that produced it (path/dict/spec) —
-        the spec is configuration, the state directory is the data."""
+        the spec is configuration, the state directory is the data. The license
+        resolves per the usual trust model so entitlements keep holding after a
+        restart."""
         if isinstance(source, ClientSpec):
             spec = source
         elif isinstance(source, dict):
@@ -229,7 +239,8 @@ class Deployment:
         cp = ControlPlane.load(path, secret=audit_secret,
                                private_key=_load_private_key(spec))
         trainer = SyntheticTrainer(spec.d_model, spec.resolved_leaf_dims())
-        dep = cls(spec, cp, trainer, connector=connector)
+        lic = license if license is not None else load_license()
+        dep = cls(spec, cp, trainer, connector=connector, license=lic)
         dep.teacher_trainer.load_lessons(os.path.join(path, "lessons"))
         kw_path = os.path.join(path, "keywords.json")
         if os.path.exists(kw_path) and isinstance(dep.connector, SpecKeywordConnector):
@@ -294,7 +305,7 @@ def deploy(source, secret: Optional[str] = None,
         cp.graft(spec.root, tenant, e.name, trainer.train_fn(e.name, cp),
                  seed=e.seed if e.seed is not None else trainer.seed_for(e.name))
 
-    return Deployment(spec, cp, trainer, connector=connector)
+    return Deployment(spec, cp, trainer, connector=connector, license=lic)
 
 
 def _load_private_key(spec: ClientSpec):

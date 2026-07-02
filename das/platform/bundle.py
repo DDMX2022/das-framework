@@ -57,8 +57,18 @@ def build_bundle(deployment, actor: Optional[str] = None) -> dict:
         "ed25519": "das-verify <bundle.json> --pubkey <public-hex>",
         "note": ("This file is itself the verifiable audit document. Keyless "
                  "verification proves the chain and weight fingerprints are "
-                 "internally consistent; a key proves authorship."),
+                 "internally consistent; a key additionally proves authorship "
+                 "AND that the bundle metadata (manifest, client, dates) was "
+                 "not altered after export."),
     }
+    # Attest the wrapper itself: the chain signatures cover only the entries,
+    # so without this a tampered manifest would still "verify". The signature
+    # binds the metadata to the chain head, using the log's own scheme.
+    signed_fields = ["bundle_schema", "client", "generated_at", "generated_by",
+                     "manifest", "head"]
+    bundle["bundle_signed_fields"] = signed_fields
+    bundle["bundle_signature"] = deployment.cp.audit.sign_blob(
+        {k: bundle.get(k) for k in signed_fields})
     return bundle
 
 

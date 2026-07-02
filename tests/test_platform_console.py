@@ -67,6 +67,19 @@ def test_offboard_is_provable(client):
     assert r["removed"] == 2 and r["non_interference"] is True and r["audit_ok"] is True
 
 
+def test_grow_refused_when_license_limit_reached(client):
+    pytest.importorskip("cryptography")
+    from das.audit import generate_keypair
+    from das.platform import License, issue_license
+    pem, pub = generate_keypair()
+    lic = License.from_doc(issue_license(pem, customer="Acme", max_experts=4), pub)
+    pc.DEPLOYMENTS["northwind"].license = lic          # northwind has 4 experts
+    r = client.post("/api/deployments/northwind/grow",
+                    json={"tenant": "careplus", "name": "one-too-many"})
+    assert r.status_code == 403
+    assert r.get_json()["license"] is True
+
+
 def test_deploy_new_client_via_api(client):
     spec = {"client": "acme", "d_model": 16,
             "tenants": [{"name": "t", "experts": [{"name": "e1"}]}]}

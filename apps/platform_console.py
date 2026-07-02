@@ -220,6 +220,8 @@ def grow(client):
                            stage=body.get("stage") or None)
         except AccessDenied as e:
             return jsonify({"error": str(e), "denied": True}), 403
+        except LicenseError as e:
+            return jsonify({"error": str(e), "license": True}), 403
         except (KeyError, ValueError) as e:
             return jsonify({"error": str(e)}), 400
         intact = all(dep.cp.forest.leaves[i].weight_hash() == before[r["eid"]]

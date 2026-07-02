@@ -130,6 +130,23 @@ def test_bundle_tamper_is_caught(dep, tmp_path):
     assert not ok2 and issues2
 
 
+def test_bundle_wrapper_tamper_is_caught_with_key(dep, tmp_path):
+    """The review's high finding: the manifest travels OUTSIDE the entry chain,
+    so it carries its own signature — a keyed verifier catches wrapper edits."""
+    out = tmp_path / "bundle.json"
+    dep.export_bundle(str(out))
+    doc = json.loads(out.read_text())
+    assert doc["bundle_signature"] and "manifest" in doc["bundle_signed_fields"]
+    ok, _ = verify_document(doc, secret="test-secret")     # untampered: passes
+    assert ok
+    doc["manifest"]["tenants"] = ["evil-corp"]             # rewrite the manifest
+    ok2, issues = verify_document(doc, secret="test-secret")
+    assert not ok2 and any("bundle metadata" in r for _i, r in issues)
+    # keyless remains structural-only (documented boundary), same as entry auth
+    ok3, _ = verify_document(doc)
+    assert ok3
+
+
 def test_deploy_requires_experts():
     # spec validation rejects an empty expert list before deploy runs
     with pytest.raises(SpecError):

@@ -248,6 +248,20 @@ class License:
                 f"license allows {max_d} deployment(s); this would be "
                 f"#{n_deployments_after}")
 
+    def check_expert_count(self, n_after: int,
+                           now: Optional[datetime.datetime] = None) -> None:
+        """Post-deploy entitlement: growing an expert must re-check the limit
+        AND expiry — without this, a fleet licensed for N experts could grow
+        past N through the very console it ships with."""
+        if (now or _utcnow()) >= self.expires_at:
+            raise LicenseError(f"license for '{self.customer}' expired at "
+                               f"{_fmt_ts(self.expires_at)} — renew to grow")
+        max_e = self._limit("max_experts")
+        if max_e is not None and n_after > max_e:
+            raise LicenseError(
+                f"growing to {n_after} experts exceeds the license limit of "
+                f"{max_e} per deployment")
+
 
 # ── loading / policy ─────────────────────────────────────────────────
 def resolve_public_key(explicit: Optional[str] = None) -> Optional[str]:

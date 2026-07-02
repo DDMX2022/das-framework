@@ -14,6 +14,7 @@ X-DAS-Vendor-Token header (the UI prompts once and remembers). Unset = local
 dev mode, open — the boot log says so loudly. This is a local admin surface;
 put real authn (mTLS/OIDC gateway) in front of it before any network exposure.
 """
+import hmac
 import io
 import json
 import os
@@ -38,7 +39,9 @@ store = VendorStore(VENDOR_DIR)
 @app.before_request
 def _gate():
     if TOKEN and request.path.startswith("/api/"):
-        if request.headers.get("X-DAS-Vendor-Token") != TOKEN:
+        supplied = request.headers.get("X-DAS-Vendor-Token", "")
+        # constant-time compare — this gate fronts the license SIGNING key
+        if not hmac.compare_digest(supplied, TOKEN):
             return jsonify({"error": "vendor token required"}), 401
 
 

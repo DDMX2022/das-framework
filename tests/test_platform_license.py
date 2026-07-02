@@ -111,6 +111,33 @@ def test_deploy_enforces_license(keys):
         deploy(SPEC, secret="s", license=bad)
 
 
+def test_grow_enforces_license_after_deploy(keys):
+    """The fix for the review's critical finding: entitlements must hold for
+    the deployment's LIFETIME — deploy at the limit, then try to grow past it."""
+    pem, pub = keys
+    lic = License.from_doc(_issue(pem, max_experts=4), pub)
+    dep = deploy(SPEC, secret="s", license=lic)             # 3 experts
+    dep.grow("root", "t1", "e4")                             # 4th: at the limit
+    with pytest.raises(LicenseError, match="exceeds the license limit"):
+        dep.grow("root", "t1", "e5")                         # 5th: refused
+    assert len(dep.cp.experts) == 4                          # nothing leaked
+    # germinate/improve swap a leaf, they don't add one -> still allowed
+    result = dep.improve("root", dep.cp.experts[0]["eid"])
+    assert result["accepted"] in (True, False)
+
+
+def test_grow_enforcement_survives_restart(keys, tmp_path):
+    """Deployment.load resolves the license too — a restart is not a bypass."""
+    from das.platform import Deployment
+    pem, pub = keys
+    lic = License.from_doc(_issue(pem, max_experts=3), pub)
+    dep = deploy(SPEC, secret="s", license=lic)              # exactly at limit
+    dep.save(str(tmp_path / "state"))
+    loaded = Deployment.load(str(tmp_path / "state"), SPEC, secret="s", license=lic)
+    with pytest.raises(LicenseError, match="exceeds the license limit"):
+        loaded.grow("root", "t1", "one-too-many")
+
+
 # ── load_license policy (env-driven) ────────────────────────────────
 def test_no_license_is_evaluation_mode(monkeypatch):
     monkeypatch.delenv("DAS_LICENSE", raising=False)

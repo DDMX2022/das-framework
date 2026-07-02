@@ -46,4 +46,6 @@ ENTRYPOINT ["das-entrypoint"]
 # intact (a single replica owns the chain); threads handle concurrency. The
 # startup guards in governance_api still run at import, so a misconfigured prod
 # deploy fails fast here too.
-CMD ["sh", "-c", "gunicorn --workers 1 --threads 8 --timeout 30 --bind 0.0.0.0:${DAS_PORT:-5070} governance_api:app"]
+# `exec` so gunicorn replaces the shell and receives SIGTERM directly — clean
+# shutdown instead of a 10s force-kill with a state write possibly in flight.
+CMD ["sh", "-c", "exec gunicorn --workers 1 --threads 8 --timeout 30 --bind 0.0.0.0:${DAS_PORT:-5070} governance_api:app"]
