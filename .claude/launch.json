@@ -18,6 +18,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["apps/lora_growth_app.py"],
       "port": 5099
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5100", "-d", "site"],
+      "port": 5100
     }
   ]
 }

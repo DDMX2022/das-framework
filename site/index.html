@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAS — governed AI expert fleets</title>
+<meta name="description" content="Add, remove, and audit AI capabilities without touching what's already certified. Isolated experts, provable deletion, tamper-evident audit — governance for model fleets.">
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#11151d; --line:#242b38; --text:#e8edf4;
+    --dim:#96a0b0; --mute:#5d6b7e; --accent:#5ba3f5; --accent-strong:#1f6feb;
+    --green:#43b96e; --gold:#d5a44a; --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:16px/1.65 -apple-system,"Segoe UI",Inter,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  nav{position:sticky;top:0;background:rgba(11,14,20,.85);backdrop-filter:blur(8px);
+      border-bottom:1px solid var(--line);z-index:10}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:58px}
+  .logo{font-weight:600;font-size:16px;color:var(--text);letter-spacing:.02em}
+  .logo span{color:var(--accent)}
+  nav .links{display:flex;gap:22px;align-items:center;font-size:14px}
+  nav .links a{color:var(--dim)}
+  .btn{display:inline-block;padding:9px 18px;border-radius:8px;font-size:14px;
+       font-weight:500;border:1px solid var(--line);color:var(--text);cursor:pointer;
+       background:transparent}
+  .btn:hover{border-color:var(--accent);text-decoration:none}
+  .btn.primary{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
+  .btn.primary:hover{filter:brightness(1.1)}
+  .hero{padding:84px 0 48px;text-align:center}
+  .badge{display:inline-block;font-size:12.5px;color:var(--accent);
+         border:1px solid var(--line);border-radius:999px;padding:4px 14px;margin-bottom:22px}
+  h1{font-size:clamp(28px,5vw,44px);line-height:1.18;font-weight:650;
+     margin:0 auto 18px;max-width:760px;letter-spacing:-.01em}
+  .hero p{max-width:620px;margin:0 auto 30px;color:var(--dim);font-size:17px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  section{padding:56px 0;scroll-margin-top:70px}
+  h2{font-size:26px;font-weight:600;margin:0 0 8px;letter-spacing:-.01em}
+  .sub{color:var(--dim);margin:0 0 32px;max-width:640px}
+  .label{font-size:12px;letter-spacing:.1em;color:var(--mute);text-transform:uppercase;
+         margin-bottom:10px}
+  .proof{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+         padding:22px 26px;max-width:660px;margin:0 auto;text-align:left}
+  .proof .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .proof .head .ok{color:var(--green);font-size:13px}
+  .proof pre{margin:0;font:13px/2 var(--mono);color:var(--dim);overflow-x:auto}
+  .proof pre b{color:var(--text);font-weight:500}
+  .proof pre .u{color:var(--green)}
+  .proof pre .h{color:var(--gold)}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}
+  .card h3{margin:0 0 8px;font-size:16px;font-weight:600}
+  .card p{margin:0;color:var(--dim);font-size:14.5px}
+  .card .ic{font-size:22px;color:var(--accent);margin-bottom:12px}
+  .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+  .num{background:var(--panel);border-radius:10px;padding:18px 20px}
+  .num .k{font-size:12.5px;color:var(--mute)}
+  .num .v{font-size:26px;font-weight:600;margin-top:2px}
+  .num .v small{font-size:14px;color:var(--dim);font-weight:400}
+  .code{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:20px 24px;font:13.5px/1.8 var(--mono);color:var(--dim);overflow-x:auto;
+        white-space:pre}
+  .code .c{color:var(--mute)} .code .k{color:var(--accent)} .code .s{color:var(--green)}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+  @media(max-width:760px){.split{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--mute);font-weight:500;font-size:12.5px;letter-spacing:.05em;
+     text-transform:uppercase}
+  td b{font-weight:600;color:var(--green)}
+  .quote{max-width:680px;margin:0 auto;text-align:center;font-size:19px;line-height:1.6;
+         color:var(--dim);font-family:Georgia,serif;font-style:italic}
+  .quote em{color:var(--text);font-style:normal}
+  .docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+  .doc{border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:block;
+       color:var(--text)}
+  .doc:hover{border-color:var(--accent);text-decoration:none}
+  .doc .t{font-size:14px;font-weight:500}
+  .doc .d{font-size:12.5px;color:var(--mute);margin-top:2px}
+  footer{border-top:1px solid var(--line);padding:44px 0 60px;margin-top:30px}
+  .partner{display:flex;justify-content:space-between;align-items:center;gap:20px;
+           flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);
+           border-radius:12px;padding:26px 30px;margin-bottom:36px}
+  .partner h3{margin:0 0 4px;font-size:17px}
+  .partner p{margin:0;color:var(--dim);font-size:14px}
+  .foot{display:flex;justify-content:space-between;color:var(--mute);font-size:13px;
+        flex-wrap:wrap;gap:10px}
+  .center{text-align:center}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="logo" href="#">DAS<span>.</span></a>
+  <div class="links">
+    <a href="#how">How it works</a>
+    <a href="#measured">Benchmarks</a>
+    <a href="#docs">Docs</a>
+    <a href="https://github.com/DDMX2022/das-framework">GitHub</a>
+    <a class="btn primary" href="#partner">Book a demo</a>
+  </div>
+</div></nav>
+
+<header class="hero wrap">
+  <div class="badge">v0.2.0 · open core · MIT</div>
+  <h1>Add, remove, and audit AI capabilities — without touching what's already certified</h1>
+  <p>DAS runs your specialists as a governed fleet: isolated experts behind a router,
+     every change proven byte-identical, every privileged action in a tamper-evident
+     audit chain your compliance team verifies offline.</p>
+  <div class="cta">
+    <a class="btn primary" href="#demo">Watch a fleet grow live</a>
+    <a class="btn" href="#how">Deploy from one YAML</a>
+  </div>
+</header>
+
+<section id="demo" class="wrap center">
+  <div class="proof">
+    <div class="head">
+      <span class="label" style="margin:0">The demo no one else shows</span>
+      <span class="ok">✓ audit chain verified</span>
+    </div>
+    <pre id="proofpre">$ grow finance --tenant medico --stage seed
+
+training adapter on teacher lessons…
+
+<b>existing experts, before → after:</b>
+legal    <span class="h">6ebeef17b8b1dd41…</span> → <span class="h">6ebeef17b8b1dd41…</span>  <span class="u">UNCHANGED</span>
+medical  <span class="h">8a9ab46615c54d60…</span> → <span class="h">8a9ab46615c54d60…</span>  <span class="u">UNCHANGED</span>
+finance  <span class="h">68c653ce36e888cf…</span>  (new · seed · eval acc 1.000)
+
+audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
+  </div>
+  <p style="color:var(--mute);font-size:13.5px;margin-top:14px">
+    Real output. Every expert is a LoRA adapter on a frozen transformer's own attention
+    layers — growing one is real fine-tuning, and the others don't move a byte.
+  </p>
+</section>
+
+<section class="wrap">
+  <div class="grid3">
+    <div class="card">
+      <div class="ic">⬚</div>
+      <h3>Isolation, proven</h3>
+      <p>Experts share nothing trainable. Grow or delete one, and every other expert
+         is re-proven byte-identical by SHA-256 fingerprint — on every change, recorded
+         in the audit entry.</p>
+    </div>
+    <div class="card">
+      <div class="ic">⟁</div>
+      <h3>Growth, earned</h3>
+      <p>New capacity trains as a candidate in quarantine and ships only if it clears
+         an accuracy floor and a minimum improvement. Saturated experts stay small —
+         the parsimony gate refuses capacity that isn't needed.</p>
+    </div>
+    <div class="card">
+      <div class="ic">⛁</div>
+      <h3>History, verifiable</h3>
+      <p>HMAC- or Ed25519-signed audit chain, bound to the weights across restarts,
+         rollback-detected via a freshness anchor — and exported as a bundle an auditor
+         verifies offline, without trusting you.</p>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="wrap">
+  <div class="label">How it works</div>
+  <h2>One spec. One command. A governed fleet.</h2>
+  <p class="sub">Declare tenants, experts, users, and an escalation policy. <code style="font-family:var(--mono);font-size:14px">das deploy</code> stands
+     it up with every guarantee attached — locally, in Docker, or on Kubernetes.</p>
+  <div class="split">
+    <div class="code"><span class="c"># client.yaml</span>
+<span class="k">client:</span> acme
+<span class="k">backend:</span> lora-minilm
+<span class="k">tenants:</span>
+  - <span class="k">name:</span> legalco
+    <span class="k">experts:</span> [{<span class="k">name:</span> legal}]
+  - <span class="k">name:</span> medico
+    <span class="k">experts:</span> [{<span class="k">name:</span> medical}]
+<span class="k">users:</span>
+  - {<span class="k">name:</span> care-agent, <span class="k">role:</span> operator,
+     <span class="k">tenant:</span> medico}
+<span class="k">escalation:</span>
+  {<span class="k">frontier_llm:</span> claude-sonnet-5,
+   <span class="k">confidence_threshold:</span> 0.7}</div>
+    <div class="code">$ das deploy client.yaml --save state/
+
+$ python
+&gt;&gt;&gt; dep.route(<span class="s">"care-agent"</span>,
+...   <span class="s">"MRI scan blocked pending urgent review"</span>)
+{expert: <span class="s">'medical'</span>, decision: <span class="s">'local'</span>}
+
+&gt;&gt;&gt; dep.grow(<span class="s">"root"</span>, <span class="s">"medico"</span>, <span class="s">"insurance"</span>,
+...          stage=<span class="s">"seed"</span>)   <span class="c"># others proven untouched</span>
+&gt;&gt;&gt; dep.germinate(<span class="s">"root"</span>, eid=2)  <span class="c"># promote only if earned</span>
+&gt;&gt;&gt; dep.offboard(<span class="s">"legalco"</span>)  <span class="c"># provable deletion</span>
+&gt;&gt;&gt; dep.export_bundle(<span class="s">"acme_audit.json"</span>)</div>
+  </div>
+  <p class="sub" style="margin-top:22px">Queries the fleet can answer stay local on small,
+     isolated experts; low-confidence queries escalate to your frontier LLM. The routing
+     decision is the cost-deflection signal — measured per query, tallied per fleet.</p>
+</section>
+
+<section id="measured" class="wrap">
+  <div class="label">Measured, honestly</div>
+  <h2>Every number traces to a runnable benchmark</h2>
+  <p class="sub">Including the ones that don't flatter us. Two of our own curriculum designs
+     were killed by measurement and are documented in the benchmarks so they don't come back.</p>
+  <div class="nums" style="margin-bottom:28px">
+    <div class="num"><div class="k">routing floor (CPU, p50)</div><div class="v">7 <small>ms/query</small></div></div>
+    <div class="num"><div class="k">seed expert</div><div class="v">770 <small>params</small></div></div>
+    <div class="num"><div class="k">batched throughput</div><div class="v">1 <small>ms/text</small></div></div>
+    <div class="num"><div class="k">tests passing</div><div class="v">225</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Curriculum</th><th>Head only (seed)</th><th>Rank-1 adapter</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>Topical text (lexical label)</td><td><b>1.00</b></td><td>1.00</td>
+          <td>adapters are pure cost — growth refused</td></tr>
+      <tr><td>Word order (identical vocabulary)</td><td>0.71</td><td><b>1.00</b></td>
+          <td>the first rung is real</td></tr>
+      <tr><td>Negation × valence (XOR)</td><td>0.90</td><td><b>1.00</b></td>
+          <td>a second real rung; above rank 1 buys nothing</td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--mute);font-size:13.5px;margin-top:14px">
+    3 seeds, train/eval vocabulary disjoint —
+    <a href="https://github.com/DDMX2022/das-framework/blob/main/benchmarks/lora_rank_bench.py">lora_rank_bench.py</a> ·
+    <a href="https://github.com/DDMX2022/das-framework/blob/main/benchmarks/lora_latency_bench.py">lora_latency_bench.py</a> ·
+    <a href="https://github.com/DDMX2022/das-framework/blob/main/benchmarks/governance_benchmark.py">governance_benchmark.py</a>
+  </p>
+</section>
+
+<section class="wrap">
+  <p class="quote">"DAS is not a smarter model. Against per-task adapters it <em>ties</em> on
+     isolation — we publish the benchmark that says so. What you're buying is everything
+     around the adapters: <em>the governance plane you'd otherwise build yourself.</em>"</p>
+</section>
+
+<section id="docs" class="wrap">
+  <div class="label">For the buying committee</div>
+  <h2>Your auditor gets artifacts, not promises</h2>
+  <p class="sub">Security review with findings and mitigations, threat model, control-to-test
+     traceability, an operations runbook, and a reference deployment with TLS + OIDC in front.</p>
+  <div class="docs">
+    <a class="doc" href="https://github.com/DDMX2022/das-framework/blob/main/docs/SECURITY_REVIEW.md">
+      <div class="t">Security review</div><div class="d">findings F1–F7, mitigations, residual risk</div></a>
+    <a class="doc" href="https://github.com/DDMX2022/das-framework/blob/main/docs/THREAT_MODEL.md">
+      <div class="t">Threat model</div><div class="d">control → test traceability</div></a>
+    <a class="doc" href="https://github.com/DDMX2022/das-framework/blob/main/docs/RUNBOOK.md">
+      <div class="t">Operations runbook</div><div class="d">backup, restore, rollback detection, key custody</div></a>
+    <a class="doc" href="https://github.com/DDMX2022/das-framework/blob/main/deploy/gateway/README.md">
+      <div class="t">Reference gateway</div><div class="d">nginx TLS + OIDC, trusted-proxy contract</div></a>
+    <a class="doc" href="https://github.com/DDMX2022/das-framework/blob/main/docs/PLATFORM_PLAN.md">
+      <div class="t">Platform plan</div><div class="d">strategy, hardening ledger, honest gaps</div></a>
+    <a class="doc" href="https://github.com/DDMX2022/das-framework/blob/main/CHANGELOG.md">
+      <div class="t">Changelog</div><div class="d">current release: v0.2.0</div></a>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <div class="partner" id="partner">
+    <div>
+      <h3>Running a multi-tenant or regulated fleet?</h3>
+      <p>The design-partner program is open — bring a real workload, keep the audit bundle.
+         Integrators and internal platform teams first.</p>
+    </div>
+    <a class="btn primary" href="https://github.com/DDMX2022/das-framework#readme">Become a design partner</a>
+  </div>
+  <div class="foot">
+    <span>DAS — dynamically assembled specialists · MIT core</span>
+    <span><a href="https://github.com/DDMX2022/das-framework">GitHub</a> ·
+          <a href="https://github.com/DDMX2022/das-framework/releases/tag/v0.2.0">v0.2.0</a></span>
+  </div>
+</div></footer>
+
+</body>
+</html>
