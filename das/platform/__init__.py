@@ -42,6 +42,20 @@ from .germination import (
     stage_dims,
     stage_of,
 )
+from .lora_expert import (          # LoRA-on-MiniLM experts; heavy deps load
+    MiniLMLoRABackbone,             # lazily, so this import stays NumPy-only
+    MiniLMLoRAForest,
+    MiniLMLoRALeaf,
+    MiniLMLoRATrainer,
+    RankGerminator,
+    RANK_STAGE_NAMES,
+    TextLessonBatch,
+    TopicRiskTextTeacher,
+    WordOrderCurriculumTeacher,
+    XorNegationTeacher,
+    rank_stage_of,
+    stage_rank,
+)
 from .deploy import Deployment, deploy
 from .bundle import write_bundle
 from .license import License, LicenseError, issue_license, load_license, verify_license
@@ -73,6 +87,18 @@ __all__ = [
     "STAGE_NAMES",
     "stage_dims",
     "stage_of",
+    "MiniLMLoRABackbone",
+    "MiniLMLoRAForest",
+    "MiniLMLoRALeaf",
+    "MiniLMLoRATrainer",
+    "RankGerminator",
+    "RANK_STAGE_NAMES",
+    "TextLessonBatch",
+    "TopicRiskTextTeacher",
+    "WordOrderCurriculumTeacher",
+    "XorNegationTeacher",
+    "rank_stage_of",
+    "stage_rank",
     "Deployment",
     "deploy",
     "write_bundle",

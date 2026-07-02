@@ -266,23 +266,34 @@ deploys it there.
   `AlignedVectorTeacher` by default; Ollama/OpenAI-compatible LLM teachers via
   `register_teacher`), and `dep.improve(…)` runs the full Growing-Child loop —
   candidate in quarantine, accuracy floor + no-regression policy, accept/reject,
-  audited as `growth_update`/`growth_rejected`. What remains aspirational is the
-  *substance* of the expert: it is still a routing/scoring head, not a language
-  model — see the pulled-forward Phase-1 item below.
-- **Pulled forward from PRODUCT_PLAN Phase 1 (top of backlog):** experts as
-  **LoRA adapters on a frozen HF transformer** behind the same `train_fn` seam.
-  Kills the "experts are synthetic" objection: growing an expert becomes real
-  adapter fine-tuning (teacher generates corpus → adapter trains → policy gates),
-  with every governance guarantee unchanged (control plane is backend-agnostic).
+  audited as `growth_update`/`growth_rejected`. The *substance* objection —
+  "the expert is a scoring head, not a language model" — is answered by the
+  pulled-forward Phase-1 item below: the default trainer stays NumPy, and the
+  LoRA-on-MiniLM trainer plugs in behind the same seam.
+- **Pulled forward from PRODUCT_PLAN Phase 1 — now built**
+  ([`das/platform/lora_expert.py`](../das/platform/lora_expert.py)): experts as
+  **LoRA adapters on MiniLM's own attention layers** (all 6 layers'
+  query/value projections) behind the same `train_fn` seam. Growing an expert
+  is real adapter fine-tuning (teacher generates a text corpus → adapter
+  trains → policy gates), and every governance guarantee is unchanged —
+  `MiniLMLoRAForest` duck-types `DASForest`, so the UNMODIFIED ControlPlane
+  proves byte-identical isolation on graft/prune over transformer experts
+  (tests/test_lora_minilm.py). Germination is a **rank ladder** (seed r=0
+  head-only → sprout r=1 → … → tree r=8) with the same earned-promotion gate,
+  measured honestly (benchmarks/lora_rank_bench.py): topical text saturates at
+  rank 0 (growth refused — parsimony); compositional labels (word order,
+  negation×valence) are the real first rung (0.71→1.00, 0.90→1.00); above
+  rank 1 buys nothing and can destabilize (rank 8 worst seed 0.47). Lessons
+  are template-teacher text — real labeled design-partner data remains open.
 - **Reference connectors** (`Static`, `Callable`, `Rest`) define the seam; the
   client-specific SQL/vector integration is still the FDE's ~50 lines.
   **Real-text semantics now exist behind the same seam** (`[hf]` extra):
   `MiniLMContextSource` routes real text through a frozen MiniLM encoder and
   `RealTextLessonEncoder` puts LLM-teacher lessons in the same geometry — plus
   `HierarchicalDASNode` slots the specialty tree under LangGraph with two-level
-  provenance and per-branch escalation. Remaining Phase-1 substance: LoRA
-  adapters on the transformer's own attention layers, real labeled lesson data
-  (design-partner gated), and a latency SLA at scale.
+  provenance and per-branch escalation. With attention-layer LoRA experts now
+  built (above), the remaining Phase-1 substance is real labeled lesson data
+  (design-partner gated) and a latency SLA at scale.
 - **Cost deflection is now measured**: [`benchmarks/cost_bench.py`](../benchmarks/cost_bench.py)
   sweeps the escalation threshold and reports deflection %, answer quality, and
   `$ / 1k` vs a 100%-frontier baseline — including the honest trade-off (aggressive
