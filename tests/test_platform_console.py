@@ -104,3 +104,65 @@ def test_audit_endpoint_verifies(client):
     j = client.get("/api/deployments/northwind/audit").get_json()
     assert j["verify"]["ok"] is True
     assert j["entries"]  # init + grafts + user adds
+
+
+# ── authentication (PLATFORM_PLAN §10.2) ─────────────────────────────────────
+
+@pytest.fixture
+def auth_client():
+    """Console with login configured: the session user IS the RBAC principal."""
+    from werkzeug.security import generate_password_hash
+    pc.app.config["TESTING"] = True
+    pc.DEPLOYMENTS.clear()
+    pc.STATS.clear()
+    pc._bootstrap()
+    pc.USERS = {"care-agent": generate_password_hash("care-pw"),
+                "root": generate_password_hash("root-pw")}
+    pc.AUTH = True
+    pc.app.secret_key = "test-session-secret"
+    yield pc.app.test_client()
+    pc.USERS = {}
+    pc.AUTH = False
+
+
+def _login(c, user, pw):
+    return c.post("/login", data={"username": user, "password": pw})
+
+
+def test_auth_blocks_anonymous(auth_client):
+    assert auth_client.get("/api/deployments").status_code == 401
+    page = auth_client.get("/")
+    assert page.status_code == 302 and "/login" in page.headers["Location"]
+
+
+def test_login_logout_flow(auth_client):
+    assert _login(auth_client, "care-agent", "wrong").status_code == 401
+    assert _login(auth_client, "ghost", "care-pw").status_code == 401
+    assert _login(auth_client, "care-agent", "care-pw").status_code == 302
+    me = auth_client.get("/api/me").get_json()
+    assert me == {"auth": True, "actor": "care-agent"}
+    assert auth_client.get("/api/deployments").status_code == 200
+    auth_client.post("/logout")
+    assert auth_client.get("/api/deployments").status_code == 401
+
+
+def test_session_actor_beats_body_actor(auth_client):
+    """The whole point of §10.2: identity is the session, not a request field.
+    care-agent is tenant-scoped to 'careplus'; a body claiming to be root must
+    not let them graft into 'fintrust'."""
+    _login(auth_client, "care-agent", "care-pw")
+    r = auth_client.post("/api/deployments/northwind/grow",
+                         json={"actor": "root", "tenant": "fintrust",
+                               "name": "smuggled"})
+    assert r.status_code == 403 and r.get_json()["denied"] is True
+    # ...and the same principal CAN act inside their own tenant
+    r = auth_client.post("/api/deployments/northwind/route",
+                         json={"actor": "root",
+                               "query": "mri claim denied appeal"})
+    assert r.status_code == 200
+
+
+def test_bad_users_config_refused(monkeypatch):
+    monkeypatch.setenv("DAS_CONSOLE_USERS", '["not", "a", "mapping"]')
+    with pytest.raises(SystemExit):
+        pc._load_users()

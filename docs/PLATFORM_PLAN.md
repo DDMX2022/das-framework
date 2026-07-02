@@ -251,8 +251,12 @@ deploys it there.
    unconditionally at the gateway; `deploy/k8s.yaml` upgraded to the same
    contract (production guards, file-mounted secrets, anchor on its own PVC,
    Ingress stub with the header-injection snippet).
-2. **Platform-console authentication** — currently a local/demo surface with no
-   authn; needs login + the hardened API as its backend before exposure.
+2. ~~Platform-console authentication~~ **— done**: session login
+   (`DAS_CONSOLE_USERS(_FILE)` with werkzeug hashes + `DAS_CONSOLE_SECRET`),
+   and the logged-in user IS the RBAC principal — the client-supplied
+   "actor" field is ignored whenever auth is on (tested: a tenant-scoped
+   operator claiming root in the body is still denied cross-tenant).
+   Open mode survives for local demos; `DAS_ENV=production` refuses it.
 3. ~~Vendor console stays internal-only~~ **— documented**
    ([RUNBOOK.md §5](RUNBOOK.md)): never leaves the vendor network, the token
    is defense-in-depth not the boundary, key custody per the runbook's §4.

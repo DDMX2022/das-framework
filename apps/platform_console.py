@@ -16,16 +16,23 @@ ControlPlane — the same guarantees as `das deploy`, with a UI on top.
 Run:
     python apps/platform_console.py           # http://localhost:5090
 
-This is the FDE's local console over in-process deployments (a POC/demo surface,
-like the other apps/ demos). The hardened, single-fleet serving unit remains
-apps/governance_api.py — see docs/SECURITY_REVIEW.md before exposing anything.
+Authentication (PLATFORM_PLAN §10.2): set DAS_CONSOLE_USERS(_FILE) to a JSON
+object {username: password_hash} (mint hashes with
+`python apps/platform_console.py hash-password`) plus DAS_CONSOLE_SECRET(_FILE)
+for session signing, and the console requires login — the logged-in user IS
+the RBAC principal on every governed call (a client-supplied "actor" field is
+ignored). Unset = the open local demo mode it always was, loudly logged;
+DAS_ENV=production refuses to start that way. The hardened, single-fleet
+serving unit remains apps/governance_api.py — see docs/SECURITY_REVIEW.md.
 """
 import io
 import json
 import os
 import threading
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import (Flask, jsonify, redirect, render_template,
+                   render_template_string, request, send_file, session)
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from das.governance import AccessDenied
 from das.platform import ClientSpec, LicenseError, SpecError, deploy
@@ -83,6 +90,119 @@ SECRET = os.environ.get("DAS_AUDIT_SECRET", "console-dev-secret")
 # Resolved once at boot per the trust model: a verified License, or None for
 # evaluation mode. A configured-but-invalid license fails the console closed.
 LICENSE = load_license()
+
+# ── authentication (SECURITY_REVIEW / PLATFORM_PLAN §10.2) ────────────
+# The console principal IS the RBAC principal: when auth is configured, every
+# governed call runs as the LOGGED-IN user (the session), never as a
+# client-supplied "actor" field — the same stance the gateway takes with
+# X-DAS-Actor. Without configured users the console stays the open local demo
+# surface it always was, and the boot log says so loudly; DAS_ENV=production
+# refuses to start that way.
+
+
+def _read_secret(name):
+    """F6: prefer a mounted-file secret (`{name}_FILE`) over the env var."""
+    path = os.environ.get(name + "_FILE")
+    if path:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read().strip()
+    return os.environ.get(name)
+
+
+def _load_users():
+    """DAS_CONSOLE_USERS(_FILE): a JSON object {username: password_hash} with
+    werkzeug hashes — mint entries with `python apps/platform_console.py
+    hash-password`. Usernames should match the RBAC users in the client specs
+    (that is what tenant scoping is enforced on)."""
+    raw = _read_secret("DAS_CONSOLE_USERS")
+    if not raw:
+        return {}
+    users = json.loads(raw)
+    if not isinstance(users, dict) or not users or \
+            not all(isinstance(v, str) and v for v in users.values()):
+        raise SystemExit("DAS_CONSOLE_USERS must be a non-empty JSON object "
+                         "{username: password_hash}")
+    return users
+
+
+ENV = os.environ.get("DAS_ENV", "development").lower()
+USERS = _load_users()
+AUTH = bool(USERS)
+_session_secret = _read_secret("DAS_CONSOLE_SECRET")
+app.secret_key = _session_secret or os.urandom(32)   # ephemeral: dev only
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
+
+if ENV == "production" and not (AUTH and _session_secret):
+    raise SystemExit(
+        "platform console REFUSES TO START (DAS_ENV=production): set "
+        "DAS_CONSOLE_USERS(_FILE) [JSON {user: password_hash}] and "
+        "DAS_CONSOLE_SECRET(_FILE) [session-signing secret] — an "
+        "unauthenticated console must never be exposed (PLATFORM_PLAN §10.2)")
+
+LOGIN_HTML = """<!doctype html><html><head><title>DAS Console — sign in</title>
+<style>body{background:#0d1117;color:#e6edf3;font:14px -apple-system,sans-serif;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+form{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:28px;
+width:300px}h1{font-size:16px;margin:0 0 14px}input{width:100%;margin:5px 0;
+padding:8px;background:#21262d;color:#e6edf3;border:1px solid #30363d;
+border-radius:6px;box-sizing:border-box}button{width:100%;margin-top:10px;
+padding:8px;background:#1f6feb;color:#fff;border:0;border-radius:6px;
+cursor:pointer}.err{color:#f85149;font-size:13px;min-height:18px}</style>
+</head><body><form method="post" action="/login">
+<h1>DAS Platform Console</h1><div class="err">{{ error or "" }}</div>
+<input name="username" placeholder="username" autofocus autocomplete="username">
+<input name="password" type="password" placeholder="password"
+       autocomplete="current-password">
+<button type="submit">Sign in</button></form></body></html>"""
+
+
+def _actor(body, default="root"):
+    """The RBAC principal for a governed call: the session user when auth is
+    on (client-supplied 'actor' is IGNORED — identity is not a request
+    parameter), else the demo behaviour (body actor, defaulting to root)."""
+    if AUTH:
+        return session["actor"]
+    a = body.get("actor", default)
+    return a if a is not None else default
+
+
+@app.before_request
+def _require_login():
+    if not AUTH:
+        return None
+    if request.path == "/login" or "actor" in session:
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "authentication required", "login": "/login"}), 401
+    return redirect("/login")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not AUTH:
+        return redirect("/")
+    if request.method == "GET":
+        return render_template_string(LOGIN_HTML, error=None)
+    user = request.form.get("username", "")
+    pw = request.form.get("password", "")
+    stored = USERS.get(user)
+    if stored is None or not check_password_hash(stored, pw):
+        return render_template_string(LOGIN_HTML, error="invalid credentials"), 401
+    session.clear()
+    session["actor"] = user
+    return redirect("/")
+
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    return redirect("/login") if AUTH else redirect("/")
+
+
+@app.get("/api/me")
+def me():
+    return jsonify({"auth": AUTH,
+                    "actor": session.get("actor") if AUTH else None})
 
 
 def _register(dep):
@@ -201,7 +321,7 @@ def deployment_detail(client):
 @app.post("/api/deployments/<client>/route")
 def route(client):
     body = request.get_json(silent=True) or {}
-    actor = body.get("actor", "root")
+    actor = _actor(body)
     query = body.get("query", "")
     if not query:
         return jsonify({"error": "missing 'query'"}), 400
@@ -221,7 +341,7 @@ def route(client):
 @app.post("/api/deployments/<client>/grow")
 def grow(client):
     body = request.get_json(silent=True) or {}
-    actor = body.get("actor", "root")
+    actor = _actor(body)
     tenant, name = body.get("tenant"), body.get("name")
     if not tenant or not name:
         return jsonify({"error": "need 'tenant' and 'name'"}), 400
@@ -253,7 +373,7 @@ def grow(client):
 @app.post("/api/deployments/<client>/improve")
 def improve(client):
     body = request.get_json(silent=True) or {}
-    actor = body.get("actor", "root")
+    actor = _actor(body)
     if body.get("eid") is None:
         return jsonify({"error": "need 'eid'"}), 400
     dep, lock = _get(client)
@@ -274,7 +394,7 @@ def improve(client):
 @app.post("/api/deployments/<client>/germinate")
 def germinate(client):
     body = request.get_json(silent=True) or {}
-    actor = body.get("actor", "root")
+    actor = _actor(body)
     if body.get("eid") is None:
         return jsonify({"error": "need 'eid'"}), 400
     dep, lock = _get(client)
@@ -317,7 +437,7 @@ def offboard(client):
         return lock
     with lock:
         try:
-            result = dep.offboard(tenant, actor=body.get("actor"))
+            result = dep.offboard(tenant, actor=_actor(body, default=None))
         except AccessDenied as e:
             return jsonify({"error": str(e), "denied": True}), 403
         return jsonify({**result, "audit_ok": dep.verify()["ok"]})
@@ -349,6 +469,23 @@ def bundle(client):
 _bootstrap()
 
 if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "hash-password":
+        # mint a DAS_CONSOLE_USERS entry: {"<user>": "<printed hash>"}
+        import getpass
+        pw = getpass.getpass("password: ")
+        if pw != getpass.getpass("again: "):
+            raise SystemExit("passwords do not match")
+        print(generate_password_hash(pw))
+        raise SystemExit(0)
     port = int(os.environ.get("DAS_CONSOLE_PORT", "5090"))
     print(f"DAS Platform Console — http://localhost:{port}")
+    if AUTH:
+        print(f"  authentication: ON ({len(USERS)} console users; "
+              f"session actor = RBAC principal)")
+    else:
+        print("  authentication: OFF — open local demo mode. Anyone reaching "
+              "this port acts as any RBAC principal. Set "
+              "DAS_CONSOLE_USERS(_FILE) + DAS_CONSOLE_SECRET(_FILE) before "
+              "any network exposure (DAS_ENV=production enforces this).")
     app.run(host="127.0.0.1", port=port, debug=False)

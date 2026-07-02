@@ -99,6 +99,7 @@ tr:last-child td{border-bottom:none}
       <div class="tab active" data-tab="overview" onclick="setTab('overview')">Overview</div>
       <div class="tab" data-tab="route" onclick="setTab('route')">Route console</div>
       <div class="tab" data-tab="audit" onclick="setTab('audit')">Audit</div>
+      <span id="whoami" style="margin-left:10px;color:var(--muted);font-size:12px"></span>
     </div>
   </header>
 
@@ -261,6 +262,11 @@ function renderRouteCards(){
 }
 
 function fillActors(){
+  if (ME && ME.auth) {   // identity is the session, not a dropdown choice
+    $('r-actor').innerHTML = `<option>${esc(ME.actor)}</option>`;
+    $('r-actor').disabled = true;
+    return;
+  }
   $('r-actor').innerHTML = Object.keys(DETAIL.users).map(u=>`<option>${esc(u)}</option>`).join('');
 }
 
@@ -422,6 +428,16 @@ async function loadLicense(){
   }catch(e){ $('licfoot').textContent = 'license status unavailable'; }
 }
 
-refreshList(); loadLicense();
+let ME = null;
+async function loadMe(){
+  ME = await api('/api/me');
+  if (ME.auth) {
+    $('whoami').innerHTML = `signed in as <b>${esc(ME.actor)}</b> ·
+      <a href="#" style="color:var(--muted)"
+         onclick="fetch('/logout',{method:'POST'}).then(()=>location='/login');return false">
+        sign out</a>`;
+  }
+}
+loadMe().then(()=>{ refreshList(); loadLicense(); });
 </script>
 </body></html>
