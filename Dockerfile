@@ -12,7 +12,13 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY das/ ./das/
 COPY das_torch.py das_text.py ./
-RUN pip install --no-cache-dir ".[web,platform]"
+# Default: the small torch-free governance image. Build with
+#   --build-arg DAS_EXTRAS=web,platform,hf
+# for the LoRA-on-MiniLM expert backend (`backend: lora-minilm` in the spec) —
+# the image grows by the torch/sentence-transformers footprint, nothing else
+# changes: same entrypoint, same guarantees, same API.
+ARG DAS_EXTRAS=web,platform
+RUN pip install --no-cache-dir ".[${DAS_EXTRAS}]"
 
 COPY apps/governance_api.py ./
 COPY deploy/entrypoint.sh /usr/local/bin/das-entrypoint

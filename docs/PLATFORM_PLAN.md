@@ -253,8 +253,9 @@ deploys it there.
    Ingress stub with the header-injection snippet).
 2. **Platform-console authentication** — currently a local/demo surface with no
    authn; needs login + the hardened API as its backend before exposure.
-3. **Vendor console stays internal-only** (it holds the signing key) — VPN/private
-   network policy, documented.
+3. ~~Vendor console stays internal-only~~ **— documented**
+   ([RUNBOOK.md §5](RUNBOOK.md)): never leaves the vendor network, the token
+   is defense-in-depth not the boundary, key custody per the runbook's §4.
 4. ~~Backup/restore runbook~~ **— done** ([`docs/RUNBOOK.md`](RUNBOOK.md)):
    what the state is, the three separations (state ≠ anchor ≠ secrets),
    backup/restore procedure with the `RollbackDetected` semantics spelled

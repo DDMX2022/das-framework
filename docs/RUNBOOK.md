@@ -84,7 +84,27 @@ volume snapshots on your normal schedule.
 * **Anchor storage credential:** must not be writable by the state writer's
   identity — separate IAM principal, ideally WORM.
 
-## 5. What this runbook does not cover
+## 5. Vendor console — network policy (PLATFORM_PLAN §10.3)
+
+`apps/vendor_console.py` holds the **license-signing Ed25519 private key** —
+compromise means an attacker can mint valid licenses for any entitlement.
+Policy, in one breath: **it never leaves the vendor's own network.**
+
+* Run it on an internal-only host or VPN segment; never on a customer site,
+  never on the same host as a customer-facing deployment, never behind a
+  public DNS name. Customers only ever receive the license FILE and pin the
+  public key — nothing about their deployment talks to this console.
+* `DAS_VENDOR_TOKEN` must be set outside local dev (the console gates every
+  `/api` call on it and boots loudly when it's absent); the token is defense
+  in depth, not the boundary — the network is the boundary.
+* The signing key directory (`DAS_VENDOR_DIR`) follows the same custody rules
+  as §4: secret store or encrypted volume, backed up separately from any
+  state, access scoped to the licensing operator role.
+* Revocation and re-issue happen here and ship to customers as files — so
+  losing this host loses convenience, not correctness, PROVIDED the key
+  material was backed up per §4.
+
+## 6. What this runbook does not cover
 
 Multi-writer HA (the control plane is deliberately a single writer — one
 audit chain, one owner), cross-region replication (snapshot shipping works;

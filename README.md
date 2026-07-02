@@ -234,13 +234,20 @@ docker run -p 5070:5070 -v das_state:/data \
 
 In `DAS_ENV=production` the API refuses to start without a non-default audit secret (F3) and a trusted-proxy secret (F2); secrets are read from mounted files (F6), the audit log can be Ed25519-signed (F7) and freshness-anchored (F1), and a per-client rate limit (F5) backs the reverse proxy.
 
-Kubernetes (`Deployment` + `Service` + `PVC` + audit `Secret`):
+For the **LoRA-on-MiniLM expert backend**, build the image with the `[hf]` extra and declare it in the spec — every guarantee and endpoint is unchanged (the control plane is backend-agnostic):
+
+```bash
+docker build --build-arg DAS_EXTRAS=web,platform,hf -t das-governance:hf .
+# client.yaml:  backend: lora-minilm
+```
+
+Kubernetes (`Deployment` + `Service` + `PVC` + secrets + an Ingress stub for TLS/OIDC):
 
 ```bash
 kubectl apply -f deploy/k8s.yaml
 ```
 
-A single replica owns the audit chain (single writer). State persists on the PVC, so the forest and the signed log survive restarts.
+A single replica owns the audit chain (single writer). State persists on the PVC, so the forest and the signed log survive restarts. For real exposure, put the reference **authn gateway** in front ([`deploy/gateway/`](deploy/gateway/README.md) — nginx TLS + oauth2-proxy OIDC wiring the trusted-proxy contract), and operate it per the **backup/restore runbook** ([`docs/RUNBOOK.md`](docs/RUNBOOK.md)).
 
 ---
 
@@ -299,7 +306,7 @@ The defensible home is **governance — auditable, isolated, deletable model fle
 | Phase | Goal | Status |
 |---|---|---|
 | **0 · Foundation** | Credible engineering | ✅ Versioned package, green CI, test suite |
-| **1 · Real backend** | Stop being toy-scale | 🟡 Real frozen pretrained encoder (MiniLM) + real text in the console & demo; LoRA-on-the-transformer + large-model scale remain |
+| **1 · Real backend** | Stop being toy-scale | 🟡 Experts are now **LoRA adapters on MiniLM's own attention layers** (`backend: lora-minilm` — rank-ladder germination, honestly benchmarked, ~7–14 ms/query CPU); large-model scale + GPU serving remain |
 | **2 · Governance control plane** | The product | ✅ Signed audit, RBAC, multi-tenancy, registry, persistence |
 | **3 · Integrations** | Fit existing stacks | 🟡 LangGraph node + Docker/k8s deploy done; HF Hub interop remains |
 | **4 · Prove & launch** | Evidence + GTM | 🟡 Benchmark + case study + self security review done; real design partner, independent audit, open-core 1.0 remain |
