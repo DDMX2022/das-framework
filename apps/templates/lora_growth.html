@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DAS — grow a specialist live (LoRA fleet)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3;
+    --dim: #8b949e; --green: #3fb950; --red: #f85149; --accent: #58a6ff;
+    --gold: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 18px 26px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 13px; }
+  main { display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px;
+         padding: 20px 26px; max-width: 1200px; }
+  section { background: var(--panel); border: 1px solid var(--line);
+            border-radius: 8px; padding: 16px; }
+  section h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
+               letter-spacing: .06em; color: var(--dim); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; }
+  code, .hash { font: 12px ui-monospace, monospace; }
+  .hash { color: var(--gold); }
+  .ok { color: var(--green); } .bad { color: var(--red); }
+  input, select, button { background: #21262d; color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px;
+    font-size: 13px; }
+  button { cursor: pointer; } button:hover { border-color: var(--accent); }
+  button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .row input[type=text] { flex: 1; min-width: 160px; }
+  .proof { margin-top: 10px; font: 12px ui-monospace, monospace; }
+  .proof div { padding: 2px 0; }
+  .banner { margin-top: 10px; padding: 8px 12px; border-radius: 6px;
+            font-weight: 600; display: none; }
+  .banner.good { display: block; background: rgba(63,185,80,.12);
+                 color: var(--green); border: 1px solid var(--green); }
+  .banner.bad  { display: block; background: rgba(248,81,73,.12);
+                 color: var(--red); border: 1px solid var(--red); }
+  .audit { font: 12px ui-monospace, monospace; color: var(--dim);
+           max-height: 220px; overflow-y: auto; }
+  .audit div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .audit .ev { color: var(--accent); }
+  .spin { color: var(--dim); font-size: 12px; display: none; }
+  #routeOut { margin-top: 8px; font-size: 13px; }
+  .full { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Grow a specialist live — LoRA experts on a frozen MiniLM</h1>
+  <p id="meta">loading fleet…</p>
+</header>
+<main>
+  <section class="full">
+    <h2>The fleet <span id="auditBadge"></span></h2>
+    <table>
+      <thead><tr><th>expert</th><th>tenant</th><th>stage</th><th>rank</th>
+        <th>adapter params</th><th>weight hash</th><th></th></tr></thead>
+      <tbody id="fleet"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Route real text</h2>
+    <div class="row">
+      <input type="text" id="query"
+             value="the arbitration clause triggered a security alert">
+      <button class="primary" id="routeBtn">Route</button>
+    </div>
+    <div id="routeOut"></div>
+  </section>
+
+  <section>
+    <h2>Grow a new specialist</h2>
+    <div class="row">
+      <input type="text" id="growName" placeholder="expert name, e.g. finance">
+      <select id="growTenant"></select>
+      <select id="growStage">
+        <option value="seed" selected>seed (rank 0)</option>
+        <option value="sprout">sprout (rank 1)</option>
+        <option value="sapling">sapling (rank 2)</option>
+      </select>
+      <button class="primary" id="growBtn">Grow live</button>
+    </div>
+    <span class="spin" id="growSpin">training the adapter on teacher lessons…</span>
+    <div class="banner" id="growBanner"></div>
+    <div class="proof" id="growProof"></div>
+  </section>
+
+  <section class="full">
+    <h2>Signed audit trail (tail)</h2>
+    <div class="audit" id="audit"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+
+function renderState(s) {
+  $("meta").textContent =
+    `client ${s.client} · backend ${s.backend} · backbone ${s.backbone} · ` +
+    `audit ${s.audit_ok ? "verified" : "BROKEN"} (${s.audit_entries} entries)`;
+  $("auditBadge").innerHTML = s.audit_ok
+    ? '<span class="ok">✓ chain verified</span>'
+    : '<span class="bad">✗ chain broken</span>';
+  $("fleet").innerHTML = s.fleet.map(r => `
+    <tr><td>${r.name}</td><td>${r.tenant}</td><td>${r.stage ?? r.rank}</td>
+        <td>${r.rank}</td><td>${r.params.toLocaleString()}</td>
+        <td class="hash">${r.hash}…</td>
+        <td><button data-eid="${r.eid}" class="germBtn"
+             title="promote only if the expert cannot meet 0.85 at its rank">
+             germinate</button></td></tr>`).join("");
+  const tenants = [...new Set(s.fleet.map(r => r.tenant))];
+  $("growTenant").innerHTML =
+    tenants.map(t => `<option>${t}</option>`).join("");
+  $("audit").innerHTML = s.audit_tail.map(e =>
+    `<div>[${e.seq}] <span class="ev">${e.event}</span> ${e.detail}</div>`
+  ).join("");
+  document.querySelectorAll(".germBtn").forEach(b =>
+    b.onclick = () => germinate(b));
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function refresh() { renderState(await api("/api/state")); }
+
+$("routeBtn").onclick = async () => {
+  const r = await api("/api/route", {query: $("query").value});
+  $("routeOut").innerHTML =
+    `→ <b>${r.expert}</b> (tenant ${r.tenant}, confidence ` +
+    `${r.confidence.toFixed(2)}) — decision: <b>${r.decision}</b>` +
+    (r.frontier_llm ? ` via ${r.frontier_llm}` : "");
+};
+
+$("growBtn").onclick = async () => {
+  const name = $("growName").value.trim();
+  if (!name) return;
+  $("growBtn").disabled = true; $("growSpin").style.display = "inline";
+  $("growBanner").className = "banner"; $("growProof").innerHTML = "";
+  try {
+    const r = await api("/api/grow", {
+      name, tenant: $("growTenant").value, stage: $("growStage").value});
+    $("growProof").innerHTML = r.proof.map(p =>
+      `<div>${p.name.padEnd(12)} ${p.before}… → ${p.after}… ` +
+      (p.unchanged ? '<span class="ok">UNCHANGED</span>'
+                   : '<span class="bad">** MOVED **</span>') + `</div>`
+    ).join("") +
+      `<div>${r.grown.name.padEnd(12)} (new, ${r.grown.stage}, eval acc ` +
+      `${(r.grown.report.eval_accuracy ?? 0).toFixed(3)})</div>`;
+    $("growBanner").className =
+      "banner " + (r.all_unchanged ? "good" : "bad");
+    $("growBanner").textContent = r.all_unchanged
+      ? `'${r.grown.name}' grown live — every existing expert byte-identical`
+      : "isolation violated — an existing expert moved";
+    renderState(r.state);
+  } catch (e) {
+    $("growBanner").className = "banner bad";
+    $("growBanner").textContent = e.message;
+  } finally {
+    $("growBtn").disabled = false; $("growSpin").style.display = "none";
+  }
+};
+
+async function germinate(btn) {
+  btn.disabled = true; btn.textContent = "training…";
+  try {
+    const r = await api("/api/germinate", {eid: +btn.dataset.eid});
+    const res = r.result;
+    $("growBanner").className = "banner " +
+      (res.action === "promoted" ? "good" : "");
+    $("growBanner").className = "banner good";
+    $("growBanner").textContent =
+      res.action === "saturated"
+        ? `parsimony: '${res.expert}' meets target at ${res.stage} ` +
+          `(acc ${res.accuracy.toFixed(3)}) — no growth needed`
+        : res.action === "promoted"
+        ? `'${res.expert}' earned ${res.stage_to} ` +
+          `(acc ${res.accuracy_before.toFixed(3)} → ${res.accuracy_after.toFixed(3)})`
+        : `promotion rejected: ${res.reason}`;
+    renderState(r.state);
+  } catch (e) {
+    $("growBanner").className = "banner bad";
+    $("growBanner").textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "germinate";
+  }
+}
+
+refresh();
+</script>
+</body>
+</html>
