@@ -169,6 +169,16 @@ class SpecKeywordConnector(ContextSource):
             for kw in e.keywords:
                 self._kw.setdefault(kw.lower(), e.name)
 
+    def add_keywords(self, name: str, keywords) -> None:
+        """Extend the keyword map for a (usually newly grown) expert. First
+        declaration of a keyword wins, same as spec parsing."""
+        for kw in keywords:
+            self._kw.setdefault(str(kw).lower(), name)
+
+    def keyword_map(self) -> Dict[str, str]:
+        """A copy of the keyword->expert map (for persistence)."""
+        return dict(self._kw)
+
     def match(self, query: str) -> Optional[str]:
         """Return the expert name whose keywords best match the query text."""
         text = str(query).lower()

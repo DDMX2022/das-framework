@@ -70,6 +70,23 @@ def test_expiry(keys):
     assert not ok and any("expired" in i for i in issues)
 
 
+def test_not_yet_valid_license_rejected(keys):
+    pem, pub = keys
+    t0 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+    doc = _issue(pem, days=365, now=t0)
+    ok, issues = verify_license(doc, pub, now=t0 - datetime.timedelta(days=2))
+    assert not ok and any("not yet valid" in i for i in issues)
+
+
+def test_status_reports_expired_for_long_running_process(keys):
+    pem, pub = keys
+    t0 = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    lic = License.from_doc(_issue(pem, days=30, now=t0), pub, now=t0)
+    s = lic.status(now=t0 + datetime.timedelta(days=40))    # held past expiry
+    assert s["expired"] is True and "EXPIRED" in s["warning"]
+    assert lic.status(now=t0)["expired"] is False
+
+
 def test_from_doc_and_status(keys):
     pem, pub = keys
     t0 = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)

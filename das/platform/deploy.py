@@ -150,11 +150,9 @@ class Deployment:
             dims = stage_dims(self.trainer.d_model, out_dim, stage)
         eid = self.cp.graft(actor, tenant, name, train_fn,
                             seed=self.trainer.seed_for(name), leaf_dims=dims)
-        if keywords:
+        if keywords and isinstance(self.connector, SpecKeywordConnector):
             # extend the demo connector's keyword map so the new expert routes
-            if isinstance(self.connector, SpecKeywordConnector):
-                for kw in keywords:
-                    self.connector._kw.setdefault(kw.lower(), name)
+            self.connector.add_keywords(name, keywords)
         return eid
 
     def improve(self, actor: str, eid: int, teacher=None,
@@ -217,7 +215,7 @@ class Deployment:
         self.teacher_trainer.save_lessons(os.path.join(path, "lessons"))
         if isinstance(self.connector, SpecKeywordConnector):
             with open(os.path.join(path, "keywords.json"), "w", encoding="utf-8") as fh:
-                json.dump(self.connector._kw, fh, indent=2, sort_keys=True)
+                json.dump(self.connector.keyword_map(), fh, indent=2, sort_keys=True)
 
     @classmethod
     def load(cls, path: str, source, secret: Optional[str] = None,
@@ -246,7 +244,7 @@ class Deployment:
         if os.path.exists(kw_path) and isinstance(dep.connector, SpecKeywordConnector):
             with open(kw_path, "r", encoding="utf-8") as fh:
                 for kw, name in json.load(fh).items():
-                    dep.connector._kw.setdefault(kw, name)
+                    dep.connector.add_keywords(name, [kw])
         return dep
 
 
@@ -284,9 +282,10 @@ def deploy(source, secret: Optional[str] = None,
 
     trainer = SyntheticTrainer(spec.d_model, spec.resolved_leaf_dims())
 
-    # Seed the ControlPlane over the first declared expert of the first tenant.
+    # Seed the ControlPlane over the first declared expert of the first tenant
+    # (its spec-level seed override is honoured, same as grafted experts).
     seed_tenant, seed_expert = spec.experts[0]
-    forest = trainer.seed_forest(seed_expert.name)
+    forest = trainer.seed_forest(seed_expert.name, seed=seed_expert.seed)
     cp = ControlPlane(forest, seed_tenant=seed_tenant, seed_name=seed_expert.name,
                       secret=audit_secret, root=spec.root, private_key=private_key)
 

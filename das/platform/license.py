@@ -168,6 +168,11 @@ def verify_license(doc: Dict[str, Any], public_key: str,
         return False, issues
 
     now = now or _utcnow()
+    issued = _parse_ts(doc["issued_at"], "issued_at")
+    if now < issued:
+        issues.append(f"license not yet valid — issued_at {doc['issued_at']} "
+                      f"is in the future (clock skew or a forged date)")
+        return False, issues
     expires = _parse_ts(doc["expires_at"], "expires_at")
     if now >= expires:
         issues.append(f"license expired at {doc['expires_at']}")
@@ -205,15 +210,23 @@ class License:
         return max(0, delta.days)
 
     def status(self, now: Optional[datetime.datetime] = None) -> Dict[str, Any]:
+        now = now or _utcnow()
         days = self.days_remaining(now)
+        expired = now >= self.expires_at
+        if expired:
+            warning = "license EXPIRED — deploys and grows fail closed; renew"
+        elif days <= GRACE_WARNING_DAYS:
+            warning = f"license expires in {days} days — renew soon"
+        else:
+            warning = None
         return {
             "licensed": True,
+            "expired": expired,          # a long-running console must not lie
             "customer": self.customer,
             "tier": self.tier,
             "expires_at": _fmt_ts(self.expires_at),
             "days_remaining": days,
-            "warning": (f"license expires in {days} days — renew soon"
-                        if days <= GRACE_WARNING_DAYS else None),
+            "warning": warning,
             "entitlements": self.entitlements,
         }
 

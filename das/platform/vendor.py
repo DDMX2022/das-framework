@@ -56,9 +56,10 @@ class VendorStore:
         if not os.path.exists(self.key_path):
             from das.audit import generate_keypair
             pem, pub_hex = generate_keypair()
-            with open(self.key_path, "wb") as fh:
+            # created 0600 from the first byte — no default-perms window
+            fd = os.open(self.key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as fh:
                 fh.write(pem)
-            os.chmod(self.key_path, 0o600)
             with open(self.pub_path, "w", encoding="utf-8") as fh:
                 fh.write(pub_hex + "\n")
         return self.public_key_hex

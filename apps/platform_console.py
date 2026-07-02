@@ -34,7 +34,12 @@ from das.platform.license import evaluation_notice, load_license
 
 app = Flask(__name__)
 
+# LOCK guards the REGISTRY (create/list/lookup); each deployment then has its
+# own lock in LOCKS, so one client's multi-second training op (grow/germinate)
+# no longer serializes every other client's requests (review finding #4).
 LOCK = threading.Lock()
+LOCKS = {}         # client name -> threading.Lock
+PENDING = set()    # client names mid-deploy (name reserved, trained outside LOCK)
 DEPLOYMENTS = {}   # client name -> Deployment
 STATS = {}         # client name -> {"local": int, "escalate": int}
 
@@ -82,6 +87,7 @@ LICENSE = load_license()
 
 def _register(dep):
     DEPLOYMENTS[dep.spec.client] = dep
+    LOCKS.setdefault(dep.spec.client, threading.Lock())
     STATS.setdefault(dep.spec.client, {"local": 0, "escalate": 0})
 
 
@@ -90,11 +96,14 @@ def _bootstrap():
         _register(deploy(spec, secret=SECRET))
 
 
-def _dep_or_404(client):
-    dep = DEPLOYMENTS.get(client)
-    if dep is None:
-        return None, (jsonify({"error": f"no deployment named '{client}'"}), 404)
-    return dep, None
+def _get(client):
+    """Look up a deployment and ITS lock under the registry lock. Returns
+    (dep, lock) or (None, http-error-response)."""
+    with LOCK:
+        dep = DEPLOYMENTS.get(client)
+        if dep is None:
+            return None, (jsonify({"error": f"no deployment named '{client}'"}), 404)
+        return dep, LOCKS[client]
 
 
 def _expert_rows(dep):
@@ -125,10 +134,12 @@ def license_status():
 @app.get("/api/deployments")
 def list_deployments():
     with LOCK:
-        rows = []
-        for name, dep in DEPLOYMENTS.items():
+        items = [(name, dep, LOCKS[name]) for name, dep in DEPLOYMENTS.items()]
+    rows = []
+    for name, dep, dlock in items:
+        with dlock:
             s = dep.summary()
-            rows.append({
+        rows.append({
                 "client": name,
                 "tenants": len(s["tenants"]),
                 "experts": len(s["experts"]),
@@ -138,7 +149,7 @@ def list_deployments():
                 "threshold": s["escalation"]["confidence_threshold"],
                 "stats": dict(STATS[name]),
             })
-        return jsonify({"deployments": rows})
+    return jsonify({"deployments": rows})
 
 
 @app.post("/api/deployments")
@@ -152,25 +163,33 @@ def deploy_client():
     except SpecError as e:
         return jsonify({"error": str(e)}), 400
     with LOCK:
-        if spec.client in DEPLOYMENTS:
+        if spec.client in DEPLOYMENTS or spec.client in PENDING:
             return jsonify({"error": f"deployment '{spec.client}' already exists"}), 409
         try:
             if LICENSE is not None:
-                LICENSE.check_fleet(len(DEPLOYMENTS) + 1)
-            dep = deploy(spec, secret=SECRET, license=LICENSE)
+                LICENSE.check_fleet(len(DEPLOYMENTS) + len(PENDING) + 1)
         except LicenseError as e:
             return jsonify({"error": str(e), "license": True}), 403
+        PENDING.add(spec.client)          # reserve the name, train outside LOCK
+    try:
+        dep = deploy(spec, secret=SECRET, license=LICENSE)
+    except LicenseError as e:
+        return jsonify({"error": str(e), "license": True}), 403
+    finally:
+        with LOCK:
+            PENDING.discard(spec.client)
+    with LOCK:
         _register(dep)
-        return jsonify(dep.summary()), 201
+    return jsonify(dep.summary()), 201
 
 
 # ── per-deployment API ───────────────────────────────────────────────
 @app.get("/api/deployments/<client>")
 def deployment_detail(client):
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         s = dep.summary()
         s["experts"] = _expert_rows(dep)
         s["stats"] = dict(STATS[client])
@@ -186,10 +205,10 @@ def route(client):
     query = body.get("query", "")
     if not query:
         return jsonify({"error": "missing 'query'"}), 400
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         try:
             r = dep.route(actor, query)
         except AccessDenied as e:
@@ -206,10 +225,10 @@ def grow(client):
     tenant, name = body.get("tenant"), body.get("name")
     if not tenant or not name:
         return jsonify({"error": "need 'tenant' and 'name'"}), 400
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         if any(r["name"] == name for r in dep.cp.experts):
             return jsonify({"error": f"expert '{name}' already exists"}), 409
         before = {r["eid"]: dep.cp.forest.leaves[i].weight_hash()
@@ -237,10 +256,10 @@ def improve(client):
     actor = body.get("actor", "root")
     if body.get("eid") is None:
         return jsonify({"error": "need 'eid'"}), 400
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         try:
             result = dep.improve(actor, int(body["eid"]),
                                  teacher=body.get("teacher") or None)
@@ -258,10 +277,10 @@ def germinate(client):
     actor = body.get("actor", "root")
     if body.get("eid") is None:
         return jsonify({"error": "need 'eid'"}), 400
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         try:
             result = dep.germinate(actor, int(body["eid"]),
                                    teacher=body.get("teacher") or None,
@@ -277,10 +296,10 @@ def germinate(client):
 @app.post("/api/deployments/<client>/teachers")
 def register_teacher(client):
     body = request.get_json(silent=True) or {}
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         try:
             return jsonify(dep.register_teacher(body)), 201
         except (ValueError, TypeError) as e:
@@ -293,10 +312,10 @@ def offboard(client):
     tenant = body.get("tenant")
     if not tenant:
         return jsonify({"error": "need 'tenant'"}), 400
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         try:
             result = dep.offboard(tenant, actor=body.get("actor"))
         except AccessDenied as e:
@@ -306,10 +325,10 @@ def offboard(client):
 
 @app.get("/api/deployments/<client>/audit")
 def audit(client):
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         entries = dep.cp.read_audit(dep.spec.root)
         v = dep.verify()
         return jsonify({"entries": entries[-50:], "verify": v})
@@ -317,10 +336,10 @@ def audit(client):
 
 @app.get("/api/deployments/<client>/bundle")
 def bundle(client):
-    with LOCK:
-        dep, err = _dep_or_404(client)
-        if err:
-            return err
+    dep, lock = _get(client)
+    if dep is None:
+        return lock
+    with lock:
         doc = build_bundle(dep)
     buf = io.BytesIO(json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
     return send_file(buf, mimetype="application/json", as_attachment=True,

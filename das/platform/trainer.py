@@ -106,11 +106,13 @@ class SyntheticTrainer:
             forest.router.train_step(Xr[i], dr[i], lr=self.router_lr)
 
     # ── seed + graft hooks ───────────────────────────────────────────
-    def seed_forest(self, seed_name: str) -> DASForest:
+    def seed_forest(self, seed_name: str, seed=None) -> DASForest:
         """Build a one-leaf forest with the seed expert trained. This is what the
-        ControlPlane is constructed over."""
+        ControlPlane is constructed over. ``seed`` honours a spec-level override
+        (ExpertSpec.seed), same as grafted experts."""
         forest = DASForest(self.d_model, self.leaf_dims, num_leaves=1,
-                           seed=_stable_seed("forest:" + seed_name))
+                           seed=seed if seed is not None
+                           else _stable_seed("forest:" + seed_name))
         X, y = self.data(seed_name)
         self._train_leaf(forest.leaves[0], X, y)
         return forest

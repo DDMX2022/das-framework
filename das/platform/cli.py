@@ -97,9 +97,10 @@ def _verify(args):
 def _license_keygen(args):
     from das.audit import generate_keypair
     pem, pub_hex = generate_keypair()
-    with open(args.out, "wb") as fh:
+    # created 0600 from the first byte — no default-perms window
+    fd = os.open(args.out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as fh:
         fh.write(pem)
-    os.chmod(args.out, 0o600)
     _print({"private_key": args.out,
             "public_key_hex": pub_hex,
             "note": "keep the PEM secret (vendor-side only); ship/pin the public "

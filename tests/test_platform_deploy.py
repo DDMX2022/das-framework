@@ -53,6 +53,19 @@ def test_deploy_is_reproducible():
     assert [e["name"] for e in a["experts"]] == [e["name"] for e in b["experts"]]
 
 
+def test_seed_override_honoured_for_first_expert():
+    """Review item #8: ExpertSpec.seed applies to the seed-tenant's first
+    expert too, not only to grafted ones."""
+    base = json.loads(json.dumps(SPEC))
+    seeded = json.loads(json.dumps(SPEC))
+    seeded["tenants"][0]["experts"][0]["seed"] = 4242
+    h_base = deploy(base, secret="s").cp.forest.leaves[0].weight_hash()
+    h_seed = deploy(seeded, secret="s").cp.forest.leaves[0].weight_hash()
+    assert h_base != h_seed                       # the override changed the init
+    h_seed2 = deploy(seeded, secret="s").cp.forest.leaves[0].weight_hash()
+    assert h_seed == h_seed2                      # and stays deterministic
+
+
 def test_routing_hits_the_right_specialist(dep):
     r = dep.route("bank-agent", "unknown recurring card charge from a merchant")
     assert r["expert"] == "card-dispute"
