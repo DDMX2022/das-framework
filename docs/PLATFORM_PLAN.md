@@ -331,8 +331,11 @@ before more building.
    (its own encoder pass); batch-16 amortizes to ~1 / ~2.4 ms per text. A
    real SLA at scale (bigger encoder, GPU, concurrency) still waits for
    partner pull, per PRODUCT_PLAN Phase 1.
-5. **The demo moment on the LoRA fleet** — grow a specialist live in the
-   dashboard while streaming the other experts' unchanged hashes; §8 calls
-   this the moment that closes, now on real adapters.
+5. **The demo moment on the LoRA fleet** — the CLI version is **done**
+   ([`examples/lora_growth_demo.py`](../examples/lora_growth_demo.py)): deploy
+   → real-text routing → grow a specialist live with every other expert's
+   hash streamed unchanged → the parsimony gate refusing a saturated seed →
+   the signed audit trail. The dashboard version (same loop in the web
+   console) remains.
 6. **Design partner** (the standing blocker) — real labeled lessons replace
    template teachers; the cost benchmark reruns on their traffic mix.
