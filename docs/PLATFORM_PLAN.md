@@ -88,6 +88,7 @@ already-proven Control Plane, so its correctness rests on tested foundations.
 | Expert trainer | `das/platform/trainer.py` | pluggable `train_fn`; deterministic default |
 | Compliance bundle | `das/platform/bundle.py` | the FDE "leave-behind" audit artifact |
 | CLI | `das/platform/cli.py` | `das deploy / verify / offboard / bundle` |
+| Console UI | `apps/platform_console.py` | Rancher-style multi-client dashboard over the engine |
 
 ---
 

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "platform-console",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["apps/platform_console.py"],
+      "port": 5090
+    }
+  ]
+}
