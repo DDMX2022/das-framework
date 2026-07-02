@@ -34,7 +34,7 @@
   .btn:hover{border-color:var(--accent);text-decoration:none;transform:translateY(-1px)}
   .btn.primary{background:linear-gradient(180deg,#2b7ff0,#1f6feb);border-color:transparent;color:#fff}
   .btn.primary:hover{filter:brightness(1.12)}
-  .hero{position:relative;padding:96px 0 56px;text-align:center;overflow:hidden}
+  .hero{position:relative;padding:88px 0 36px;text-align:center;overflow:hidden}
   .hero::before{content:"";position:absolute;inset:-40% -20% auto;height:560px;
     background:radial-gradient(600px 340px at 50% 0%,rgba(31,111,235,.22),transparent 70%);
     pointer-events:none}
@@ -47,18 +47,18 @@
   h1 em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--accent2));
         -webkit-background-clip:text;background-clip:text;color:transparent}
   .hero p{max-width:640px;margin:0 auto 32px;color:var(--dim);font-size:17.5px}
-  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:44px}
-  .ticker{display:flex;gap:0;justify-content:center;flex-wrap:wrap;border:1px solid var(--line);
-          border-radius:12px;max-width:720px;margin:0 auto;background:var(--panel);overflow:hidden}
-  .tick{flex:1;min-width:150px;padding:14px 10px;border-right:1px solid var(--line)}
-  .tick:last-child{border-right:0}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px}
+  .ticker{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border:1px solid var(--line);
+          border-radius:12px;max-width:720px;margin:0 auto;background:var(--line);overflow:hidden}
+  .tick{background:var(--panel);padding:14px 10px}
+  @media(max-width:680px){.ticker{grid-template-columns:repeat(2,1fr)}}
   .tick .v{font-size:21px;font-weight:600} .tick .v small{font-size:13px;color:var(--dim);font-weight:400}
   .tick .k{font-size:12px;color:var(--mute)}
-  section{padding:64px 0;scroll-margin-top:72px}
+  section{padding:52px 0;scroll-margin-top:72px}
   .label{font-size:12px;letter-spacing:.14em;color:var(--accent);text-transform:uppercase;
          margin-bottom:12px;font-weight:600}
   h2{font-size:clamp(24px,3.4vw,32px);font-weight:640;margin:0 0 10px;letter-spacing:-.01em}
-  .sub{color:var(--dim);margin:0 0 36px;max-width:680px;font-size:16.5px}
+  .sub{color:var(--dim);margin:0 0 30px;max-width:680px;font-size:16.5px}
   .proof{background:var(--panel);border:1px solid var(--line);border-radius:14px;
          padding:0;max-width:700px;margin:0 auto;text-align:left;overflow:hidden}
   .proof .bar{display:flex;justify-content:space-between;align-items:center;
@@ -81,16 +81,16 @@
       display:flex;align-items:center;justify-content:center;margin-bottom:16px}
   .ic svg{width:20px;height:20px;stroke:var(--accent);fill:none;stroke-width:1.8;
           stroke-linecap:round;stroke-linejoin:round}
-  .feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
   .frow{display:flex;gap:16px;background:var(--panel);border:1px solid var(--line);
-        border-radius:12px;padding:18px 20px}
+        border-radius:12px;padding:20px 22px;align-items:flex-start}
   .frow .fi{flex:0 0 auto;width:34px;height:34px;border-radius:9px;
             background:rgba(139,124,246,.12);display:flex;align-items:center;justify-content:center}
   .frow .fi svg{width:18px;height:18px;stroke:var(--accent2);fill:none;stroke-width:1.8;
                 stroke-linecap:round;stroke-linejoin:round}
   .frow h4{margin:0 0 3px;font-size:14.5px;font-weight:600}
   .frow p{margin:0;font-size:13.5px;color:var(--dim)}
-  .stack{display:flex;align-items:stretch;gap:0;max-width:840px;margin:0 auto;
+  .stack{display:flex;align-items:stretch;gap:0;max-width:840px;margin:6px auto 0;
          flex-wrap:wrap;justify-content:center}
   .snode{background:var(--panel);border:1px solid var(--line);border-radius:12px;
          padding:16px 20px;text-align:center;min-width:170px;flex:1}
@@ -114,7 +114,7 @@
   th.das{background:rgba(31,111,235,.14);color:var(--accent)}
   .yes{color:var(--green);font-weight:600} .no{color:var(--red)} .half{color:var(--gold)}
   td small{color:var(--mute);display:block;font-size:12px;line-height:1.4}
-  .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:30px}
+  .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px}
   .num{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
   .num .k{font-size:12.5px;color:var(--mute)}
   .num .v{font-size:26px;font-weight:640;margin-top:2px}
@@ -173,7 +173,7 @@
   </div>
 </header>
 
-<section id="demo" class="wrap fade">
+<section id="demo" class="wrap fade" style="padding-top:20px">
   <div class="proof">
     <div class="bar">
       <div class="dots"><i></i><i></i><i></i></div>
@@ -195,7 +195,7 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
      layers — growing one is real fine-tuning, and the others don't move a byte.</p>
 </section>
 
-<section class="wrap fade">
+<section class="wrap fade" style="padding-top:24px">
   <div class="grid3">
     <div class="card">
       <div class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
@@ -259,7 +259,7 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
     <div class="snode"><div class="t">Frontier LLM</div><div class="d">only when confidence is low</div></div>
   </div>
 
-  <h2 style="margin-top:64px">The honest comparison</h2>
+  <h2 style="margin-top:56px">The honest comparison</h2>
   <p class="sub">Against per-task adapters we <b style="font-weight:600;color:var(--text)">tie</b> on isolation — we publish the benchmark
      that says so. The right column is what you'd otherwise build yourself.</p>
   <div class="cmp"><table>
@@ -301,7 +301,7 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
     </tbody>
   </table></div>
 
-  <div class="grid3" style="margin-top:44px">
+  <div class="grid3" style="margin-top:40px">
     <div class="card"><h3>Regulated enterprises</h3>
       <p>Health, finance, legal — where "did the certified model change?" is a board-level
          question and the audit bundle is the answer you hand over.</p></div>
@@ -379,7 +379,7 @@ audit[3] graft: 'finance' grafted; prior experts unchanged: True</pre>
   </p>
 </section>
 
-<section class="wrap fade">
+<section class="wrap fade" style="padding:36px 0">
   <p class="quote">"DAS is not a smarter model. Against per-task adapters it <em>ties</em> on
      isolation — we publish the benchmark that says so. What you're buying is everything
      around the adapters: <em>the governance plane you'd otherwise build yourself.</em>"</p>
