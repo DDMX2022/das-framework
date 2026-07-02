@@ -15,6 +15,17 @@ stringData:
   secret: "change-me-in-prod"
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: das-proxy
+type: Opaque
+stringData:
+  # CHANGE THIS. Shared with the authn gateway (nginx/oauth2-proxy or the
+  # Ingress below) — the API only honours X-DAS-Actor on requests that carry
+  # this value in X-DAS-Proxy-Auth (SECURITY_REVIEW F2).
+  secret: "change-me-in-prod-too"
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: das-spec
@@ -76,18 +87,33 @@ spec:
           ports:
             - containerPort: 5070
           env:
+            - name: DAS_ENV           # startup guards: refuse default/absent secrets
+              value: production
             - name: DAS_STATE
               value: /data
+            - name: DAS_ANCHOR        # rollback detection (F1) — NOT on the state PVC
+              value: /anchor/das.anchor
             - name: DAS_PORT
               value: "5070"
             - name: DAS_SPEC          # the front door: deploy this spec on first boot
               value: /spec/client.yaml
-            - name: DAS_AUDIT_SECRET
-              valueFrom:
-                secretKeyRef: { name: das-audit, key: secret }
+            # secrets are file-mounted, not env (F6): env can leak via /proc,
+            # crash dumps, child processes
+            - name: DAS_AUDIT_SECRET_FILE
+              value: /run/das-secrets/audit/secret
+            - name: DAS_TRUSTED_PROXY_SECRET_FILE
+              value: /run/das-secrets/proxy/secret
           volumeMounts:
             - name: state
               mountPath: /data
+            - name: anchor
+              mountPath: /anchor
+            - name: audit-secret
+              mountPath: /run/das-secrets/audit
+              readOnly: true
+            - name: proxy-secret
+              mountPath: /run/das-secrets/proxy
+              readOnly: true
             - name: spec
               mountPath: /spec
               readOnly: true
@@ -106,9 +132,29 @@ spec:
         - name: state
           persistentVolumeClaim:
             claimName: das-state
+        - name: anchor
+          persistentVolumeClaim:
+            claimName: das-anchor
+        - name: audit-secret
+          secret: { secretName: das-audit }
+        - name: proxy-secret
+          secret: { secretName: das-proxy }
         - name: spec
           configMap:
             name: das-spec
+---
+# The anchor gets its OWN claim: if it shared the state volume, whoever can
+# roll back the state could roll back the rollback-evidence too. In production
+# bind this to a storage class the state writer has no access to.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: das-anchor
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 100Mi
 ---
 apiVersion: v1
 kind: Service
@@ -119,3 +165,37 @@ spec:
   ports:
     - port: 80
       targetPort: 5070
+---
+# Ingress stub — TLS via cert-manager + OIDC via oauth2-proxy, mirroring
+# deploy/gateway/. The snippet is what injects the two headers the API
+# requires; without it, production mode rejects every request (F2).
+# Requires: ingress-nginx, cert-manager, and an oauth2-proxy deployment
+# (https://oauth2-proxy.github.io/oauth2-proxy/) in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: das-governance
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt   # CHANGE to your issuer
+    nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-Email"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      auth_request_set $email $upstream_http_x_auth_request_email;
+      proxy_set_header X-DAS-Actor      $email;
+      proxy_set_header X-DAS-Proxy-Auth "PASTE-das-proxy-SECRET-OR-TEMPLATE-IT";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [das.example.com]                    # CHANGE
+      secretName: das-governance-tls
+  rules:
+    - host: das.example.com                       # CHANGE
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: das-governance
+                port: { number: 80 }

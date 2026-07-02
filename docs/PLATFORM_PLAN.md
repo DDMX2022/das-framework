@@ -244,13 +244,23 @@ deploys it there.
 
 ## 10. Backlog — server/production hardening (before any hosted sale)
 
-1. **Gateway reference deployment** — nginx/oauth2-proxy or k8s Ingress + TLS +
-   OIDC in front of the governance API, `DAS_TRUSTED_PROXY_SECRET` wired.
+1. ~~Gateway reference deployment~~ **— done**
+   ([`deploy/gateway/`](../deploy/gateway/README.md)): nginx TLS + oauth2-proxy
+   OIDC via the canonical auth_request pattern, `DAS_TRUSTED_PROXY_SECRET`
+   wired end-to-end from file-mounted secrets, identity headers overwritten
+   unconditionally at the gateway; `deploy/k8s.yaml` upgraded to the same
+   contract (production guards, file-mounted secrets, anchor on its own PVC,
+   Ingress stub with the header-injection snippet).
 2. **Platform-console authentication** — currently a local/demo surface with no
    authn; needs login + the hardened API as its backend before exposure.
 3. **Vendor console stays internal-only** (it holds the signing key) — VPN/private
    network policy, documented.
-4. **Backup/restore runbook** — state volume + freshness anchor together.
+4. ~~Backup/restore runbook~~ **— done** ([`docs/RUNBOOK.md`](RUNBOOK.md)):
+   what the state is, the three separations (state ≠ anchor ≠ secrets),
+   backup/restore procedure with the `RollbackDetected` semantics spelled
+   out, restore proof via `/health`'s `audit_chain_ok` +
+   `state_matches_audit`, and key-custody notes (HMAC rotation, Ed25519,
+   anchor credentials).
 5. **Independent security audit** (self-review exists; buyers will ask for third-party).
 6. **Legal open-core split** (MIT → core-MIT + commercial platform) + EULA — the
    hard prerequisite to any sale.

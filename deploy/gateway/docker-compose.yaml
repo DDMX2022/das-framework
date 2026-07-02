@@ -1,0 +1,82 @@
+# Reference authn gateway for the DAS governance API (PLATFORM_PLAN §10.1).
+#
+# Topology — the canonical auth_request pattern:
+#
+#   client ──TLS──> nginx ──auth_request──> oauth2-proxy ──OIDC──> your IdP
+#                     │ (authenticated)
+#                     └──> das-governance   with BOTH headers set:
+#                            X-DAS-Actor:      the OIDC-verified email
+#                            X-DAS-Proxy-Auth: the shared proxy secret
+#
+# The API runs with DAS_ENV=production, so it REFUSES to start without a real
+# audit secret + proxy secret, and rejects any request that did not transit
+# this gateway (SECURITY_REVIEW F2/F3). Secrets are file-mounted (F6).
+#
+#   1. put real values in ./secrets/  (see README.md)
+#   2. put a TLS cert/key in ./tls/   (or use the self-signed dev pair)
+#   3. docker compose up
+#
+# This is a REFERENCE: swap the oidc-issuer/client for your IdP, and keep the
+# freshness anchor volume on storage the state writer cannot roll back (F1).
+services:
+  das-governance:
+    build: ../..
+    environment:
+      DAS_ENV: production
+      DAS_STATE: /data
+      DAS_ANCHOR: /anchor/das.anchor          # MUST be a different volume than /data
+      DAS_SPEC: /spec/client.yaml
+      DAS_AUDIT_SECRET_FILE: /run/secrets/das_audit_secret
+      DAS_TRUSTED_PROXY_SECRET_FILE: /run/secrets/das_proxy_secret
+    secrets: [das_audit_secret, das_proxy_secret]
+    volumes:
+      - das-state:/data
+      - das-anchor:/anchor                    # separate volume: rollback evidence
+      - ./client.yaml:/spec/client.yaml:ro
+    expose: ["5070"]
+    restart: unless-stopped
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    command:
+      - --http-address=0.0.0.0:4180
+      - --provider=oidc
+      - --oidc-issuer-url=https://YOUR-IDP.example.com/realms/main
+      - --client-id=das-governance
+      - --email-domain=*                      # tighten to your org domain
+      - --reverse-proxy=true
+      - --set-xauthrequest=true               # exposes X-Auth-Request-Email to nginx
+      - --cookie-secure=true
+    environment:
+      OAUTH2_PROXY_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+      OAUTH2_PROXY_COOKIE_SECRET_FILE: /run/secrets/cookie_secret
+    secrets: [oidc_client_secret, cookie_secret]
+    expose: ["4180"]
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27
+    ports: ["443:443"]
+    # render the proxy secret's VALUE into the config from the mounted secret
+    # file (nginx cannot read a file into a header natively), then serve
+    command: >
+      /bin/sh -c "export DAS_PROXY_SECRET=$$(cat /run/secrets/das_proxy_secret)
+      && envsubst '$$DAS_PROXY_SECRET'
+      < /gateway/default.conf.template > /etc/nginx/conf.d/default.conf
+      && exec nginx -g 'daemon off;'"
+    secrets: [das_proxy_secret]
+    volumes:
+      - ./nginx.conf.template:/gateway/default.conf.template:ro
+      - ./tls:/etc/nginx/tls:ro
+    depends_on: [das-governance, oauth2-proxy]
+    restart: unless-stopped
+
+secrets:
+  das_audit_secret:   { file: ./secrets/das_audit_secret }
+  das_proxy_secret:   { file: ./secrets/das_proxy_secret }
+  oidc_client_secret: { file: ./secrets/oidc_client_secret }
+  cookie_secret:      { file: ./secrets/cookie_secret }
+
+volumes:
+  das-state: {}
+  das-anchor: {}   # in production: bind this to storage with separate write access
